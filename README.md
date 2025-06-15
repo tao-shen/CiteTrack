@@ -42,7 +42,7 @@ You can also manually switch languages in the settings without restarting the ap
 
 Download the latest version from our [Releases page](https://github.com/tao-shen/CiteTrack/releases/latest).
 
-**Recommended**: Download `CiteTrack-Multilingual-v1.1.0.dmg` for the complete multilingual installer package.
+**Recommended**: Download `CiteTrack-Multilingual-v1.1.1.dmg` for the complete multilingual installer package.
 
 ### Quick Installation
 
@@ -130,8 +130,14 @@ CiteTrack is completely safe and respects your privacy:
 
 The security warning appears because the app is not notarized through Apple's paid developer program ($99/year). This does not affect the app's safety or functionality.
 
-## 🆕 What's New in v1.1.0
+## 🆕 What's New
 
+### v1.1.1 (Latest) - Copy-Paste Bug Fix
+- 🐛 **Fixed Copy-Paste**: Restored keyboard shortcuts (Cmd+C/V/A/X/Z) in Add Scholar dialog
+- ✨ **Enhanced Text Input**: Proper focus management and cross-application copy-paste
+- 🛠️ **Technical**: Added EditableTextField class for robust text editing support
+
+### v1.1.0 - Multilingual Release
 - 🌍 **Multilingual Support**: 7 languages with automatic detection
 - 🎨 **Redesigned Settings**: Professional tabbed interface
 - 🔄 **Drag & Drop**: Reorder scholars with mouse drag
