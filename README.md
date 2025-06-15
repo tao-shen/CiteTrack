@@ -1,111 +1,132 @@
-# CiteTrack 📊
+<div align="center">
+  <img src="logo.png" alt="CiteTrack Logo" width="128" height="128">
+  
+  # CiteTrack
+  
+  **A lightweight macOS menu bar app for monitoring Google Scholar citation counts**
+  
+  [![Platform](https://img.shields.io/badge/platform-macOS-blue)](https://www.apple.com/macos/)
+  [![Swift](https://img.shields.io/badge/language-Swift-orange)](https://swift.org/)
+  [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+  [![Release](https://img.shields.io/github/v/release/tao-shen/CiteTrack)](https://github.com/tao-shen/CiteTrack/releases)
+  
+</div>
 
-一个轻量级的 macOS 菜单栏应用，用于监控 Google Scholar 学术引用数量。
+## ✨ Features
 
-![CiteTrack](https://img.shields.io/badge/platform-macOS-blue)
-![Swift](https://img.shields.io/badge/language-Swift-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+- 🔄 **Real-time Monitoring**: Automatically fetch Google Scholar citation data
+- 👥 **Multi-Scholar Support**: Track multiple scholars simultaneously
+- 🎨 **Custom Icons**: Personalize each scholar with emoji icons
+- 🌙 **Theme Adaptation**: Automatically adapts to system dark/light theme
+- ⚡ **Lightweight**: Only 752KB application size
+- 🔒 **Privacy First**: All data stored locally, no personal information collected
 
-## ✨ 功能特点
+## 📥 Download
 
-- 🔄 **实时监控**: 自动获取 Google Scholar 引用数据
-- 👥 **多学者支持**: 同时监控多个学者的引用情况
-- 🎨 **自定义图标**: 为每个学者设置个性化 emoji 图标
-- 🌙 **主题适配**: 自动适配系统深色/浅色主题
-- ⚡ **轻量级**: 应用大小仅 752KB
-- 🔒 **隐私保护**: 所有数据本地存储，不收集个人信息
+### Latest Release
 
-## 📥 下载安装
+Download the latest version from our [Releases page](https://github.com/tao-shen/CiteTrack/releases/latest).
 
-### 快速安装
-1. 下载 [CiteTrack_with_installer.dmg](CiteTrack_with_installer.dmg)
-2. 打开 DMG 文件
-3. 如遇安全警告，运行 `bypass_security_warning.sh` 脚本
-4. 将 CiteTrack.app 拖拽到 Applications 文件夹
+**Recommended**: Download `CiteTrack-v1.0.0.dmg` for the complete installer package.
 
-### 安全警告解决
-如果看到 "Apple could not verify CiteTrack is free of malware" 错误：
+### Quick Installation
 
-**方法 1 - 自动脚本（推荐）**
+1. Download the DMG file from releases
+2. Open the DMG file
+3. If you see a security warning, run the included bypass script
+4. Drag CiteTrack.app to your Applications folder
+
+## 🚨 Security Notice
+
+CiteTrack uses ad-hoc code signing and is not notarized through Apple's paid developer program. This may trigger a security warning on first launch.
+
+**This is completely normal and safe.** The app is open-source and contains no malicious code.
+
+### Bypass Security Warning
+
+**Method 1 - Automatic (Recommended)**
+Run the included script in the DMG:
 ```bash
 ./bypass_security_warning.sh
 ```
 
-**方法 2 - 手动操作**
-- 右键点击 CiteTrack.app → 选择"打开" → 点击"打开"
-- 或运行：`xattr -dr com.apple.quarantine CiteTrack.app`
+**Method 2 - Manual**
+- Right-click CiteTrack.app → Select "Open" → Click "Open" in the dialog
+- Or run: `xattr -dr com.apple.quarantine CiteTrack.app`
 
-详细说明请查看 [用户安装指南](用户安装指南.md)
+## 🚀 Usage
 
-## 🚀 使用方法
+1. **First Launch**: The app will guide you to add your first scholar
+2. **Add Scholar**: Enter the Google Scholar profile URL
+3. **Customize Icon**: Choose an emoji icon for each scholar
+4. **View Data**: Click the menu bar icon to see citation statistics
+5. **Manage Settings**: Access settings through the menu
 
-1. **首次启动**: 应用会引导您添加第一个学者
-2. **添加学者**: 输入 Google Scholar 个人页面 URL
-3. **自定义图标**: 为每个学者选择 emoji 图标
-4. **查看数据**: 点击菜单栏图标查看引用统计
-5. **管理设置**: 通过菜单访问设置界面
+## 🛠️ Development
 
-## 🛠️ 开发构建
-
-### 环境要求
+### Requirements
 - macOS 10.15+
 - Xcode Command Line Tools
 - Swift 5.0+
 
-### 构建步骤
+### Build from Source
+
 ```bash
-# 克隆仓库
+# Clone the repository
 git clone https://github.com/tao-shen/CiteTrack.git
 cd CiteTrack
 
-# 构建应用
+# Build the application
 ./build_complete.sh
 
-# 创建 DMG
+# Create DMG installer
 ./create_user_friendly_dmg.sh
 ```
 
-## 📁 项目结构
+## 📊 Technical Specifications
 
-```
-CiteTrack/
-├── Sources/
-│   └── main.swift              # 主应用代码
-├── CiteTrack.app               # 构建的应用程序
-├── CiteTrack_with_installer.dmg # 完整安装包
-├── bypass_security_warning.sh  # 安全警告解决脚本
-├── build_complete.sh           # 构建脚本
-├── create_user_friendly_dmg.sh # DMG 创建脚本
-├── 用户安装指南.md             # 用户安装指南
-└── README.md                   # 项目说明
-```
+- **Application Size**: 752KB
+- **Installer Size**: 564KB (DMG)
+- **System Requirements**: macOS 10.15+
+- **Architecture**: Native Apple Silicon support
+- **Language**: Swift
+- **Framework**: AppKit
 
-## 🔐 安全性说明
+## 🔐 Privacy & Security
 
-CiteTrack 是完全安全的开源应用：
-- ✅ **开源透明**: 所有代码公开可查看
-- ✅ **无恶意行为**: 仅访问 Google Scholar 公开数据
-- ✅ **本地存储**: 数据存储在用户设备上
-- ✅ **无数据收集**: 不收集任何个人信息
-- ✅ **代码签名**: 使用 ad-hoc 签名，符合 macOS 安全要求
+CiteTrack is completely safe and respects your privacy:
 
-安全警告出现是因为应用未通过 Apple 付费公证服务（$99/年），这不影响应用的安全性和功能。
+- ✅ **Open Source**: Full source code available for inspection
+- ✅ **No Data Collection**: Zero personal information collected
+- ✅ **Local Storage**: All data stored on your device
+- ✅ **Minimal Permissions**: Only accesses public Google Scholar data
+- ✅ **Code Signed**: Uses ad-hoc signing for integrity
 
-## 🤝 贡献
+The security warning appears because the app is not notarized through Apple's paid developer program ($99/year). This does not affect the app's safety or functionality.
 
-欢迎提交 Issue 和 Pull Request！
+## 🤝 Contributing
 
-## 📄 许可证
+We welcome contributions! Please feel free to:
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
+- 🐛 Report bugs via [GitHub Issues](https://github.com/tao-shen/CiteTrack/issues)
+- 💡 Suggest features through issues
+- 🔧 Submit pull requests
 
-## 📞 支持
+## 📄 License
 
-如有问题或建议，请：
-- 提交 [GitHub Issue](https://github.com/tao-shen/CiteTrack/issues)
-- 查看 [用户安装指南](用户安装指南.md)
-- 查看 [Apple公证解决方案总结](Apple公证解决方案总结.md)
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+Need help? Check out:
+
+- [GitHub Issues](https://github.com/tao-shen/CiteTrack/issues) for bug reports and questions
+- [Releases](https://github.com/tao-shen/CiteTrack/releases) for the latest downloads
 
 ---
 
-*让学术引用监控变得简单高效！* 🎓 
+<div align="center">
+  <strong>Made with ❤️ for the academic community</strong>
+  <br>
+  <em>Keep track of your research impact effortlessly</em>
+</div> 
