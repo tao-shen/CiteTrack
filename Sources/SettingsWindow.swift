@@ -1,6 +1,38 @@
 import Cocoa
 import Foundation
 
+// MARK: - Custom TextField with Copy/Paste Support
+class EditableTextField: NSTextField {
+    private let commandKey = NSEvent.ModifierFlags.command.rawValue
+    private let commandShiftKey = NSEvent.ModifierFlags.command.rawValue | NSEvent.ModifierFlags.shift.rawValue
+    
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if event.type == NSEvent.EventType.keyDown {
+            if (event.modifierFlags.rawValue & NSEvent.ModifierFlags.deviceIndependentFlagsMask.rawValue) == commandKey {
+                switch event.charactersIgnoringModifiers! {
+                case "x":
+                    if NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: self) { return true }
+                case "c":
+                    if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) { return true }
+                case "v":
+                    if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: self) { return true }
+                case "z":
+                    if NSApp.sendAction(Selector(("undo:")), to: nil, from: self) { return true }
+                case "a":
+                    if NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: self) { return true }
+                default:
+                    break
+                }
+            } else if (event.modifierFlags.rawValue & NSEvent.ModifierFlags.deviceIndependentFlagsMask.rawValue) == commandShiftKey {
+                if event.charactersIgnoringModifiers == "Z" {
+                    if NSApp.sendAction(Selector(("redo:")), to: nil, from: self) { return true }
+                }
+            }
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 // MARK: - Settings Window Controller
 class SettingsWindowController: NSWindowController {
     private var tabView: NSTabView!
@@ -434,12 +466,22 @@ class SettingsWindowController: NSWindowController {
         alert.addButton(withTitle: L("button_add"))
         alert.addButton(withTitle: L("button_cancel"))
         
-        // 创建输入字段
-        let inputTextField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        // 创建支持复制粘贴的输入字段
+        let inputTextField = EditableTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
         inputTextField.placeholderString = L("add_scholar_id_placeholder")
+        inputTextField.isEditable = true
+        inputTextField.isSelectable = true
+        inputTextField.usesSingleLineMode = true
+        inputTextField.cell?.wraps = false
+        inputTextField.cell?.isScrollable = true
         
-        let nameTextField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        let nameTextField = EditableTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
         nameTextField.placeholderString = L("add_scholar_name_placeholder")
+        nameTextField.isEditable = true
+        nameTextField.isSelectable = true
+        nameTextField.usesSingleLineMode = true
+        nameTextField.cell?.wraps = false
+        nameTextField.cell?.isScrollable = true
         
         // 创建容器视图
         let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 80))
@@ -462,6 +504,9 @@ class SettingsWindowController: NSWindowController {
         containerView.addSubview(nameTextField)
         
         alert.accessoryView = containerView
+        
+        // 设置初始焦点到第一个输入框
+        alert.window.initialFirstResponder = inputTextField
         
         let response = alert.runModal()
         
