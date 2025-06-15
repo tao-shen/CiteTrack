@@ -4,7 +4,7 @@
 # 构建支持多语言的 CiteTrack 应用
 
 APP_NAME="CiteTrack"
-VERSION="1.1.0"
+VERSION="1.1.1"
 BUILD_DIR="build"
 SOURCES_DIR="Sources"
 

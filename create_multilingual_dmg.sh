@@ -4,7 +4,7 @@
 # 创建包含多语言支持的专业安装包
 
 APP_NAME="CiteTrack"
-VERSION="1.1.0"
+VERSION="1.1.1"
 DMG_NAME="CiteTrack-Multilingual-v${VERSION}"
 TEMP_DIR="dmg_temp"
 
