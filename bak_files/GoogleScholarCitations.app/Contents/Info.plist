@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>GoogleScholarCitations</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.scholar.citations</string>
+    <key>CFBundleName</key>
+    <string>GoogleScholarCitations</string>
+    <key>CFBundleDisplayName</key>
+    <string>Google Scholar Citations</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2024 Google Scholar Citations. All rights reserved.</string>
+    <key>CFBundleIconFile</key>
+    <string>app_icon</string>
+</dict>
+</plist>
