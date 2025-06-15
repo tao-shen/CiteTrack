@@ -3,7 +3,7 @@
   
   # CiteTrack
   
-  **A lightweight macOS menu bar app for monitoring Google Scholar citation counts**
+  **A professional multilingual macOS menu bar app for monitoring Google Scholar citation counts**
   
   [![Platform](https://img.shields.io/badge/platform-macOS-blue)](https://www.apple.com/macos/)
   [![Swift](https://img.shields.io/badge/language-Swift-orange)](https://swift.org/)
@@ -14,12 +14,27 @@
 
 ## ✨ Features
 
-- 🔄 **Real-time Monitoring**: Automatically fetch Google Scholar citation data
-- 👥 **Multi-Scholar Support**: Track multiple scholars simultaneously
-- 🎨 **Custom Icons**: Personalize each scholar with emoji icons
-- 🌙 **Theme Adaptation**: Automatically adapts to system dark/light theme
-- ⚡ **Lightweight**: Only 752KB application size
+- 🔄 **Real-time Monitoring**: Automatically fetch Google Scholar citation data with customizable intervals
+- 👥 **Multi-Scholar Support**: Track multiple scholars simultaneously with drag-and-drop reordering
+- 🌍 **Multilingual Interface**: Support for 7 languages (English, Chinese, Japanese, Korean, Spanish, French, German)
+- 🌙 **Theme Adaptation**: Menu bar icon automatically adapts to system dark/light theme
+- ⚙️ **Professional Settings**: Tabbed settings interface with General and Scholar management pages
+- ⚡ **Lightweight**: Only ~850KB application size
 - 🔒 **Privacy First**: All data stored locally, no personal information collected
+
+## 🌍 Language Support
+
+CiteTrack automatically detects your system language and supports:
+
+- 🇺🇸 **English** (Full support)
+- 🇨🇳 **简体中文** (Full support)
+- 🇯🇵 **日本語** (Full support)
+- 🇰🇷 **한국어** (Full support)
+- 🇪🇸 **Español** (Basic support)
+- 🇫🇷 **Français** (Basic support)
+- 🇩🇪 **Deutsch** (Basic support)
+
+You can also manually switch languages in the settings without restarting the app.
 
 ## 📥 Download
 
@@ -27,7 +42,7 @@
 
 Download the latest version from our [Releases page](https://github.com/tao-shen/CiteTrack/releases/latest).
 
-**Recommended**: Download `CiteTrack-v1.0.0.dmg` for the complete installer package.
+**Recommended**: Download `CiteTrack-Multilingual-v1.1.0.dmg` for the complete multilingual installer package.
 
 ### Quick Installation
 
@@ -56,11 +71,21 @@ Run the included script in the DMG:
 
 ## 🚀 Usage
 
+### Getting Started
 1. **First Launch**: The app will guide you to add your first scholar
-2. **Add Scholar**: Enter the Google Scholar profile URL
-3. **Customize Icon**: Choose an emoji icon for each scholar
-4. **View Data**: Click the menu bar icon to see citation statistics
-5. **Manage Settings**: Access settings through the menu
+2. **Add Scholar**: Enter the Google Scholar profile URL or user ID
+3. **View Data**: Click the ∞ menu bar icon to see citation statistics
+4. **Manage Settings**: Access settings through the menu
+
+### Settings Interface
+- **General Tab**: Configure update intervals, language, display options, and startup preferences
+- **Scholars Tab**: Manage your scholar list with drag-and-drop reordering, add/remove scholars
+
+### Scholar Management
+- Add scholars using their Google Scholar profile URL or user ID
+- Drag and drop to reorder scholars in your preferred sequence
+- View real-time citation counts and last update timestamps
+- Customize update intervals from 30 minutes to 1 week
 
 ## 🛠️ Development
 
@@ -76,21 +101,22 @@ Run the included script in the DMG:
 git clone https://github.com/tao-shen/CiteTrack.git
 cd CiteTrack
 
-# Build the application
-./build_complete.sh
+# Build the multilingual application
+./build_multilingual.sh
 
-# Create DMG installer
-./create_user_friendly_dmg.sh
+# Create multilingual DMG installer
+./create_multilingual_dmg.sh
 ```
 
 ## 📊 Technical Specifications
 
-- **Application Size**: 752KB
-- **Installer Size**: 564KB (DMG)
+- **Application Size**: ~850KB
+- **Installer Size**: ~988KB (DMG)
 - **System Requirements**: macOS 10.15+
-- **Architecture**: Native Apple Silicon support
+- **Architecture**: Universal (Intel & Apple Silicon)
 - **Language**: Swift
 - **Framework**: AppKit
+- **Localization**: 7 languages supported
 
 ## 🔐 Privacy & Security
 
@@ -104,6 +130,15 @@ CiteTrack is completely safe and respects your privacy:
 
 The security warning appears because the app is not notarized through Apple's paid developer program ($99/year). This does not affect the app's safety or functionality.
 
+## 🆕 What's New in v1.1.0
+
+- 🌍 **Multilingual Support**: 7 languages with automatic detection
+- 🎨 **Redesigned Settings**: Professional tabbed interface
+- 🔄 **Drag & Drop**: Reorder scholars with mouse drag
+- 🚀 **Startup Options**: Configure launch preferences
+- 🎯 **Theme Integration**: Better system theme adaptation
+- 📱 **UI Improvements**: Cleaner interface without unnecessary backgrounds
+
 ## 🤝 Contributing
 
 We welcome contributions! Please feel free to:
@@ -111,6 +146,7 @@ We welcome contributions! Please feel free to:
 - 🐛 Report bugs via [GitHub Issues](https://github.com/tao-shen/CiteTrack/issues)
 - 💡 Suggest features through issues
 - 🔧 Submit pull requests
+- 🌍 Help with translations for additional languages
 
 ## 📄 License
 
@@ -122,11 +158,12 @@ Need help? Check out:
 
 - [GitHub Issues](https://github.com/tao-shen/CiteTrack/issues) for bug reports and questions
 - [Releases](https://github.com/tao-shen/CiteTrack/releases) for the latest downloads
+- [Multilingual Features Guide](MULTILINGUAL_FEATURES.md) for detailed documentation
 
 ---
 
 <div align="center">
-  <strong>Made with ❤️ for the academic community</strong>
+  <strong>Made with ❤️ for the global academic community</strong>
   <br>
-  <em>Keep track of your research impact effortlessly</em>
+  <em>Keep track of your research impact effortlessly, in your language</em>
 </div> 
