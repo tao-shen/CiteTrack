@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>CiteTrack</title>
+        <link>https://github.com/tao-shen/CiteTrack</link>
+        <description>CiteTrack - Google Scholar Citation Monitor</description>
+        <language>en</language>
+        
+        <item>
+            <title>Version 1.1.2</title>
+            <description><![CDATA[
+                <h2>CiteTrack v1.1.2 - Elegant Progress Window & UI Enhancements</h2>
+                
+                <h3>✨ New Features</h3>
+                <ul>
+                    <li><strong>Elegant Progress Window</strong>: Beautiful, borderless floating window with real-time progress</li>
+                    <li><strong>Enhanced Update Experience</strong>: Live status updates with visual feedback</li>
+                    <li><strong>Automatic Updates</strong>: Sparkle-powered automatic update system</li>
+                </ul>
+                
+                <h3>🐛 Fixed Issues</h3>
+                <ul>
+                    <li>Data synchronization between dropdown menu and settings page</li>
+                    <li>Missing update feedback for manual refresh</li>
+                    <li>Delayed UI updates after data changes</li>
+                </ul>
+                
+                <h3>🛠️ Technical Improvements</h3>
+                <ul>
+                    <li>Modern floating window architecture</li>
+                    <li>Notification-based real-time sync system</li>
+                    <li>macOS version compatibility (10.15+)</li>
+                    <li>Professional animations and visual design</li>
+                </ul>
+            ]]></description>
+            <pubDate>Sun, 14 Jul 2024 12:00:00 +0000</pubDate>
+            <sparkle:releaseNotesLink>https://github.com/tao-shen/CiteTrack/releases/tag/v1.1.2</sparkle:releaseNotesLink>
+            <enclosure 
+                url="https://github.com/tao-shen/CiteTrack/releases/download/v1.1.2/CiteTrack-Multilingual-v1.1.2.dmg"
+                sparkle:version="1.1.2"
+                sparkle:shortVersionString="1.1.2"
+                length="1000000"
+                type="application/octet-stream" />
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+        </item>
+        
+        <!-- 之前的版本记录 -->
+        <item>
+            <title>Version 1.1.1</title>
+            <description><![CDATA[
+                <h2>CiteTrack v1.1.1 - Copy-Paste Bug Fix</h2>
+                <p>Fixed copy-paste functionality in the "Add Scholar" dialog.</p>
+            ]]></description>
+            <pubDate>Sun, 14 Jul 2024 10:00:00 +0000</pubDate>
+            <sparkle:releaseNotesLink>https://github.com/tao-shen/CiteTrack/releases/tag/v1.1.1</sparkle:releaseNotesLink>
+            <enclosure 
+                url="https://github.com/tao-shen/CiteTrack/releases/download/v1.1.1/CiteTrack-Multilingual-v1.1.1.dmg"
+                sparkle:version="1.1.1"
+                sparkle:shortVersionString="1.1.1"
+                length="1000000"
+                type="application/octet-stream" />
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+        </item>
+        
+    </channel>
+</rss> 
