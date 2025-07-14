@@ -59,4 +59,45 @@ bak/
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# ======================
+# CiteTrack Specific
+# ======================
+
+# 备份文件夹（不上传到Git）
+backup_files/
+
+# 构建产物
+*.app/
+*.dmg
+*.zip
+dist/
+CiteTrack.app/
+CiteTrack*.dmg
+
+# 临时构建文件
+dmg_temp/
+*_temp/
+build_temp/
+
+# 开发工具
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 密钥和敏感信息
+*.p12
+*.key
+*.pem
+private_keys/
+secrets/
+
+# 测试文件
+test_output/
+*.test
+
+# 日志文件
+*.log
+logs/ 
