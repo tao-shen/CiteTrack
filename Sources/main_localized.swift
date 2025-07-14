@@ -1,6 +1,8 @@
 import Cocoa
 import Foundation
-import ServiceManagement
+import Sparkle
+
+// MARK: - L() Function for Localization
 
 // MARK: - User Defaults Keys
 extension UserDefaults {
@@ -243,6 +245,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let googleScholarService = GoogleScholarService()
     private var updateTimer: Timer?
     
+    // Sparkle自动更新
+    private let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         setupStatusItem()
         updateAppearance()
@@ -330,6 +335,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
+        let checkForUpdatesItem = NSMenuItem(title: L("menu_check_updates"), action: #selector(checkForUpdates), keyEquivalent: "")
+        checkForUpdatesItem.target = self
+        menu.addItem(checkForUpdatesItem)
+        
         let aboutItem = NSMenuItem(title: L("menu_about"), action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
@@ -379,6 +388,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         alert.messageText = L("app_name")
         alert.informativeText = L("app_about")
         alert.runModal()
+    }
+    
+    @objc private func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
     }
     
     @objc private func refreshCitations() {

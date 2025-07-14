@@ -86,6 +86,7 @@ class LocalizationManager {
             "menu_no_scholars": "No scholar data",
             "menu_manual_update": "Manual Update",
             "menu_preferences": "Preferences...",
+            "menu_check_updates": "Check for Updates...",
             "menu_about": "About CiteTrack",
             "menu_quit": "Quit",
             
@@ -196,6 +197,7 @@ class LocalizationManager {
             "menu_no_scholars": "暂无学者数据",
             "menu_manual_update": "手动更新",
             "menu_preferences": "偏好设置...",
+            "menu_check_updates": "检查更新...",
             "menu_about": "关于 CiteTrack",
             "menu_quit": "退出",
             
@@ -306,6 +308,7 @@ class LocalizationManager {
             "menu_no_scholars": "研究者データなし",
             "menu_manual_update": "手動更新",
             "menu_preferences": "環境設定...",
+            "menu_check_updates": "アップデートを確認...",
             "menu_about": "CiteTrackについて",
             "menu_quit": "終了",
             

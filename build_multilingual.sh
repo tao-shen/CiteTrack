@@ -4,7 +4,7 @@
 # 构建支持多语言的 CiteTrack 应用
 
 APP_NAME="CiteTrack"
-VERSION="1.1.2"
+VERSION="1.1.3"
 BUILD_DIR="build"
 SOURCES_DIR="Sources"
 
@@ -32,6 +32,10 @@ echo "📝 编译多语言应用..."
 # 编译应用
 swiftc -O \
     -target arm64-apple-macos10.15 \
+    -F Frameworks \
+    -framework Sparkle \
+    -Xlinker -rpath \
+    -Xlinker @executable_path/../Frameworks \
     "${SOURCES_DIR}/Localization.swift" \
     "${SOURCES_DIR}/SettingsWindow.swift" \
     "${SOURCES_DIR}/main_localized.swift" \
@@ -98,6 +102,14 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
     </array>
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/tao-shen/CiteTrack/main/appcast.xml</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <string>86400</string>
+    <key>SUAllowsAutomaticUpdates</key>
+    <true/>
 </dict>
 </plist>
 EOF
@@ -143,9 +155,34 @@ elif [ -f "logo.png" ]; then
     rm -rf "${ICONSET_DIR}"
 fi
 
+echo "📦 复制 Sparkle 框架..."
+
+# 创建 Frameworks 目录
+mkdir -p "${APP_BUNDLE}/Contents/Frameworks"
+
+# 复制 Sparkle 框架
+cp -R "Frameworks/Sparkle.framework" "${APP_BUNDLE}/Contents/Frameworks/"
+
+if [ $? -eq 0 ]; then
+    echo "✅ Sparkle 框架复制成功"
+else
+    echo "❌ Sparkle 框架复制失败"
+    exit 1
+fi
+
 echo "🔐 代码签名..."
 
-# 代码签名
+# 先签名 Sparkle 框架
+codesign --force --deep --sign - "${APP_BUNDLE}/Contents/Frameworks/Sparkle.framework"
+
+if [ $? -eq 0 ]; then
+    echo "✅ Sparkle 框架签名成功"
+else
+    echo "❌ Sparkle 框架签名失败"
+    exit 1
+fi
+
+# 代码签名应用包
 codesign --force --deep --sign - "${APP_BUNDLE}"
 
 if [ $? -eq 0 ]; then
