@@ -225,6 +225,15 @@ class PreferencesManager {
             userDefaults.set(newValue, forKey: UserDefaults.Keys.launchAtLogin)
         }
     }
+    
+    func updateScholar(withId id: String, citations: Int) {
+        var scholars = self.scholars
+        if let index = scholars.firstIndex(where: { $0.id == id }) {
+            scholars[index].citations = citations
+            scholars[index].lastUpdated = Date()
+            self.scholars = scholars
+        }
+    }
 }
 
 // MARK: - App Delegate
@@ -247,6 +256,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             object: nil
         )
         
+        // 监听学者数据更新
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scholarsDataUpdated),
+            name: .scholarsDataUpdated,
+            object: nil
+        )
+        
         // 检查是否是首次启动
         if PreferencesManager.shared.scholars.isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -260,6 +277,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func languageChanged() {
+        updateStatusItemMenu()
+    }
+    
+    @objc private func scholarsDataUpdated() {
         updateStatusItemMenu()
     }
     
@@ -361,19 +382,233 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func refreshCitations() {
-        var scholars = PreferencesManager.shared.scholars
+        let scholars = PreferencesManager.shared.scholars
+        guard !scholars.isEmpty else { return }
         
-        for (index, scholar) in scholars.enumerated() {
+        // 创建并显示进度窗口
+        let progressWindow = createProgressWindow(totalCount: scholars.count)
+        progressWindow.makeKeyAndOrderFront(nil)
+        
+        var completedCount = 0
+        var successCount = 0
+        let totalCount = scholars.count
+        
+        for (_, scholar) in scholars.enumerated() {
             googleScholarService.fetchCitationCount(for: scholar.id) { result in
                 DispatchQueue.main.async {
+                    completedCount += 1
+                    
                     switch result {
                     case .success(let citations):
-                        scholars[index].citations = citations
-                        scholars[index].lastUpdated = Date()
-                        PreferencesManager.shared.scholars = scholars
-                        self.updateStatusItemMenu()
+                        successCount += 1
+                        PreferencesManager.shared.updateScholar(withId: scholar.id, citations: citations)
+                        
                     case .failure(let error):
-                        print("获取学者 \(scholar.id) 的引用量失败: \(error.localizedDescription)")
+                        print("Failed to update scholar \(scholar.id): \(error)")
+                    }
+                    
+                    // 更新进度窗口
+                    self.updateProgressWindow(progressWindow, completed: completedCount, total: totalCount, success: successCount)
+                    
+                    // 检查是否完成
+                    if completedCount == totalCount {
+                        // 发送数据更新通知
+                        NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+                        
+                        // 显示完成状态并添加优雅的淡出动画
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            self.showCompletionAndCloseWindow(progressWindow, success: successCount, total: totalCount)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func createProgressWindow(totalCount: Int) -> NSWindow {
+        let progressWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: 80),
+            styleMask: .borderless,  // 无边框
+            backing: .buffered,
+            defer: false
+        )
+        progressWindow.level = .floating
+        progressWindow.collectionBehavior = [.fullScreenAuxiliary]
+        progressWindow.isOpaque = false
+        progressWindow.backgroundColor = .clear
+        progressWindow.hasShadow = true
+        progressWindow.ignoresMouseEvents = false  // 允许鼠标事件以便显示阴影效果
+        
+        // 居中显示，但稍微偏上一些
+        progressWindow.center()
+        var frame = progressWindow.frame
+        frame.origin.y += 100  // 往上偏移一些
+        progressWindow.setFrame(frame, display: true)
+        
+        // 创建主容器视图
+        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 280, height: 80))
+        containerView.wantsLayer = true
+        
+        // 设置现代化的外观
+        containerView.layer?.backgroundColor = NSColor.controlBackgroundColor.blended(withFraction: 0.95, of: .white)?.cgColor
+        containerView.layer?.cornerRadius = 12
+        containerView.layer?.borderWidth = 1
+        containerView.layer?.borderColor = NSColor.separatorColor.cgColor
+        
+        // 添加阴影
+        containerView.layer?.shadowColor = NSColor.black.cgColor
+        containerView.layer?.shadowOpacity = 0.2
+        containerView.layer?.shadowOffset = NSSize(width: 0, height: -2)
+        containerView.layer?.shadowRadius = 8
+        
+        // 创建图标
+        let iconView = NSImageView(frame: NSRect(x: 15, y: 35, width: 24, height: 24))
+        if #available(macOS 11.0, *) {
+            iconView.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
+            iconView.contentTintColor = .systemBlue
+        } else {
+            // 为较老的macOS版本创建简单的文本标签
+            iconView.isHidden = true
+        }
+        containerView.addSubview(iconView)
+        
+        // 创建状态标签
+        let statusLabel = NSTextField(frame: NSRect(x: 50, y: 45, width: 200, height: 20))
+        statusLabel.stringValue = L("status_updating_progress", 0, totalCount)
+        statusLabel.isEditable = false
+        statusLabel.isBordered = false
+        statusLabel.backgroundColor = .clear
+        statusLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        statusLabel.textColor = .labelColor
+        
+        // 为老版本macOS调整位置（因为没有图标）
+        if #unavailable(macOS 11.0) {
+            statusLabel.frame = NSRect(x: 20, y: 45, width: 240, height: 20)
+        }
+        
+        containerView.addSubview(statusLabel)
+        
+        // 创建进度条
+        let progressIndicator = NSProgressIndicator(frame: NSRect(x: 50, y: 20, width: 200, height: 8))
+        progressIndicator.style = .bar
+        progressIndicator.minValue = 0
+        progressIndicator.maxValue = Double(totalCount)
+        progressIndicator.doubleValue = 0
+        progressIndicator.isIndeterminate = false
+        progressIndicator.controlSize = .small
+        progressIndicator.wantsLayer = true
+        progressIndicator.layer?.cornerRadius = 4
+        containerView.addSubview(progressIndicator)
+        
+        progressWindow.contentView = containerView
+        
+        // 添加淡入动画
+        progressWindow.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.3
+            progressWindow.animator().alphaValue = 1.0
+        }
+        
+        return progressWindow
+    }
+    
+    private func updateProgressWindow(_ window: NSWindow, completed: Int, total: Int, success: Int) {
+        DispatchQueue.main.async {
+            guard let contentView = window.contentView else { return }
+            
+            for subview in contentView.subviews {
+                if subview is NSProgressIndicator {
+                    let progressIndicator = subview as! NSProgressIndicator
+                    progressIndicator.maxValue = Double(total)
+                    progressIndicator.doubleValue = Double(completed)
+                } else if subview is NSTextField {
+                    let statusLabel = subview as! NSTextField
+                    statusLabel.stringValue = L("status_updating_progress", completed, total)
+                }
+            }
+        }
+    }
+    
+    private func showCompletionAndCloseWindow(_ window: NSWindow, success: Int, total: Int) {
+        // 首先更新进度窗口显示完成状态
+        updateProgressWindowToComplete(window, success: success, total: total)
+        
+        DispatchQueue.main.async {
+            // 更新菜单栏按钮标题来显示反馈
+            if let button = self.statusItem?.button {
+                if success == total {
+                    button.title = "✓"
+                    // 2秒后恢复正常显示
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        button.title = "∞"
+                    }
+                } else {
+                    button.title = "⚠️"
+                    // 3秒后恢复正常显示
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                        button.title = "∞"
+                    }
+                }
+            }
+            
+            // 更新菜单内容
+            self.updateStatusItemMenu()
+            
+            // 如果有失败的，显示详细信息
+            if success < total {
+                let failedCount = total - success
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    let alert = NSAlert()
+                    alert.messageText = L("update_completed")
+                    alert.informativeText = L("update_result_message", success, total, failedCount)
+                    alert.alertStyle = success > 0 ? .warning : .critical
+                    alert.runModal()
+                }
+            }
+            
+            // 延迟1.5秒后添加优雅的淡出动画
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.3
+                    window.animator().alphaValue = 0.0
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    window.orderOut(nil)
+                }
+            }
+        }
+    }
+    
+    private func updateProgressWindowToComplete(_ window: NSWindow, success: Int, total: Int) {
+        DispatchQueue.main.async {
+            guard let contentView = window.contentView else { return }
+            
+            for subview in contentView.subviews {
+                if subview is NSProgressIndicator {
+                    let progressIndicator = subview as! NSProgressIndicator
+                    progressIndicator.doubleValue = Double(total) // 完整进度条
+                } else if subview is NSTextField {
+                    let statusLabel = subview as! NSTextField
+                    if success == total {
+                        statusLabel.stringValue = L("update_completed") + " ✓"
+                        statusLabel.textColor = .systemGreen
+                    } else {
+                        statusLabel.stringValue = L("update_completed") + " ⚠️"
+                        statusLabel.textColor = .systemOrange
+                    }
+                } else if subview is NSImageView {
+                    let iconView = subview as! NSImageView
+                    if #available(macOS 11.0, *) {
+                        if success == total {
+                            iconView.image = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: nil)
+                            iconView.contentTintColor = .systemGreen
+                        } else {
+                            iconView.image = NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: nil)
+                            iconView.contentTintColor = .systemOrange
+                        }
+                    } else {
+                        // 对于较老的macOS版本，隐藏图标
+                        iconView.isHidden = true
                     }
                 }
             }

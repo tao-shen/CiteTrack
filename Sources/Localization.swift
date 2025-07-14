@@ -169,7 +169,19 @@ class LocalizationManager {
             "never": "Never",
             
             // Tooltip
-            "tooltip_citetrack": "CiteTrack - Google Scholar Citation Monitor"
+            "tooltip_citetrack": "CiteTrack - Google Scholar Citation Monitor",
+            
+            // Update Status
+            "status_updating": "Updating...",
+            "status_updating_progress": "Updating... (%d/%d)",
+            "update_completed": "Update Completed",
+            "update_progress_title": "Updating Citations",
+            "update_result_message": "%d of %d scholars updated successfully. %d failed.",
+            
+            // Refresh Status
+            "refresh_completed": "Refresh Completed",
+            "refresh_success_message": "All %d scholars updated successfully.",
+            "refresh_partial_message": "%d of %d scholars updated successfully. %d failed."
         ]
         
         // Chinese Simplified
@@ -251,7 +263,7 @@ class LocalizationManager {
             "welcome_title": "欢迎使用 CiteTrack",
             "welcome_message": "这是一个精美专业的macOS菜单栏应用，用于实时监控您的Google Scholar引用量。\n\n小而精，专业可靠。\n\n请先添加学者信息来开始使用。",
             "button_open_settings": "打开设置",
-            "button_later": "稍后设置",
+            "button_later": "稍后",
             
             // Scholar Service Errors
             "error_invalid_url": "无效的Google Scholar URL",
@@ -267,7 +279,19 @@ class LocalizationManager {
             "never": "从未",
             
             // Tooltip
-            "tooltip_citetrack": "CiteTrack - Google Scholar引用量监控"
+            "tooltip_citetrack": "CiteTrack - Google Scholar引用量监控",
+            
+            // Update Status
+            "status_updating": "更新中...",
+            "status_updating_progress": "更新中... (%d/%d)",
+            "update_completed": "更新完成",
+            "update_progress_title": "更新引用量",
+            "update_result_message": "%d 个学者中的 %d 个更新成功，%d 个失败。",
+            
+            // Refresh Status
+            "refresh_completed": "刷新完成",
+            "refresh_success_message": "所有 %d 个学者更新成功。",
+            "refresh_partial_message": "%d 个学者更新成功，%d 个失败。"
         ]
         
         // Japanese
@@ -365,7 +389,19 @@ class LocalizationManager {
             "never": "なし",
             
             // Tooltip
-            "tooltip_citetrack": "CiteTrack - Google Scholar引用数モニター"
+            "tooltip_citetrack": "CiteTrack - Google Scholar引用数モニター",
+            
+            // Update Status
+            "status_updating": "更新中...",
+            "status_updating_progress": "更新中... (%d/%d)",
+            "update_completed": "更新完了",
+            "update_progress_title": "引用数更新中",
+            "update_result_message": "%d人の研究者のうち%d人が正常に更新されました。%d人が失敗しました。",
+            
+            // Refresh Status
+            "refresh_completed": "更新完了",
+            "refresh_success_message": "%d人の研究者全員が正常に更新されました。",
+            "refresh_partial_message": "%d人の研究者のうち%d人が正常に更新されました。%d人が失敗しました。"
         ]
         
         // Add more languages as needed...
@@ -375,6 +411,7 @@ class LocalizationManager {
 // MARK: - Notification Names
 extension Notification.Name {
     static let languageChanged = Notification.Name("LanguageChanged")
+    static let scholarsDataUpdated = Notification.Name("ScholarsDataUpdated")
 }
 
 // MARK: - Convenience Functions

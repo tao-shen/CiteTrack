@@ -58,6 +58,14 @@ class SettingsWindowController: NSWindowController {
             name: .languageChanged,
             object: nil
         )
+        
+        // 监听学者数据更新
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scholarsDataUpdated),
+            name: .scholarsDataUpdated,
+            object: nil
+        )
     }
     
     required init?(coder: NSCoder) {
@@ -592,21 +600,73 @@ class SettingsWindowController: NSWindowController {
     }
     
     @objc private func refreshData() {
-        for (index, scholar) in scholars.enumerated() {
+        let currentScholars = PreferencesManager.shared.scholars
+        guard !currentScholars.isEmpty else { return }
+        
+        // 显示更新中状态
+        showRefreshingState()
+        
+        var completedCount = 0
+        var successCount = 0
+        let totalCount = currentScholars.count
+        
+        for scholar in currentScholars {
             googleScholarService.fetchCitationCount(for: scholar.id) { [weak self] result in
                 DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    
+                    completedCount += 1
+                    
                     switch result {
                     case .success(let citations):
-                        self?.scholars[index].citations = citations
-                        self?.scholars[index].lastUpdated = Date()
-                        PreferencesManager.shared.scholars = self?.scholars ?? []
-                        self?.tableView.reloadData()
+                        successCount += 1
+                        // 直接更新PreferencesManager，避免本地副本导致的数据竞争
+                        PreferencesManager.shared.updateScholar(withId: scholar.id, citations: citations)
+                        
                     case .failure(let error):
                         print("刷新学者 \(scholar.id) 失败: \(error.localizedDescription)")
+                    }
+                    
+                    // 当所有请求完成时
+                    if completedCount == totalCount {
+                        // 重新加载本地数据
+                        self.loadData()
+                        
+                        // 发送数据更新通知给其他组件
+                        NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+                        
+                        // 显示更新结果
+                        self.showRefreshResult(success: successCount, total: totalCount)
                     }
                 }
             }
         }
+    }
+    
+    private func showRefreshingState() {
+        // 可以在这里添加进度指示器或更新按钮状态
+        // 暂时只在控制台输出
+        print("正在刷新学者数据...")
+    }
+    
+    private func showRefreshResult(success: Int, total: Int) {
+        let message: String
+        let style: NSAlert.Style
+        
+        if success == total {
+            message = L("refresh_success_message", success)
+            style = .informational
+        } else {
+            let failed = total - success
+            message = L("refresh_partial_message", success, total, failed)
+            style = .warning
+        }
+        
+        let alert = NSAlert()
+        alert.messageText = L("refresh_completed")
+        alert.informativeText = message
+        alert.alertStyle = style
+        alert.runModal()
     }
     
     @objc private func updateIntervalChanged() {
@@ -627,6 +687,10 @@ class SettingsWindowController: NSWindowController {
     
     @objc private func launchAtLoginChanged() {
         PreferencesManager.shared.launchAtLogin = launchAtLoginCheckbox.state == .on
+    }
+    
+    @objc private func scholarsDataUpdated() {
+        loadData()
     }
     
     private func updateAppearance() {
