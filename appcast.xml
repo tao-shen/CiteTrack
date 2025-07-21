@@ -71,9 +71,8 @@
                 url="https://github.com/tao-shen/CiteTrack/releases/download/v2.0.0/CiteTrack-Charts-v2.0.0.dmg"
                 sparkle:version="2.0.0"
                 sparkle:shortVersionString="2.0.0"
-                length="2151066"
-                type="application/octet-stream"
-                sparkle:edSignature="BROgGgmIpIKOobD+pbMTF0dA4bR8HKHgC/ov50Ebm4/vZirHizAiht4MLBX3uXq8bLRyBUHYTpijxLke/1Q/Aw==" />
+                length="2150945"
+                type="application/octet-stream" />
             <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
         </item>
         
