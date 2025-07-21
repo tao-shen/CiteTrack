@@ -115,8 +115,7 @@
                 sparkle:version="1.1.3"
                 sparkle:shortVersionString="1.1.3"
                 length="1924001"
-                type="application/octet-stream"
-                sparkle:edSignature="Fv2p+LzspJqnETpOzrza940nAUuSn5hWIYDajYEdy0ET0xm/fIzUrFF452+/9xmNqLB+zrva0Oh9cQSfD0QDDg==" />
+                type="application/octet-stream" />
             <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
         </item>
         
