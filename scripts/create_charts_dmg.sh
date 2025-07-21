@@ -1,22 +1,22 @@
 #!/bin/bash
 
-# CiteTrack 多语言版本 DMG 创建脚本
-# 创建包含多语言支持的专业安装包
+# CiteTrack 图表功能版本 DMG 创建脚本
+# 创建包含完整图表功能的专业安装包
 
 # 切换到项目根目录
 cd "$(dirname "$0")/.."
 
 APP_NAME="CiteTrack"
-VERSION="1.1.3"
-DMG_NAME="CiteTrack-Multilingual-v${VERSION}"
+VERSION="2.0.0"
+DMG_NAME="CiteTrack-Charts-v${VERSION}"
 TEMP_DIR="dmg_temp"
 
-echo "🌍 创建 CiteTrack 多语言版本 DMG 安装包..."
+echo "📊 创建 CiteTrack 图表功能版本 DMG 安装包..."
 
 # 检查应用是否存在
 if [ ! -d "${APP_NAME}.app" ]; then
     echo "❌ 错误: 找不到 ${APP_NAME}.app"
-    echo "请先运行 ./build_multilingual.sh 构建应用"
+    echo "请先运行 ./scripts/build_charts.sh 构建应用"
     exit 1
 fi
 
@@ -34,13 +34,10 @@ cp -R "${APP_NAME}.app" "${TEMP_DIR}/"
 # 创建 Applications 文件夹的符号链接
 ln -s /Applications "${TEMP_DIR}/Applications"
 
-# 不再添加安装指南、脚本或其他文件 - 保持DMG简洁
-# 只包含APP和Applications快捷方式
-
 echo "🎨 设置 DMG 外观..."
 
 # 创建 DMG
-hdiutil create -volname "CiteTrack Multilingual v${VERSION}" \
+hdiutil create -volname "CiteTrack Charts v${VERSION}" \
     -srcfolder "${TEMP_DIR}" \
     -ov -format UDZO \
     "${DMG_NAME}.dmg"
@@ -53,22 +50,21 @@ if [ $? -eq 0 ]; then
     DMG_SIZE=$(du -sh "${DMG_NAME}.dmg" | cut -f1)
     
     echo ""
-    echo "🎉 简洁版 DMG 创建完成！"
+    echo "🎉 CiteTrack 图表功能版本 DMG 创建完成！"
     echo "📁 文件名: ${DMG_NAME}.dmg"
     echo "📏 文件大小: ${DMG_SIZE}"
     echo ""
     echo "📦 DMG 内容:"
-    echo "  • CiteTrack.app (多语言版本)"
+    echo "  • CiteTrack.app (图表功能版本)"
     echo "  • Applications 文件夹快捷方式"
     echo ""
-    echo "🌍 支持的语言:"
-    echo "  • English (英语)"
-    echo "  • 简体中文 (Simplified Chinese)"
-    echo "  • 日本語 (Japanese)"
-    echo "  • 한국어 (Korean)"
-    echo "  • Español (Spanish)"
-    echo "  • Français (French)"
-    echo "  • Deutsch (German)"
+    echo "📊 主要功能:"
+    echo "  • 📈 专业图表系统"
+    echo "  • 📊 历史数据分析"
+    echo "  • 🔔 智能通知"
+    echo "  • 📤 数据导出"
+    echo "  • 🌍 多语言支持"
+    echo "  • 💾 数据持久化"
     echo ""
     echo "🚀 可以分发 DMG 文件："
     echo "   open ${DMG_NAME}.dmg"
@@ -76,4 +72,4 @@ else
     echo "❌ DMG 创建失败"
     rm -rf "${TEMP_DIR}"
     exit 1
-fi 
+fi

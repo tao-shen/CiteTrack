@@ -1,6 +1,7 @@
 import Cocoa
 import Foundation
 import ServiceManagement
+import Sparkle
 
 // MARK: - User Defaults Keys
 extension UserDefaults {
@@ -10,8 +11,11 @@ extension UserDefaults {
         static let showInDock = "ShowInDock"
         static let showInMenuBar = "ShowInMenuBar"
         static let launchAtLogin = "LaunchAtLogin"
+        static let iCloudSyncEnabled = "iCloudSyncEnabled"
     }
 }
+
+
 
 // MARK: - Scholar Model
 struct Scholar: Codable, Identifiable {
@@ -30,6 +34,15 @@ struct Scholar: Codable, Identifiable {
 
 // MARK: - Google Scholar Service
 class GoogleScholarService {
+    // 共享的URLSession配置，包含合理的超时设置
+    private static let urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30.0  // 单个请求超时30秒
+        config.timeoutIntervalForResource = 60.0  // 总资源获取超时60秒
+        config.allowsCellularAccess = true
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData  // 总是获取最新数据
+        return URLSession(configuration: config)
+    }()
     enum ScholarError: Error, LocalizedError {
         case invalidURL
         case noData
@@ -53,27 +66,84 @@ class GoogleScholarService {
     static func extractScholarId(from input: String) -> String? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         
+        // 验证输入不为空
+        guard !trimmed.isEmpty else {
+            print("⚠️ Scholar ID 输入为空")
+            return nil
+        }
+        
+        // 验证输入长度（Google Scholar ID通常为8-20个字符）
+        guard trimmed.count >= 8 && trimmed.count <= 100 else {
+            print("⚠️ Scholar ID 长度无效: \(trimmed.count) 字符")
+            return nil
+        }
+        
         if trimmed.contains("scholar.google.com") {
             let patterns = [
-                #"user=([A-Za-z0-9_-]+)"#,
-                #"citations\?user=([A-Za-z0-9_-]+)"#,
-                #"profile/([A-Za-z0-9_-]+)"#
+                #"user=([A-Za-z0-9_-]{8,20})"#,  // 更严格的长度验证
+                #"citations\?user=([A-Za-z0-9_-]{8,20})"#,
+                #"profile/([A-Za-z0-9_-]{8,20})"#
             ]
             
             for pattern in patterns {
                 if let regex = try? NSRegularExpression(pattern: pattern, options: []),
                    let match = regex.firstMatch(in: trimmed, options: [], range: NSRange(location: 0, length: trimmed.count)),
                    let range = Range(match.range(at: 1), in: trimmed) {
-                    return String(trimmed[range])
+                    let extractedId = String(trimmed[range])
+                    
+                    // 验证提取的ID
+                    if isValidScholarId(extractedId) {
+                        print("✅ 从URL提取到有效的Scholar ID: \(extractedId)")
+                        return extractedId
+                    }
                 }
             }
+            
+            print("❌ 无法从URL中提取有效的Scholar ID")
+            return nil
         }
         
-        if trimmed.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil {
+        // 如果是直接的ID，进行验证
+        if isValidScholarId(trimmed) {
+            print("✅ 直接输入的Scholar ID有效: \(trimmed)")
             return trimmed
         }
         
+        print("❌ 无效的Scholar ID格式: \(trimmed)")
         return nil
+    }
+    
+    /// 验证Scholar ID是否有效
+    private static func isValidScholarId(_ id: String) -> Bool {
+        // 基本格式验证：只包含字母、数字、下划线和短横线
+        guard id.range(of: "^[A-Za-z0-9_-]+$", options: .regularExpression) != nil else {
+            print("⚠️ Scholar ID 包含无效字符: \(id)")
+            return false
+        }
+        
+        // 长度验证：Google Scholar ID 通常是8-20个字符
+        guard id.count >= 8 && id.count <= 20 else {
+            print("⚠️ Scholar ID 长度无效: \(id.count) 字符 (应为8-20)")
+            return false
+        }
+        
+        // 确保不是纯数字或纯特殊字符
+        let hasLetter = id.range(of: "[A-Za-z]", options: .regularExpression) != nil
+        let hasNumber = id.range(of: "[0-9]", options: .regularExpression) != nil
+        
+        guard hasLetter || hasNumber else {
+            print("⚠️ Scholar ID 应包含字母或数字")
+            return false
+        }
+        
+        // 检查是否以特殊字符开头或结尾
+        guard !id.hasPrefix("_") && !id.hasPrefix("-") && 
+              !id.hasSuffix("_") && !id.hasSuffix("-") else {
+            print("⚠️ Scholar ID 不应以特殊字符开头或结尾")
+            return false
+        }
+        
+        return true
     }
     
     func fetchScholarInfo(for scholarId: String, completion: @escaping (Result<(name: String, citations: Int), ScholarError>) -> Void) {
@@ -86,10 +156,30 @@ class GoogleScholarService {
         var request = URLRequest(url: url)
         request.setValue("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36", forHTTPHeaderField: "User-Agent")
         
-        URLSession.shared.dataTask(with: request) { data, response, error in
+        // 使用共享的URLSession进行请求
+        GoogleScholarService.urlSession.dataTask(with: request) { data, response, error in
             if let error = error {
-                completion(.failure(.networkError(error)))
+                // 检查是否是超时错误
+                if (error as NSError).code == NSURLErrorTimedOut {
+                    print("⏰ Google Scholar请求超时: \(scholarId)")
+                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: -1001, userInfo: [NSLocalizedDescriptionKey: "请求超时，请检查网络连接"]))))
+                } else {
+                    completion(.failure(.networkError(error)))
+                }
                 return
+            }
+            
+            // 检查HTTP响应状态码
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 429 {
+                    print("🚦 Google Scholar访问频率限制: \(scholarId)")
+                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: 429, userInfo: [NSLocalizedDescriptionKey: "访问过于频繁，请稍后再试"]))))
+                    return
+                } else if httpResponse.statusCode >= 400 {
+                    print("❌ HTTP错误 \(httpResponse.statusCode): \(scholarId)")
+                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "服务器错误: \(httpResponse.statusCode)"]))))
+                    return
+                }
             }
             
             guard let data = data else {
@@ -228,6 +318,22 @@ class PreferencesManager {
         }
     }
     
+    var iCloudSyncEnabled: Bool {
+        get {
+            return userDefaults.bool(forKey: UserDefaults.Keys.iCloudSyncEnabled)
+        }
+        set {
+            userDefaults.set(newValue, forKey: UserDefaults.Keys.iCloudSyncEnabled)
+            if newValue {
+                // Enable iCloud sync
+                iCloudSyncManager.shared.enableAutoSync()
+            } else {
+                // Disable iCloud sync
+                iCloudSyncManager.shared.disableAutoSync()
+            }
+        }
+    }
+    
     private func updateActivationPolicy() {
         DispatchQueue.main.async {
             if self.showInDock {
@@ -265,597 +371,36 @@ class PreferencesManager {
     func updateScholar(withId id: String, name: String? = nil, citations: Int? = nil) {
         var currentScholars = scholars
         if let index = currentScholars.firstIndex(where: { $0.id == id }) {
+            let oldCitations = currentScholars[index].citations
+            
             if let name = name {
                 currentScholars[index].name = name
             }
             if let citations = citations {
                 currentScholars[index].citations = citations
                 currentScholars[index].lastUpdated = Date()
+                
+                // 保存历史数据到 Core Data (只有数据变化时才保存)
+                let historyManager = CitationHistoryManager.shared
+                historyManager.saveHistoryIfChanged(scholarId: id, citationCount: citations) { saved in
+                    if saved {
+                        print("✅ Citation data changed for scholar \(id): \(citations) citations - saved to history (updateScholar)")
+                    } else {
+                        print("ℹ️ Citation data unchanged for scholar \(id): \(citations) citations - not saved (updateScholar)")
+                    }
+                }
+                
+                // 如果引用数有变化，发送通知
+                if citations != oldCitations {
+                    NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+                }
             }
             scholars = currentScholars
         }
     }
 }
 
-// MARK: - Custom TextField with Copy/Paste Support
-class EditableTextField: NSTextField {
-    private let commandKey = NSEvent.ModifierFlags.command.rawValue
-    private let commandShiftKey = NSEvent.ModifierFlags.command.rawValue | NSEvent.ModifierFlags.shift.rawValue
-    
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if event.type == NSEvent.EventType.keyDown {
-            if (event.modifierFlags.rawValue & NSEvent.ModifierFlags.deviceIndependentFlagsMask.rawValue) == commandKey {
-                switch event.charactersIgnoringModifiers! {
-                case "x":
-                    if NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: self) { return true }
-                case "c":
-                    if NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: self) { return true }
-                case "v":
-                    if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: self) { return true }
-                case "z":
-                    if NSApp.sendAction(Selector(("undo:")), to: nil, from: self) { return true }
-                case "a":
-                    if NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: self) { return true }
-                default:
-                    break
-                }
-            } else if (event.modifierFlags.rawValue & NSEvent.ModifierFlags.deviceIndependentFlagsMask.rawValue) == commandShiftKey {
-                if event.charactersIgnoringModifiers == "Z" {
-                    if NSApp.sendAction(Selector(("redo:")), to: nil, from: self) { return true }
-                }
-            }
-        }
-        return super.performKeyEquivalent(with: event)
-    }
-}
-
-// MARK: - Settings Window Controller
-class SettingsWindowController: NSWindowController {
-    private var scholars: [Scholar] = []
-    private var tableView: NSTableView!
-    private var updateIntervalPopup: NSPopUpButton!
-    private var showInDockCheckbox: NSButton!
-    private var showInMenuBarCheckbox: NSButton!
-    private var launchAtLoginCheckbox: NSButton!
-    private let scholarService = GoogleScholarService()
-    
-    deinit {
-        // 清理资源
-    }
-    
-    override func loadWindow() {
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: 550),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "CiteTrack - 设置"
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        self.window = window
-        
-        setupUI()
-        loadData()
-    }
-    
-    private func setupUI() {
-        guard let window = window else { return }
-        
-        let contentView = NSView()
-        window.contentView = contentView
-        
-        let mainStack = NSStackView()
-        mainStack.orientation = .vertical
-        mainStack.spacing = 20
-        mainStack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(mainStack)
-        
-        // 学者管理区域
-        let scholarSection = createScholarSection()
-        mainStack.addArrangedSubview(scholarSection)
-        
-        // 设置区域
-        let settingsSection = createSettingsSection()
-        mainStack.addArrangedSubview(settingsSection)
-        
-        NSLayoutConstraint.activate([
-            mainStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
-            mainStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            mainStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            mainStack.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
-        ])
-    }
-    
-    private func createScholarSection() -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        
-        let titleLabel = NSTextField(labelWithString: "学者管理")
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 16)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(titleLabel)
-        
-        let scrollView = NSScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = true
-        scrollView.borderType = .bezelBorder
-        
-        tableView = NSTableView()
-        tableView.headerView = nil
-        tableView.rowSizeStyle = .medium
-        
-        let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
-        nameColumn.title = "姓名"
-        nameColumn.width = 150
-        tableView.addTableColumn(nameColumn)
-        
-        let idColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("id"))
-        idColumn.title = "学者ID"
-        idColumn.width = 200
-        tableView.addTableColumn(idColumn)
-        
-        let citationsColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("citations"))
-        citationsColumn.title = "引用量"
-        citationsColumn.width = 80
-        tableView.addTableColumn(citationsColumn)
-        
-        tableView.dataSource = self
-        tableView.delegate = self
-        scrollView.documentView = tableView
-        container.addSubview(scrollView)
-        
-        let buttonStack = NSStackView()
-        buttonStack.orientation = .horizontal
-        buttonStack.spacing = 12
-        buttonStack.translatesAutoresizingMaskIntoConstraints = false
-        
-        let addButton = NSButton(title: "添加学者", target: self, action: #selector(addScholar))
-        let removeButton = NSButton(title: "删除", target: self, action: #selector(removeScholar))
-        let refreshButton = NSButton(title: "刷新数据", target: self, action: #selector(refreshData))
-        
-        addButton.bezelStyle = .rounded
-        removeButton.bezelStyle = .rounded
-        refreshButton.bezelStyle = .rounded
-        
-        buttonStack.addArrangedSubview(addButton)
-        buttonStack.addArrangedSubview(removeButton)
-        buttonStack.addArrangedSubview(refreshButton)
-        buttonStack.addArrangedSubview(NSView()) // 弹簧
-        
-        container.addSubview(buttonStack)
-        
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor),
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            
-            scrollView.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
-            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scrollView.heightAnchor.constraint(equalToConstant: 200),
-            
-            buttonStack.topAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: 12),
-            buttonStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            buttonStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            buttonStack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
-        
-        return container
-    }
-    
-    private func createSettingsSection() -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        
-        let titleLabel = NSTextField(labelWithString: "应用设置")
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 16)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(titleLabel)
-        
-        let formStack = NSStackView()
-        formStack.orientation = .vertical
-        formStack.spacing = 16
-        formStack.translatesAutoresizingMaskIntoConstraints = false
-        
-        // 更新频率
-        let updateRow = createFormRow(
-            label: "自动更新间隔:",
-            control: {
-                updateIntervalPopup = NSPopUpButton()
-                updateIntervalPopup.addItem(withTitle: "30分钟")
-                updateIntervalPopup.addItem(withTitle: "1小时")
-                updateIntervalPopup.addItem(withTitle: "2小时")
-                updateIntervalPopup.addItem(withTitle: "6小时")
-                updateIntervalPopup.addItem(withTitle: "12小时")
-                updateIntervalPopup.addItem(withTitle: "1天")
-                updateIntervalPopup.addItem(withTitle: "3天")
-                updateIntervalPopup.addItem(withTitle: "1周")
-                updateIntervalPopup.target = self
-                updateIntervalPopup.action = #selector(updateIntervalChanged)
-                return updateIntervalPopup
-            }()
-        )
-        formStack.addArrangedSubview(updateRow)
-        
-        // 显示选项
-        let displaySection = createSectionTitle("显示选项")
-        formStack.addArrangedSubview(displaySection)
-        
-        let dockRow = createCheckboxRow(
-            label: "在Dock中显示:",
-            checkbox: {
-                showInDockCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInDockChanged))
-                return showInDockCheckbox
-            }()
-        )
-        formStack.addArrangedSubview(dockRow)
-        
-        let menuBarRow = createCheckboxRow(
-            label: "在菜单栏中显示:",
-            checkbox: {
-                showInMenuBarCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInMenuBarChanged))
-                return showInMenuBarCheckbox
-            }()
-        )
-        formStack.addArrangedSubview(menuBarRow)
-        
-        // 启动选项
-        let startupSection = createSectionTitle("启动选项")
-        formStack.addArrangedSubview(startupSection)
-        
-        let launchRow = createCheckboxRow(
-            label: "随系统启动:",
-            checkbox: {
-                launchAtLoginCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(launchAtLoginChanged))
-                return launchAtLoginCheckbox
-            }()
-        )
-        formStack.addArrangedSubview(launchRow)
-        
-        container.addSubview(formStack)
-        
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: container.topAnchor),
-            titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            
-            formStack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 12),
-            formStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            formStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            formStack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
-        
-        return container
-    }
-    
-    private func createFormRow(label: String, control: NSView) -> NSView {
-        let row = NSView()
-        row.translatesAutoresizingMaskIntoConstraints = false
-        
-        let labelField = NSTextField(labelWithString: label)
-        labelField.font = NSFont.systemFont(ofSize: 13)
-        labelField.translatesAutoresizingMaskIntoConstraints = false
-        
-        control.translatesAutoresizingMaskIntoConstraints = false
-        
-        row.addSubview(labelField)
-        row.addSubview(control)
-        
-        NSLayoutConstraint.activate([
-            labelField.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-            labelField.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            labelField.widthAnchor.constraint(equalToConstant: 120),
-            
-            control.leadingAnchor.constraint(equalTo: labelField.trailingAnchor, constant: 12),
-            control.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            control.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
-            
-            row.heightAnchor.constraint(equalToConstant: 28)
-        ])
-        
-        return row
-    }
-    
-    private func createSectionTitle(_ title: String) -> NSView {
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 13)
-        titleLabel.textColor = .secondaryLabelColor
-        return titleLabel
-    }
-    
-    private func createCheckboxRow(label: String, checkbox: NSButton) -> NSView {
-        let row = NSView()
-        row.translatesAutoresizingMaskIntoConstraints = false
-        
-        let labelField = NSTextField(labelWithString: label)
-        labelField.font = NSFont.systemFont(ofSize: 13)
-        labelField.translatesAutoresizingMaskIntoConstraints = false
-        
-        checkbox.translatesAutoresizingMaskIntoConstraints = false
-        
-        row.addSubview(labelField)
-        row.addSubview(checkbox)
-        
-        NSLayoutConstraint.activate([
-            labelField.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-            labelField.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            labelField.widthAnchor.constraint(equalToConstant: 120),
-            
-            checkbox.leadingAnchor.constraint(equalTo: labelField.trailingAnchor, constant: 12),
-            checkbox.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            checkbox.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
-            
-            row.heightAnchor.constraint(equalToConstant: 28)
-        ])
-        
-        return row
-    }
-    
-    private func loadData() {
-        scholars = PreferencesManager.shared.scholars
-        tableView.reloadData()
-        
-        // 设置更新频率
-        let interval = PreferencesManager.shared.updateInterval
-        let index: Int
-        switch interval {
-        case 1800: index = 0   // 30分钟
-        case 3600: index = 1   // 1小时
-        case 7200: index = 2   // 2小时
-        case 21600: index = 3  // 6小时
-        case 43200: index = 4  // 12小时
-        case 86400: index = 5  // 1天
-        case 259200: index = 6 // 3天
-        case 604800: index = 7 // 1周
-        default: index = 5     // 默认1天
-        }
-        updateIntervalPopup.selectItem(at: index)
-        
-        // 设置显示选项
-        showInDockCheckbox.state = PreferencesManager.shared.showInDock ? .on : .off
-        showInMenuBarCheckbox.state = PreferencesManager.shared.showInMenuBar ? .on : .off
-        launchAtLoginCheckbox.state = PreferencesManager.shared.launchAtLogin ? .on : .off
-    }
-    
-    @objc private func addScholar() {
-        // 使用简单的NSAlert方式，避免复杂的模态窗口管理
-        let alert = NSAlert()
-        alert.messageText = "添加学者"
-        alert.informativeText = "请输入Google Scholar用户ID或完整链接"
-        alert.addButton(withTitle: "添加")
-        alert.addButton(withTitle: "取消")
-        
-        // 创建输入框
-        let inputTextField = EditableTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        inputTextField.placeholderString = "例如：USER_ID 或完整链接"
-        inputTextField.isEditable = true
-        inputTextField.isSelectable = true
-        inputTextField.usesSingleLineMode = true
-        inputTextField.cell?.wraps = false
-        inputTextField.cell?.isScrollable = true
-        
-        // 创建姓名输入框
-        let nameTextField = EditableTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
-        nameTextField.placeholderString = "学者姓名（可选）"
-        nameTextField.isEditable = true
-        nameTextField.isSelectable = true
-        nameTextField.usesSingleLineMode = true
-        nameTextField.cell?.wraps = false
-        nameTextField.cell?.isScrollable = true
-        
-        // 创建容器视图
-        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 80))
-        
-        let idLabel = NSTextField(labelWithString: "Scholar ID或链接:")
-        idLabel.frame = NSRect(x: 0, y: 50, width: 300, height: 20)
-        idLabel.font = NSFont.systemFont(ofSize: 12)
-        containerView.addSubview(idLabel)
-        
-        inputTextField.frame = NSRect(x: 0, y: 30, width: 300, height: 24)
-        containerView.addSubview(inputTextField)
-        
-        let nameLabel = NSTextField(labelWithString: "姓名（可选）:")
-        nameLabel.frame = NSRect(x: 0, y: 5, width: 300, height: 20)
-        nameLabel.font = NSFont.systemFont(ofSize: 12)
-        containerView.addSubview(nameLabel)
-        
-        nameTextField.frame = NSRect(x: 0, y: -15, width: 300, height: 24)
-        containerView.addSubview(nameTextField)
-        
-        alert.accessoryView = containerView
-        
-        // 设置初始焦点
-        alert.window.initialFirstResponder = inputTextField
-        
-        let response = alert.runModal()
-        
-        if response == .alertFirstButtonReturn {
-            let input = inputTextField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let customName = nameTextField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            
-            if input.isEmpty {
-                let errorAlert = NSAlert()
-                errorAlert.messageText = "输入为空"
-                errorAlert.informativeText = "请输入有效的Google Scholar用户ID或链接"
-                errorAlert.runModal()
-                return
-            }
-            
-            if let scholarId = GoogleScholarService.extractScholarId(from: input) {
-                // 检查是否已存在
-                if scholars.contains(where: { $0.id == scholarId }) {
-                    let existAlert = NSAlert()
-                    existAlert.messageText = "学者已存在"
-                    existAlert.informativeText = "该学者已在列表中"
-                    existAlert.runModal()
-                    return
-                }
-                
-                // 立即获取学者信息
-                scholarService.fetchScholarInfo(for: scholarId) { [weak self] result in
-                    DispatchQueue.main.async {
-                        guard let self = self, let _ = self.window else { return }
-                        
-                        switch result {
-                        case .success(let info):
-                            // 使用自定义姓名（如果提供）或从Google Scholar获取的姓名
-                            let finalName = customName.isEmpty ? info.name : customName
-                            let scholar = Scholar(id: scholarId, name: finalName)
-                            PreferencesManager.shared.addScholar(scholar)
-                            PreferencesManager.shared.updateScholar(withId: scholarId, citations: info.citations)
-                            self.loadData()
-                            NotificationCenter.default.post(name: NSNotification.Name("ScholarsUpdated"), object: nil)
-                            
-                            // 安全地显示成功消息
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                guard let _ = self.window else { return }
-                                let successAlert = NSAlert()
-                                successAlert.messageText = "添加成功"
-                                successAlert.informativeText = "学者 \(finalName) 已添加，引用量：\(info.citations)"
-                                successAlert.runModal()
-                            }
-                            
-                        case .failure(let error):
-                            // 使用自定义姓名或默认姓名
-                            let finalName = customName.isEmpty ? "学者 \(scholarId.prefix(8))" : customName
-                            let scholar = Scholar(id: scholarId, name: finalName)
-                            PreferencesManager.shared.addScholar(scholar)
-                            self.loadData()
-                            NotificationCenter.default.post(name: NSNotification.Name("ScholarsUpdated"), object: nil)
-                            
-                            // 安全地显示错误消息
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                guard let _ = self.window else { return }
-                                let errorAlert = NSAlert()
-                                errorAlert.messageText = "获取学者信息失败"
-                                errorAlert.informativeText = "学者已添加为 \(finalName)，但无法获取详细信息：\(error.localizedDescription)"
-                                errorAlert.runModal()
-                            }
-                        }
-                    }
-                }
-            } else {
-                let errorAlert = NSAlert()
-                errorAlert.messageText = "输入格式错误"
-                errorAlert.informativeText = "请输入有效的Google Scholar用户ID或完整链接\n\n支持格式：\n• 直接输入用户ID\n• https://scholar.google.com/citations?user=USER_ID"
-                errorAlert.runModal()
-            }
-        }
-    }
-    
-
-    
-    @objc private func removeScholar() {
-        let selectedRow = tableView.selectedRow
-        guard selectedRow >= 0 && selectedRow < scholars.count else {
-            let alert = NSAlert()
-            alert.messageText = "请选择要删除的学者"
-            alert.runModal()
-            return
-        }
-        
-        let scholar = scholars[selectedRow]
-        PreferencesManager.shared.removeScholar(withId: scholar.id)
-        loadData()
-        NotificationCenter.default.post(name: NSNotification.Name("ScholarsUpdated"), object: nil)
-    }
-    
-    @objc private func refreshData() {
-        // 立即刷新所有学者数据
-        for scholar in scholars {
-            scholarService.fetchScholarInfo(for: scholar.id) { [weak self] result in
-                DispatchQueue.main.async {
-                    guard let self = self, let _ = self.window else { return }
-                    
-                    switch result {
-                    case .success(let info):
-                        PreferencesManager.shared.updateScholar(withId: scholar.id, name: info.name, citations: info.citations)
-                        self.loadData()
-                        NotificationCenter.default.post(name: NSNotification.Name("ScholarsUpdated"), object: nil)
-                    case .failure(let error):
-                        print("刷新学者 \(scholar.id) 失败: \(error.localizedDescription)")
-                    }
-                }
-            }
-        }
-    }
-    
-    @objc private func updateIntervalChanged() {
-        let intervals: [TimeInterval] = [1800, 3600, 7200, 21600, 43200, 86400, 259200, 604800]
-        let selectedIndex = updateIntervalPopup.indexOfSelectedItem
-        if selectedIndex >= 0 && selectedIndex < intervals.count {
-            PreferencesManager.shared.updateInterval = intervals[selectedIndex]
-            NotificationCenter.default.post(name: NSNotification.Name("UpdateIntervalChanged"), object: nil)
-        }
-    }
-    
-    @objc private func showInDockChanged() {
-        PreferencesManager.shared.showInDock = showInDockCheckbox.state == .on
-    }
-    
-    @objc private func showInMenuBarChanged() {
-        PreferencesManager.shared.showInMenuBar = showInMenuBarCheckbox.state == .on
-        NotificationCenter.default.post(name: NSNotification.Name("MenuBarVisibilityChanged"), object: nil)
-    }
-    
-    @objc private func launchAtLoginChanged() {
-        PreferencesManager.shared.launchAtLogin = launchAtLoginCheckbox.state == .on
-    }
-}
-
-extension SettingsWindowController: NSWindowDelegate {
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        // 隐藏窗口而不是关闭，避免重复创建
-        sender.orderOut(nil)
-        return false
-    }
-}
-
-extension SettingsWindowController: NSTableViewDataSource, NSTableViewDelegate {
-    func numberOfRows(in tableView: NSTableView) -> Int {
-        return scholars.count
-    }
-    
-    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-        let scholar = scholars[row]
-        let cellView = NSTableCellView()
-        
-        let textField = NSTextField()
-        textField.isEditable = false
-        textField.isBordered = false
-        textField.backgroundColor = .clear
-        textField.font = NSFont.systemFont(ofSize: 13)
-        
-        switch tableColumn?.identifier.rawValue {
-        case "name":
-            textField.stringValue = scholar.name
-        case "id":
-            textField.stringValue = scholar.id
-            textField.textColor = .secondaryLabelColor
-        case "citations":
-            if let citations = scholar.citations {
-                textField.stringValue = "\(citations)"
-                textField.alignment = .right
-            } else {
-                textField.stringValue = "--"
-                textField.alignment = .right
-                textField.textColor = .tertiaryLabelColor
-            }
-        default:
-            textField.stringValue = ""
-        }
-        
-        cellView.addSubview(textField)
-        textField.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 8),
-            textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -8),
-            textField.centerYAnchor.constraint(equalTo: cellView.centerYAnchor)
-        ])
-        
-        return cellView
-    }
-}
+// Note: SettingsWindowController and EditableTextField are now defined in SettingsWindow.swift
 
 // MARK: - App Delegate
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -864,10 +409,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private let scholarService = GoogleScholarService()
     private var settingsWindowController: SettingsWindowController?
+    private var chartsWindowController: ChartsWindowController?
     private var scholars: [Scholar] = []
     private var currentCitations: [String: Int] = [:]
+    private let backgroundDataService = BackgroundDataCollectionService.shared
+    private var isUpdating = false
+    
+    // Sparkle updater
+    private var updaterController: SPUStandardUpdaterController!
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // Initialize Sparkle updater
+        setupSparkleUpdater()
+        
+        // Initialize Core Data stack
+        initializeCoreData()
+        
+        // Only check iCloud if sync is enabled
+        if PreferencesManager.shared.iCloudSyncEnabled {
+            print("🚀 [App Startup] iCloud sync enabled, checking status...")
+            let status = iCloudSyncManager.shared.getFileStatus()
+            print("📋 [iCloud Status] \(status.description)")
+        } else {
+            print("🚀 [App Startup] iCloud sync disabled, skipping check")
+        }
+        
         updateActivationPolicy()
         setupNotifications()
         setupStatusBar()
@@ -883,12 +449,55 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showFirstTimeSetup()
             }
         } else {
-            startPeriodicUpdate()
-            updateAllCitations()
+            backgroundDataService.startAutomaticCollection()
+        }
+    }
+    
+    private func setupSparkleUpdater() {
+        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    }
+    
+    private func initializeCoreData() {
+        // Perform migration check
+        CoreDataManager.shared.performMigrationIfNeeded()
+        
+        // Initialize the persistent container
+        _ = CoreDataManager.shared.persistentContainer
+        
+        // Schedule maintenance tasks
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 30) {
+            CoreDataManager.shared.performMaintenanceTasks()
+        }
+        
+        // Listen for Core Data errors
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCoreDataError(_:)),
+            name: .coreDataError,
+            object: nil
+        )
+    }
+    
+    @objc private func handleCoreDataError(_ notification: Notification) {
+        guard let error = notification.userInfo?["error"] as? NSError else { return }
+        
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = L("error_database_title")
+            alert.informativeText = L("error_database_message", error.localizedDescription)
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: L("button_ok"))
+            alert.runModal()
         }
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
+        // Save Core Data context before terminating
+        CoreDataManager.shared.saveContext()
+        
+        // Stop background data collection
+        backgroundDataService.stopAutomaticCollection()
+        
         // 清理定时器
         timer?.invalidate()
         timer = nil
@@ -940,6 +549,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSNotification.Name("MenuBarVisibilityChanged"),
             object: nil
         )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageChanged),
+            name: .languageChanged,
+            object: nil
+        )
     }
     
     private func setupStatusBar() {
@@ -962,6 +578,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    private func updateMenuBarTitle(_ title: String) {
+        // 确保在主线程执行UI更新
+        assert(Thread.isMainThread, "updateMenuBarTitle() must be called on the main thread")
+        
+        if let button = statusBarItem.button {
+            button.title = title
+        }
+    }
+    
     private func setupMenu() {
         menu = NSMenu()
         statusBarItem.menu = menu
@@ -969,6 +594,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func rebuildMenu() {
+        // 确保在主线程执行UI更新
+        assert(Thread.isMainThread, "rebuildMenu() must be called on the main thread")
+        
         menu.removeAllItems()
         
         let titleItem = NSMenuItem(title: "CiteTrack", action: nil, keyEquivalent: "")
@@ -977,8 +605,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
-        if scholars.isEmpty {
-            let noScholarsItem = NSMenuItem(title: "暂无学者数据", action: nil, keyEquivalent: "")
+        if isUpdating {
+            // 显示更新中状态
+            let updatingItem = NSMenuItem(title: "updating···", action: nil, keyEquivalent: "")
+            updatingItem.isEnabled = false
+            menu.addItem(updatingItem)
+        } else if scholars.isEmpty {
+            let noScholarsItem = NSMenuItem(title: L("menu_no_scholars"), action: nil, keyEquivalent: "")
             noScholarsItem.isEnabled = false
             menu.addItem(noScholarsItem)
         } else {
@@ -993,21 +626,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
-        let refreshItem = NSMenuItem(title: "手动更新", action: #selector(refreshCitations), keyEquivalent: "r")
+        let refreshItem = NSMenuItem(title: L("menu_manual_update"), action: #selector(refreshCitations), keyEquivalent: "r")
         refreshItem.target = self
         menu.addItem(refreshItem)
         
-        let settingsItem = NSMenuItem(title: "偏好设置...", action: #selector(showSettings), keyEquivalent: ",")
+        let settingsItem = NSMenuItem(title: L("menu_preferences"), action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
         
+        let chartsItem = NSMenuItem(title: L("menu_charts"), action: #selector(showCharts), keyEquivalent: "")
+        chartsItem.target = self
+        menu.addItem(chartsItem)
+        
         menu.addItem(NSMenuItem.separator())
         
-        let aboutItem = NSMenuItem(title: "关于 CiteTrack", action: #selector(showAbout), keyEquivalent: "")
+        let checkForUpdatesItem = NSMenuItem(title: L("menu_check_updates"), action: #selector(checkForUpdates), keyEquivalent: "")
+        checkForUpdatesItem.target = self
+        menu.addItem(checkForUpdatesItem)
+        
+        let aboutItem = NSMenuItem(title: L("menu_about"), action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         menu.addItem(aboutItem)
         
-        let quitItem = NSMenuItem(title: "退出", action: #selector(quit), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: L("menu_quit"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
     }
@@ -1030,10 +671,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             
             let alert = NSAlert()
-            alert.messageText = "欢迎使用 CiteTrack"
-            alert.informativeText = "这是一个精美专业的macOS菜单栏应用，用于实时监控您的Google Scholar引用量。\n\n小而精，专业可靠。\n\n请先添加学者信息来开始使用。"
-            alert.addButton(withTitle: "打开设置")
-            alert.addButton(withTitle: "稍后设置")
+            alert.messageText = L("welcome_title")
+            alert.informativeText = L("welcome_message")
+            alert.addButton(withTitle: L("button_open_settings"))
+            alert.addButton(withTitle: L("button_later"))
             
             let response = alert.runModal()
             if response == .alertFirstButtonReturn {
@@ -1043,15 +684,129 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func startPeriodicUpdate() {
-        timer?.invalidate()
-        let interval = PreferencesManager.shared.updateInterval
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in
-            self.updateAllCitations()
-        }
+        // Use the new background data collection service
+        backgroundDataService.startAutomaticCollection()
     }
     
     @objc private func refreshCitations() {
-        updateAllCitations()
+        guard !scholars.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = L("menu_no_scholars")
+            alert.informativeText = L("error_no_scholars_for_charts_message")
+            alert.runModal()
+            return
+        }
+        
+        // 设置更新状态
+        isUpdating = true
+        
+        // 显示更新中状态
+        updateMenuBarTitle("⋯")
+        rebuildMenu() // 重建菜单以显示updating状态
+        
+        // 使用同步队列保护共享变量
+        let updateQueue = DispatchQueue(label: "com.citetrack.citationupdate", attributes: .concurrent)
+        var updatedCount = 0
+        let totalCount = scholars.count
+        var hasChanges = false
+        var changeDetails: [String] = []
+        
+        let group = DispatchGroup()
+        
+        for scholar in scholars {
+            group.enter()
+            let oldCitations = currentCitations[scholar.id] ?? 0
+            
+            scholarService.fetchScholarInfo(for: scholar.id) { [weak self] result in
+                DispatchQueue.main.async {
+                    // 使用 weak-strong dance 模式
+                    guard let strongSelf = self else { 
+                        group.leave()
+                        return 
+                    }
+                    
+                    defer { group.leave() }
+                    
+                    switch result {
+                    case .success(let info):
+                        // 使用 barrier 确保线程安全的更新
+                        updateQueue.async(flags: .barrier) {
+                            updatedCount += 1
+                            let newCitations = info.citations
+                            let change = newCitations - oldCitations
+                            
+                            // 记录变化
+                            if change != 0 {
+                                hasChanges = true
+                                let changeText = change > 0 ? "+\(change)" : "\(change)"
+                                changeDetails.append("\(scholar.name): \(oldCitations) → \(newCitations) (\(changeText))")
+                            }
+                            
+                            DispatchQueue.main.async {
+                                // 更新数据 (在主线程执行)
+                                strongSelf.currentCitations[scholar.id] = newCitations
+                                PreferencesManager.shared.updateScholar(withId: scholar.id, name: info.name, citations: newCitations)
+                                
+                                // 实时更新菜单显示
+                                strongSelf.rebuildMenu()
+                            }
+                        }
+                        
+                    case .failure(let error):
+                        print("更新学者 \(scholar.name) 失败: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        
+        // 等待所有请求完成
+        group.notify(queue: .main) { [weak self] in
+            guard let strongSelf = self else { return }
+            
+            // 重置更新状态
+            strongSelf.isUpdating = false
+            
+            // 根据更新结果显示不同状态
+            if updatedCount == totalCount {
+                // 全部成功
+                strongSelf.updateMenuBarTitle("✓")
+                // 2秒后恢复正常显示
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+                    guard let strongSelf = self else { return }
+                    strongSelf.updateMenuBarTitle("∞")
+                    strongSelf.rebuildMenu() // 恢复正常菜单显示
+                }
+            } else {
+                // 有失败的情况
+                strongSelf.updateMenuBarTitle("⚠️")
+                // 3秒后恢复正常显示
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                    guard let strongSelf = self else { return }
+                    strongSelf.updateMenuBarTitle("∞")
+                    strongSelf.rebuildMenu() // 恢复正常菜单显示
+                }
+            }
+            
+            // 立即重建菜单以显示更新后的数据
+            strongSelf.rebuildMenu()
+            
+            // 显示更新结果
+            let alert = NSAlert()
+            alert.messageText = L("update_completed")
+            
+            if hasChanges {
+                alert.informativeText = L("update_result_with_changes", updatedCount, totalCount) + "\n\n" + L("change_details") + ":\n" + changeDetails.joined(separator: "\n")
+                alert.alertStyle = .informational
+            } else {
+                alert.informativeText = L("update_result_no_changes", updatedCount, totalCount)
+                alert.alertStyle = .informational
+            }
+            
+            alert.runModal()
+            
+            // 通知其他组件数据已更新
+            NotificationCenter.default.post(name: NSNotification.Name("ScholarsUpdated"), object: nil)
+        }
     }
     
     @objc private func showSettings() {
@@ -1063,10 +818,73 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
     
+    @objc private func showCharts() {
+        print("AppDelegate: showCharts() called")
+        
+        // 防止多次调用导致的崩溃：如果窗口已存在，直接返回
+        if let existingController = chartsWindowController,
+           let existingWindow = existingController.window {
+            print("AppDelegate: Charts window already exists, bringing to front")
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        
+        // Ensure Core Data is initialized first
+        let _ = CoreDataManager.shared.viewContext
+        print("AppDelegate: Core Data is available")
+        
+        // Check if we have any scholars before showing charts
+        if scholars.isEmpty {
+            print("AppDelegate: No scholars available, showing alert")
+            let alert = NSAlert()
+            alert.messageText = L("error_no_scholars_for_charts")
+            alert.informativeText = L("error_no_scholars_for_charts_message")
+            alert.addButton(withTitle: L("button_open_settings"))
+            alert.addButton(withTitle: L("button_cancel"))
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                showSettings()
+            }
+            return
+        }
+        
+        print("AppDelegate: Creating charts window...")
+        
+        // 创建新的ChartsWindowController实例
+        print("AppDelegate: Creating new ChartsWindowController")
+        chartsWindowController = ChartsWindowController()
+        
+        guard chartsWindowController != nil else {
+            print("AppDelegate: ERROR - Failed to create ChartsWindowController")
+            let alert = NSAlert()
+            alert.messageText = "Charts Error"
+            alert.informativeText = "Failed to create charts window. Please try again."
+            alert.alertStyle = .critical
+            alert.runModal()
+            return
+        }
+        
+        print("AppDelegate: Showing charts window...")
+        chartsWindowController?.showWindow(self)
+        print("AppDelegate: Charts window shown successfully")
+    }
+    
+    // Called when charts window is closed
+    func chartsWindowDidClose() {
+        print("AppDelegate: Charts window closed, clearing reference")
+        chartsWindowController = nil
+    }
+    
+    @objc private func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
+    }
+    
     @objc private func showAbout() {
         let alert = NSAlert()
-        alert.messageText = "CiteTrack"
-        alert.informativeText = "版本 1.0\n\n一个精美专业的macOS菜单栏应用\n实时监控Google Scholar引用量\n\n小而精，专业可靠\n支持多学者监控，智能更新\n\n© 2024"
+        alert.messageText = L("app_name")
+        alert.informativeText = L("app_about")
         alert.runModal()
     }
     
@@ -1075,20 +893,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func scholarsUpdated() {
-        loadScholars()
-        if !scholars.isEmpty {
-            startPeriodicUpdate()
-            updateAllCitations()
+        // 确保UI和数据更新在主线程执行
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            strongSelf.loadScholars()
+            if !strongSelf.scholars.isEmpty {
+                strongSelf.backgroundDataService.restartAutomaticCollection()
+            }
         }
     }
     
     @objc private func updateIntervalChanged() {
-        startPeriodicUpdate()
+        backgroundDataService.restartAutomaticCollection()
     }
     
     @objc private func menuBarVisibilityChanged() {
         updateMenuBarDisplay()
         updateActivationPolicy()
+    }
+    
+    @objc private func languageChanged() {
+        // 确保UI更新在主线程执行
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            // 重新构建菜单以更新所有文本
+            strongSelf.rebuildMenu()
+        }
     }
     
     private func updateAllCitations() {
@@ -1097,13 +927,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
-        for scholar in scholars {
-            updateCitation(for: scholar)
+        // Use the new background data collection service for manual updates
+        backgroundDataService.performManualCollection { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                switch result {
+                case .success(let results):
+                    self.currentCitations = results
+                    self.rebuildMenu()
+                case .failure(let error):
+                    print("更新所有学者引用量失败: \(error.localizedDescription)")
+                }
+            }
         }
     }
     
     private func updateCitation(for scholar: Scholar) {
-        scholarService.fetchCitationCount(for: scholar.id) { [weak self] result in
+        // Use the new service with automatic history saving
+        scholarService.fetchAndSaveCitationCount(for: scholar.id) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 switch result {

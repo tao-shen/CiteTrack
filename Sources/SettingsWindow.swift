@@ -33,6 +33,37 @@ class EditableTextField: NSTextField {
     }
 }
 
+// MARK: - Validated TextField with Scholar ID Validation
+class ValidatedTextField: EditableTextField {
+    override func textDidChange(_ notification: Notification) {
+        super.textDidChange(notification)
+        
+        let text = self.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // 实时验证输入
+        if !text.isEmpty {
+            if GoogleScholarService.extractScholarId(from: text) != nil {
+                // 有效输入 - 使用绿色边框
+                self.layer?.borderColor = NSColor.systemGreen.cgColor
+                self.layer?.borderWidth = 1.0
+            } else {
+                // 无效输入 - 使用红色边框
+                self.layer?.borderColor = NSColor.systemRed.cgColor
+                self.layer?.borderWidth = 1.0
+            }
+        } else {
+            // 清除边框
+            self.layer?.borderWidth = 0.0
+        }
+    }
+    
+    override func awakeFromNib() {
+        super.awakeFromNib()
+        self.wantsLayer = true
+        self.layer?.cornerRadius = 3.0
+    }
+}
+
 // MARK: - Settings Window Controller
 class SettingsWindowController: NSWindowController {
     private var tabView: NSTabView!
@@ -44,6 +75,7 @@ class SettingsWindowController: NSWindowController {
     private var showInMenuBarCheckbox: NSButton!
     private var launchAtLoginCheckbox: NSButton!
     private var languagePopup: NSPopUpButton!
+    // Charts functionality moved to separate window
     
     override init(window: NSWindow?) {
         super.init(window: window)
@@ -56,6 +88,14 @@ class SettingsWindowController: NSWindowController {
             self,
             selector: #selector(languageChanged),
             name: .languageChanged,
+            object: nil
+        )
+        
+        // 监听语言切换失败
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageChangeFailed(_:)),
+            name: .languageChangeFailed,
             object: nil
         )
         
@@ -117,6 +157,7 @@ class SettingsWindowController: NSWindowController {
         
         setupGeneralTab()
         setupScholarTab()
+        // Charts tab removed - now available as separate window from main menu
     }
     
     private func setupGeneralTab() {
@@ -143,40 +184,64 @@ class SettingsWindowController: NSWindowController {
         tabView.addTabViewItem(scholarTabItem)
     }
     
+    // Charts tab functionality moved to separate ChartsWindowController
+    // Access via main menu > Charts
+    
     private func setupGeneralSettings(in parentView: NSView) {
         let settingsStack = NSStackView()
         settingsStack.orientation = .vertical
-        settingsStack.spacing = 20
+        settingsStack.spacing = 24
         settingsStack.alignment = .leading
         settingsStack.translatesAutoresizingMaskIntoConstraints = false
         parentView.addSubview(settingsStack)
         
-        // 启动选项标题 - 移到最上面
-        let startupTitle = createSectionTitle(L("section_startup_options"))
-        settingsStack.addArrangedSubview(startupTitle)
+        // Create organized sections with better spacing
+        setupStartupSection(in: settingsStack)
+        settingsStack.addArrangedSubview(createSeparator())
+        setupAppSettingsSection(in: settingsStack)
+        settingsStack.addArrangedSubview(createSeparator())
+        setupDisplaySection(in: settingsStack)
+        settingsStack.addArrangedSubview(createSeparator())
+        setupiCloudSyncSection(in: settingsStack)
         
-        // 启动设置
-        let launchContainer = createSettingRow(
+        // Set up constraints to fill the parent view properly
+        NSLayoutConstraint.activate([
+            settingsStack.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 24),
+            settingsStack.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 24),
+            settingsStack.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -24),
+            settingsStack.bottomAnchor.constraint(lessThanOrEqualTo: parentView.bottomAnchor, constant: -24)
+        ])
+    }
+    
+    private func setupStartupSection(in stackView: NSStackView) {
+        let sectionContainer = createSectionContainer()
+        
+        let titleLabel = createSectionTitle(L("section_startup_options"))
+        sectionContainer.addArrangedSubview(titleLabel)
+        
+        let launchContainer = createImprovedSettingRow(
             label: L("setting_launch_at_login"),
+            description: "Automatically start CiteTrack when you log in",
             control: {
                 launchAtLoginCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(launchAtLoginChanged))
                 launchAtLoginCheckbox.state = PreferencesManager.shared.launchAtLogin ? .on : .off
                 return launchAtLoginCheckbox
             }()
         )
-        settingsStack.addArrangedSubview(launchContainer)
+        sectionContainer.addArrangedSubview(launchContainer)
         
-        // 分隔线
-        let separator1 = createSeparator()
-        settingsStack.addArrangedSubview(separator1)
+        stackView.addArrangedSubview(sectionContainer)
+    }
+    
+    private func setupAppSettingsSection(in stackView: NSStackView) {
+        let sectionContainer = createSectionContainer()
         
-        // 应用设置标题
-        let appSettingsTitle = createSectionTitle(L("section_app_settings"))
-        settingsStack.addArrangedSubview(appSettingsTitle)
+        let titleLabel = createSectionTitle(L("section_app_settings"))
+        sectionContainer.addArrangedSubview(titleLabel)
         
-        // 更新间隔设置
-        let updateIntervalContainer = createSettingRow(
+        let updateIntervalContainer = createImprovedSettingRow(
             label: L("setting_update_interval"),
+            description: "How often to automatically check for citation updates",
             control: {
                 updateIntervalPopup = NSPopUpButton()
                 updateIntervalPopup.addItem(withTitle: L("interval_30min"))
@@ -196,71 +261,197 @@ class SettingsWindowController: NSWindowController {
                 return updateIntervalPopup
             }()
         )
-        settingsStack.addArrangedSubview(updateIntervalContainer)
+        sectionContainer.addArrangedSubview(updateIntervalContainer)
         
-        // 语言设置
-        let languageContainer = createSettingRow(
+        let languageContainer = createImprovedSettingRow(
             label: L("setting_language"),
+            description: "Choose your preferred language for the interface",
             control: {
                 languagePopup = NSPopUpButton()
-                for language in LocalizationManager.shared.availableLanguages {
-                    languagePopup.addItem(withTitle: language.displayName)
-                    languagePopup.lastItem?.representedObject = language
-                }
-                
-                // 选择当前语言
-                let currentLanguage = LocalizationManager.shared.currentLanguageCode
-                for i in 0..<languagePopup.numberOfItems {
-                    if let language = languagePopup.item(at: i)?.representedObject as? LocalizationManager.Language,
-                       language.rawValue == currentLanguage {
-                        languagePopup.selectItem(at: i)
-                        break
-                    }
-                }
-                
-                languagePopup.target = self
-                languagePopup.action = #selector(languageSelectionChanged(_:))
+                setupLanguagePopup()
                 return languagePopup
             }()
         )
-        settingsStack.addArrangedSubview(languageContainer)
+        sectionContainer.addArrangedSubview(languageContainer)
         
-        // 分隔线
-        let separator2 = createSeparator()
-        settingsStack.addArrangedSubview(separator2)
+        stackView.addArrangedSubview(sectionContainer)
+    }
+    
+    private func setupDisplaySection(in stackView: NSStackView) {
+        let sectionContainer = createSectionContainer()
         
-        // 显示选项标题
-        let displayTitle = createSectionTitle(L("section_display_options"))
-        settingsStack.addArrangedSubview(displayTitle)
+        let titleLabel = createSectionTitle(L("section_display_options"))
+        sectionContainer.addArrangedSubview(titleLabel)
         
-        // Dock显示设置
-        let dockContainer = createSettingRow(
+        let dockContainer = createImprovedSettingRow(
             label: L("setting_show_in_dock"),
+            description: "Show CiteTrack icon in the Dock",
             control: {
                 showInDockCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInDockChanged))
                 showInDockCheckbox.state = PreferencesManager.shared.showInDock ? .on : .off
                 return showInDockCheckbox
             }()
         )
-        settingsStack.addArrangedSubview(dockContainer)
+        sectionContainer.addArrangedSubview(dockContainer)
         
-        // 菜单栏显示设置
-        let menuBarContainer = createSettingRow(
+        let menuBarContainer = createImprovedSettingRow(
             label: L("setting_show_in_menubar"),
+            description: "Show CiteTrack icon in the menu bar",
             control: {
                 showInMenuBarCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInMenuBarChanged))
                 showInMenuBarCheckbox.state = PreferencesManager.shared.showInMenuBar ? .on : .off
                 return showInMenuBarCheckbox
             }()
         )
-        settingsStack.addArrangedSubview(menuBarContainer)
+        sectionContainer.addArrangedSubview(menuBarContainer)
         
-        // 约束
+        // Add Open Charts button
+        let chartsContainer = createImprovedSettingRow(
+            label: L("setting_open_charts"),
+            description: "Open the charts window to view citation trends and statistics",
+            control: {
+                let openChartsButton = NSButton(title: L("button_open_charts"), target: self, action: #selector(openChartsWindow))
+                openChartsButton.bezelStyle = .rounded
+                return openChartsButton
+            }()
+        )
+        sectionContainer.addArrangedSubview(chartsContainer)
+        
+        stackView.addArrangedSubview(sectionContainer)
+    }
+    
+    private func setupiCloudSyncSection(in stackView: NSStackView) {
+        let sectionContainer = createSectionContainer()
+        
+        let titleLabel = createSectionTitle(L("section_icloud_sync"))
+        sectionContainer.addArrangedSubview(titleLabel)
+        
+        // iCloud sync checkbox
+        let syncContainer = createImprovedSettingRow(
+            label: L("setting_icloud_sync_enabled"),
+            description: L("setting_icloud_sync_description"),
+            control: {
+                let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(iCloudSyncToggled))
+                checkbox.state = PreferencesManager.shared.iCloudSyncEnabled ? .on : .off
+                return checkbox
+            }()
+        )
+        sectionContainer.addArrangedSubview(syncContainer)
+        
+        // iCloud status display
+        let statusContainer = createiCloudStatusRow()
+        sectionContainer.addArrangedSubview(statusContainer)
+        
+        // Open folder in Finder (enabled when iCloud is available)
+        let folderContainer = createImprovedSettingRow(
+            label: L("setting_open_icloud_folder"),
+            description: L("setting_open_icloud_folder_description"),
+            control: {
+                let folderButton = NSButton(title: L("button_open_folder"), target: self, action: #selector(openiCloudFolder))
+                folderButton.bezelStyle = .rounded
+                
+                // Store reference for later updates
+                objc_setAssociatedObject(self, "iCloudFolderButton", folderButton, .OBJC_ASSOCIATION_RETAIN)
+                
+                return folderButton
+            }()
+        )
+        sectionContainer.addArrangedSubview(folderContainer)
+        
+        stackView.addArrangedSubview(sectionContainer)
+    }
+    
+    private func createiCloudStatusRow() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        
+        let statusLabel = NSTextField(labelWithString: L("setting_icloud_status"))
+        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        statusLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        statusLabel.textColor = .labelColor
+        
+        let statusValue = NSTextField(labelWithString: "Checking...")
+        statusValue.translatesAutoresizingMaskIntoConstraints = false
+        statusValue.font = NSFont.systemFont(ofSize: 11)
+        statusValue.textColor = .secondaryLabelColor
+        statusValue.lineBreakMode = .byWordWrapping
+        statusValue.maximumNumberOfLines = 3
+        statusValue.preferredMaxLayoutWidth = 300
+        
+        // Store reference for updates
+        objc_setAssociatedObject(self, "iCloudStatusLabel", statusValue, .OBJC_ASSOCIATION_RETAIN)
+        
+        container.addSubview(statusLabel)
+        container.addSubview(statusValue)
+        
         NSLayoutConstraint.activate([
-            settingsStack.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 20),
-            settingsStack.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 20),
-            settingsStack.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -20)
+            statusLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            statusLabel.topAnchor.constraint(equalTo: container.topAnchor),
+            statusLabel.widthAnchor.constraint(equalToConstant: 120),
+            
+            statusValue.leadingAnchor.constraint(equalTo: statusLabel.trailingAnchor, constant: 16),
+            statusValue.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            statusValue.topAnchor.constraint(equalTo: container.topAnchor),
+            statusValue.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 40)
         ])
+        
+        // Update status immediately
+        updateiCloudStatus()
+        
+        return container
+    }
+    
+    private func createSectionContainer() -> NSStackView {
+        let container = NSStackView()
+        container.orientation = .vertical
+        container.spacing = 16
+        container.alignment = .leading
+        container.translatesAutoresizingMaskIntoConstraints = false
+        return container
+    }
+    
+    private func createImprovedSettingRow(label: String, description: String, control: NSView) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        
+        let labelView = NSTextField(labelWithString: label)
+        labelView.translatesAutoresizingMaskIntoConstraints = false
+        labelView.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        labelView.textColor = .labelColor
+        
+        let descriptionView = NSTextField(labelWithString: description)
+        descriptionView.translatesAutoresizingMaskIntoConstraints = false
+        descriptionView.font = NSFont.systemFont(ofSize: 11)
+        descriptionView.textColor = .secondaryLabelColor
+        descriptionView.lineBreakMode = .byWordWrapping
+        descriptionView.maximumNumberOfLines = 2
+        
+        control.translatesAutoresizingMaskIntoConstraints = false
+        
+        container.addSubview(labelView)
+        container.addSubview(descriptionView)
+        container.addSubview(control)
+        
+        NSLayoutConstraint.activate([
+            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 50),
+            
+            labelView.topAnchor.constraint(equalTo: container.topAnchor),
+            labelView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            labelView.widthAnchor.constraint(equalToConstant: 200),
+            
+            descriptionView.topAnchor.constraint(equalTo: labelView.bottomAnchor, constant: 4),
+            descriptionView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            descriptionView.widthAnchor.constraint(equalToConstant: 200),
+            descriptionView.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor),
+            
+            control.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            control.leadingAnchor.constraint(equalTo: labelView.trailingAnchor, constant: 24),
+            control.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+        ])
+        
+        return container
     }
     
     private func setupScholarManagement(in parentView: NSView) {
@@ -454,17 +645,62 @@ class SettingsWindowController: NSWindowController {
         }
     }
     
+    private func setupLanguagePopup() {
+        languagePopup.removeAllItems()
+        
+        for language in LocalizationManager.shared.availableLanguages {
+            languagePopup.addItem(withTitle: language.displayName)
+            languagePopup.lastItem?.representedObject = language
+        }
+        
+        let currentLanguage = LocalizationManager.shared.currentLanguageCode
+        for i in 0..<languagePopup.numberOfItems {
+            if let language = languagePopup.item(at: i)?.representedObject as? LocalizationManager.Language,
+               language.rawValue == currentLanguage {
+                languagePopup.selectItem(at: i)
+                break
+            }
+        }
+        
+        languagePopup.target = self
+        languagePopup.action = #selector(languageSelectionChanged(_:))
+    }
+    
     @objc private func languageChanged() {
-        // 重新设置窗口标题和UI文本
-        window?.title = L("settings_title")
-        // 重新构建UI以更新所有文本
-        setupUI()
-        tableView.reloadData()
+        // 确保UI更新在主线程执行
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            
+            // 重新设置窗口标题和UI文本
+            strongSelf.window?.title = L("settings_title")
+            // 重新构建语言下拉菜单以更新语言名称
+            strongSelf.setupLanguagePopup()
+            // 重新构建UI以更新所有文本
+            strongSelf.setupUI()
+            strongSelf.tableView?.reloadData()
+        }
     }
     
     @objc private func languageSelectionChanged(_ sender: NSPopUpButton) {
         guard let language = sender.selectedItem?.representedObject as? LocalizationManager.Language else { return }
         LocalizationManager.shared.setLanguage(language)
+    }
+    
+    @objc private func languageChangeFailed(_ notification: Notification) {
+        DispatchQueue.main.async { [weak self] in
+            guard let strongSelf = self else { return }
+            
+            // 重置语言选择到之前的值
+            strongSelf.setupLanguagePopup()
+            
+            // 显示错误提示
+            let alert = NSAlert()
+            alert.messageText = "语言切换失败"
+            alert.informativeText = "无法切换到所选语言，已恢复到之前的设置。"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "确定")
+            alert.runModal()
+        }
     }
     
     @objc private func addScholar() {
@@ -475,7 +711,7 @@ class SettingsWindowController: NSWindowController {
         alert.addButton(withTitle: L("button_cancel"))
         
         // 创建支持复制粘贴的输入字段
-        let inputTextField = EditableTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        let inputTextField = ValidatedTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
         inputTextField.placeholderString = L("add_scholar_id_placeholder")
         inputTextField.isEditable = true
         inputTextField.isSelectable = true
@@ -530,10 +766,27 @@ class SettingsWindowController: NSWindowController {
                 return
             }
             
+            // 进行详细的输入验证
+            if input.count < 8 {
+                let errorAlert = NSAlert()
+                errorAlert.messageText = L("error_invalid_format")
+                errorAlert.informativeText = "Scholar ID 至少需要8个字符。请输入完整的Google Scholar用户ID或链接。"
+                errorAlert.runModal()
+                return
+            }
+            
+            if input.count > 100 {
+                let errorAlert = NSAlert()
+                errorAlert.messageText = L("error_invalid_format")
+                errorAlert.informativeText = "输入内容过长。请输入有效的Google Scholar用户ID或链接。"
+                errorAlert.runModal()
+                return
+            }
+            
             guard let scholarId = GoogleScholarService.extractScholarId(from: input) else {
                 let errorAlert = NSAlert()
                 errorAlert.messageText = L("error_invalid_format")
-                errorAlert.informativeText = L("error_invalid_format_message")
+                errorAlert.informativeText = L("error_invalid_format_message") + "\n\n输入的内容：\(input.prefix(50))..."
                 errorAlert.runModal()
                 return
             }
@@ -550,6 +803,8 @@ class SettingsWindowController: NSWindowController {
             // 获取学者信息
             googleScholarService.fetchScholarInfo(for: scholarId) { [weak self] result in
                 DispatchQueue.main.async {
+                    guard let strongSelf = self else { return }
+                    
                     switch result {
                     case .success(let info):
                         let finalName = customName.isEmpty ? info.name : customName
@@ -558,9 +813,9 @@ class SettingsWindowController: NSWindowController {
                         updatedScholar.citations = info.citations
                         updatedScholar.lastUpdated = Date()
                         
-                        self?.scholars.append(updatedScholar)
-                        PreferencesManager.shared.scholars = self?.scholars ?? []
-                        self?.tableView.reloadData()
+                        strongSelf.scholars.append(updatedScholar)
+                        PreferencesManager.shared.scholars = strongSelf.scholars
+                        strongSelf.tableView.reloadData()
                         
                         let successAlert = NSAlert()
                         successAlert.messageText = L("success_scholar_added")
@@ -571,9 +826,9 @@ class SettingsWindowController: NSWindowController {
                         let finalName = customName.isEmpty ? L("default_scholar_name", String(scholarId.prefix(8))) : customName
                         let scholar = Scholar(id: scholarId, name: finalName)
                         
-                        self?.scholars.append(scholar)
-                        PreferencesManager.shared.scholars = self?.scholars ?? []
-                        self?.tableView.reloadData()
+                        strongSelf.scholars.append(scholar)
+                        PreferencesManager.shared.scholars = strongSelf.scholars
+                        strongSelf.tableView.reloadData()
                         
                         let errorAlert = NSAlert()
                         errorAlert.messageText = L("error_fetch_failed")
@@ -606,22 +861,25 @@ class SettingsWindowController: NSWindowController {
         // 显示更新中状态
         showRefreshingState()
         
+        // 使用同步队列保护共享变量
+        let refreshQueue = DispatchQueue(label: "com.citetrack.refresh", attributes: .concurrent)
         var completedCount = 0
         var successCount = 0
         let totalCount = currentScholars.count
         
         for scholar in currentScholars {
             googleScholarService.fetchCitationCount(for: scholar.id) { [weak self] result in
-                DispatchQueue.main.async {
-                    guard let self = self else { return }
-                    
+                // 使用 barrier 确保线程安全的计数更新
+                refreshQueue.async(flags: .barrier) {
                     completedCount += 1
                     
                     switch result {
                     case .success(let citations):
                         successCount += 1
-                        // 直接更新PreferencesManager，避免本地副本导致的数据竞争
-                        PreferencesManager.shared.updateScholar(withId: scholar.id, citations: citations)
+                        // 在主线程更新PreferencesManager
+                        DispatchQueue.main.async {
+                            PreferencesManager.shared.updateScholar(withId: scholar.id, citations: citations)
+                        }
                         
                     case .failure(let error):
                         print("刷新学者 \(scholar.id) 失败: \(error.localizedDescription)")
@@ -629,14 +887,18 @@ class SettingsWindowController: NSWindowController {
                     
                     // 当所有请求完成时
                     if completedCount == totalCount {
-                        // 重新加载本地数据
-                        self.loadData()
-                        
-                        // 发送数据更新通知给其他组件
-                        NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
-                        
-                        // 显示更新结果
-                        self.showRefreshResult(success: successCount, total: totalCount)
+                        DispatchQueue.main.async {
+                            guard let strongSelf = self else { return }
+                            
+                            // 重新加载本地数据
+                            strongSelf.loadData()
+                            
+                            // 发送数据更新通知给其他组件
+                            NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+                            
+                            // 显示更新结果
+                            strongSelf.showRefreshResult(success: successCount, total: totalCount)
+                        }
                     }
                 }
             }
@@ -689,17 +951,149 @@ class SettingsWindowController: NSWindowController {
         PreferencesManager.shared.launchAtLogin = launchAtLoginCheckbox.state == .on
     }
     
-    @objc private func scholarsDataUpdated() {
-        loadData()
+    @objc private func openChartsWindow() {
+        // Close settings window first
+        window?.close()
+        
+        // Create and show charts window
+        let chartsWindowController = ChartsWindowController()
+        chartsWindowController.showWindow(nil)
+        
+        // Keep reference to prevent deallocation
+        NSApp.delegate?.perform(Selector(("setChartsWindowController:")), with: chartsWindowController)
     }
     
-    private func updateAppearance() {
-        if let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.updateAppearance()
+    // MARK: - iCloud Sync Actions
+    
+    @objc private func iCloudSyncToggled(_ sender: NSButton) {
+        let isEnabled = sender.state == .on
+        PreferencesManager.shared.iCloudSyncEnabled = isEnabled
+        
+        // Update UI state
+        updateiCloudSyncUIState(enabled: isEnabled)
+        
+        if isEnabled {
+            // Show initial sync dialog
+            let alert = NSAlert()
+            alert.messageText = L("icloud_sync_enabled_title")
+            alert.informativeText = L("icloud_sync_enabled_message")
+            alert.alertStyle = .informational
+            alert.runModal()
+            
+            // Trigger initial sync
+            iCloudSyncManager.shared.performInitialSync()
+        } else {
+            let alert = NSAlert()
+            alert.messageText = L("icloud_sync_disabled_title")
+            alert.informativeText = L("icloud_sync_disabled_message")
+            alert.alertStyle = .informational
+            alert.runModal()
+        }
+        
+        // Update status display
+        updateiCloudStatus()
+    }
+    
+    private func updateiCloudSyncUIState(enabled: Bool) {
+        // Update the folder button state
+        // This is handled automatically when the checkbox changes
+        print("ℹ️ iCloud sync UI state updated: \(enabled ? "enabled" : "disabled")")
+    }
+    
+    @objc private func openiCloudFolder() {
+        iCloudSyncManager.shared.openFolderInFinder()
+        
+        // Update status after folder operation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.updateiCloudStatus()
         }
     }
     
+    private func updateiCloudStatus() {
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let status = iCloudSyncManager.shared.getFileStatus()
+            
+            DispatchQueue.main.async {
+                guard let statusLabel = objc_getAssociatedObject(self as Any, "iCloudStatusLabel") as? NSTextField else { return }
+                statusLabel.stringValue = status.description
+                
+                // Update status label color
+                if status.iCloudAvailable {
+                    if status.isSyncEnabled {
+                        statusLabel.textColor = .systemGreen
+                    } else {
+                        statusLabel.textColor = .labelColor
+                    }
+                } else {
+                    statusLabel.textColor = .systemRed
+                }
+                
+                // Update folder button state
+                if let folderButton = objc_getAssociatedObject(self as Any, "iCloudFolderButton") as? NSButton {
+                    folderButton.isEnabled = status.folderButtonEnabled
+                }
+            }
+        }
+    }
+    
+    // MARK: - Alert Helpers
+    
+    private func showProgressAlert(_ title: String, _ message: String) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        
+        let progressIndicator = NSProgressIndicator()
+        progressIndicator.style = .spinning
+        progressIndicator.startAnimation(nil)
+        progressIndicator.frame = NSRect(x: 0, y: 0, width: 32, height: 32)
+        alert.accessoryView = progressIndicator
+        
+        alert.runModal()
+        return alert
+    }
+    
+    private func showSuccessAlert(_ title: String, _ message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.runModal()
+    }
+    
+    private func showErrorAlert(_ title: String, _ message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .critical
+        alert.runModal()
+    }
+    
+    private func showInfoAlert(_ title: String, _ message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.runModal()
+    }
+    
+    @objc private func scholarsDataUpdated() {
+        // 确保数据更新在主线程执行
+        DispatchQueue.main.async { [weak self] in
+            self?.loadData()
+        }
+    }
+    
+    private func updateAppearance() {
+        // Update appearance settings if needed
+        // This method can be used for future appearance customizations
+    }
+    
     private func loadData() {
+        // 确保这个方法总是在主线程调用
+        assert(Thread.isMainThread, "loadData() must be called on the main thread")
+        
         scholars = PreferencesManager.shared.scholars
         tableView?.reloadData()
     }

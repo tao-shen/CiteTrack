@@ -3,7 +3,7 @@
   
   # CiteTrack
   
-  **A professional multilingual macOS menu bar app for monitoring Google Scholar citation counts**
+  **A professional multilingual macOS app for monitoring and visualizing Google Scholar citations**
   
   [![Platform](https://img.shields.io/badge/platform-macOS-blue)](https://www.apple.com/macos/)
   [![Swift](https://img.shields.io/badge/language-Swift-orange)](https://swift.org/)
@@ -15,13 +15,35 @@
 
 ## ✨ Features
 
-- 🔄 **Real-time Monitoring**: Automatically fetches Google Scholar citation data at customizable intervals
-- 👥 **Multi-Scholar Support**: Track multiple scholars with drag-and-drop reordering
-- 🌍 **Multilingual Interface**: Supports 7 languages (English, Chinese, Japanese, Korean, Spanish, French, German)
-- 🌗 **Theme Adaptation**: Menu bar icon adapts to system dark/light mode
-- ⚙️ **Professional Settings**: Tabbed settings interface for General and Scholar management
-- ⚡ **Lightweight**: Application size ~850KB
-- 🔒 **Privacy First**: All data stored locally, no personal information collected
+### 📊 Professional Chart System
+- **Interactive Visualizations**: Line charts, bar charts, and area charts with real-time data
+- **Historical Tracking**: Complete citation history with Core Data persistence
+- **Time Range Filtering**: View data by week, month, quarter, year, or custom ranges
+- **Advanced Analytics**: Trend analysis, growth rates, and statistical insights
+- **Data Export**: Export charts and data to CSV/JSON formats
+
+### 🔄 Smart Monitoring
+- **Real-time Updates**: Automatically fetches Google Scholar citation data
+- **Background Collection**: Intelligent data collection with configurable intervals
+- **Change Notifications**: Smart alerts when citation counts change
+- **Multiple Scholars**: Track unlimited scholars with individual dashboards
+
+### 🌍 Multilingual Interface
+- **7 Languages**: English, Chinese, Japanese, Korean, Spanish, French, German
+- **Auto-detection**: Automatically detects system language
+- **Live Switching**: Change languages without restarting
+
+### 💾 Data Management
+- **Core Data Integration**: Robust data persistence and migration
+- **iCloud Sync**: Optional cloud synchronization across devices
+- **Data Repair Tools**: Built-in tools for data validation and repair
+- **History Management**: Complete citation history with timestamps
+
+### 🎨 Modern UI
+- **Native macOS Design**: Follows Apple's Human Interface Guidelines
+- **Dark Mode Support**: Seamless adaptation to system themes
+- **Responsive Layout**: Optimized for different window sizes
+- **Menu Bar Integration**: Lightweight menu bar presence
 
 ## 🌍 Language Support
 
@@ -31,50 +53,41 @@ CiteTrack automatically detects your system language and supports:
 - 🇨🇳 **简体中文** (Full support)
 - 🇯🇵 **日本語** (Full support)
 - 🇰🇷 **한국어** (Full support)
-- 🇪🇸 **Español** (Basic support)
-- 🇫🇷 **Français** (Basic support)
-- 🇩🇪 **Deutsch** (Basic support)
-
-You can also manually switch languages in the settings without restarting the app.
+- 🇪🇸 **Español** (Full support)
+- 🇫🇷 **Français** (Full support)
+- 🇩🇪 **Deutsch** (Full support)
 
 ## 📥 Download
 
 Download the latest version from the [Releases page](https://github.com/tao-shen/CiteTrack/releases/latest).
 
-**Recommended:** Download `CiteTrack-Multilingual-vX.Y.Z.dmg` for the full multilingual installer.
+**Recommended:** Download `CiteTrack-Charts-v2.0.0.dmg` for the complete charts-enabled version.
 
 ## 🚀 Quick Start
 
 1. Download the DMG file from releases
-2. Open the DMG file
-3. If you see a security warning, run the included bypass script or right-click and select "Open"
-4. Drag CiteTrack.app to your Applications folder
+2. Open the DMG and drag CiteTrack.app to Applications
+3. Launch CiteTrack and add your first scholar
+4. Click the menu bar icon to view charts and statistics
 
-## 🛡️ Security Notice
+## 📊 Chart System
 
-CiteTrack uses ad-hoc code signing and is not notarized by Apple. This may trigger a security warning on first launch. This is normal and safe—the app is open-source and contains no malicious code.
+### Visualization Options
+- **Line Charts**: Perfect for trend analysis over time
+- **Bar Charts**: Compare citation counts across different periods
+- **Area Charts**: Visualize cumulative growth patterns
 
-### Bypass Security Warning
-- **Automatic:** Run the included `bypass_security.sh` script
-- **Manual:** Right-click CiteTrack.app → Select "Open" → Click "Open" in the dialog
-- Or run: `xattr -dr com.apple.quarantine CiteTrack.app`
+### Interactive Features
+- **Hover Tooltips**: Detailed information on data points
+- **Zoom & Pan**: Navigate through large datasets
+- **Time Range Selector**: Custom date range selection with Apple-style pickers
+- **Theme Options**: Multiple color schemes and themes
 
-## 🖥️ Usage
-
-1. **First Launch:** The app will guide you to add your first scholar
-2. **Add Scholar:** Enter the Google Scholar profile URL or user ID
-3. **View Data:** Click the ∞ menu bar icon to see citation statistics
-4. **Manage Settings:** Access settings through the menu
-
-### Settings Interface
-- **General Tab:** Configure update intervals, language, display options, and startup preferences
-- **Scholars Tab:** Manage your scholar list with drag-and-drop reordering, add/remove scholars
-
-### Scholar Management
-- Add scholars using their Google Scholar profile URL or user ID
-- Drag and drop to reorder scholars
-- View real-time citation counts and last update timestamps
-- Customize update intervals from 30 minutes to 1 week
+### Analytics Dashboard
+- **Statistics Cards**: Key metrics at a glance
+- **Trend Analysis**: Growth rates and change indicators
+- **Insights Panel**: AI-powered insights about citation patterns
+- **Export Tools**: Save charts as images or export data
 
 ## 🛠️ Development
 
@@ -90,48 +103,58 @@ CiteTrack uses ad-hoc code signing and is not notarized by Apple. This may trigg
 git clone https://github.com/tao-shen/CiteTrack.git
 cd CiteTrack
 
-# Build the multilingual application
-./scripts/build.sh
+# Build the charts-enabled application
+./scripts/build_charts.sh
 
-# Create multilingual DMG installer
-./scripts/create_dmg.sh
+# Create DMG installer
+./scripts/create_charts_dmg.sh
 ```
 
 ### Project Structure
 
 ```
 CiteTrack/
-├── README.md              # Project documentation
-├── LICENSE                # MIT license
-├── .gitignore             # Git ignore rules
-├── Sources/               # Swift source code
-│   ├── main_localized.swift
-│   ├── Localization.swift
-│   └── SettingsWindow.swift
-├── scripts/               # Build and deployment scripts
-│   ├── build.sh           # Main build script
-│   ├── create_dmg.sh      # DMG creation script
-│   └── bypass_security.sh # Security bypass tool
-├── docs/                  # Project documentation
-│   ├── FEATURES.md        # Feature documentation
-│   └── CHANGELOG.md       # Version history
-├── assets/                # Project assets
-│   ├── app_icon.icns      # Application icon
-│   └── logo.png           # Project logo
-├── Frameworks/            # External dependencies
-│   └── Sparkle.framework  # Auto-update framework
-└── backup_files/          # Backups (not tracked by Git)
+├── README.md                           # Project documentation
+├── LICENSE                             # MIT license
+├── .gitignore                          # Git ignore rules
+├── Sources/                            # Swift source code
+│   ├── main.swift                      # Main application entry
+│   ├── Localization.swift              # Multilingual support
+│   ├── SettingsWindow.swift            # Settings interface
+│   ├── ChartsViewController.swift      # Chart visualization
+│   ├── ChartView.swift                 # Custom chart rendering
+│   ├── ChartDataService.swift          # Chart data processing
+│   ├── CoreDataManager.swift           # Data persistence
+│   ├── CitationHistoryManager.swift    # History management
+│   ├── NotificationManager.swift       # Smart notifications
+│   ├── iCloudSyncManager.swift         # Cloud synchronization
+│   └── DataRepairViewController.swift  # Data management tools
+├── scripts/                            # Build and deployment scripts
+│   ├── build_charts.sh                 # Charts build script
+│   ├── create_charts_dmg.sh            # DMG creation script
+│   └── test_app.sh                     # Testing utilities
+├── docs/                               # Project documentation
+│   ├── CHART_STABILITY_IMPROVEMENTS.md # Chart system docs
+│   └── ICLOUD_DEBUG_GUIDE.md          # iCloud integration guide
+├── assets/                             # Project assets
+│   ├── app_icon.icns                   # Application icon
+│   └── logo.png                        # Project logo
+├── Frameworks/                         # External dependencies
+│   └── Sparkle.framework               # Auto-update framework
+├── CiteTrack.entitlements              # App capabilities
+└── Sources/CitationTrackingModel.xcdatamodeld/  # Core Data model
 ```
 
 ## 📊 Technical Specifications
 
-- **Application Size:** ~850KB
-- **Installer Size:** ~988KB (DMG)
+- **Application Size:** ~4.9MB (with charts)
+- **Installer Size:** ~2.1MB (DMG)
 - **System Requirements:** macOS 10.15+
 - **Architecture:** Universal (Intel & Apple Silicon)
 - **Language:** Swift
-- **Framework:** AppKit
+- **Frameworks:** AppKit, Core Data, UserNotifications
 - **Localization:** 7 languages supported
+- **Data Storage:** Core Data with optional iCloud sync
 
 ## 🔒 Privacy & Security
 
@@ -139,8 +162,26 @@ CiteTrack is open source and privacy-friendly:
 - ✅ **Open Source:** Full source code available
 - ✅ **No Data Collection:** No personal information collected
 - ✅ **Local Storage:** All data stored on your device
+- ✅ **Optional Cloud Sync:** iCloud sync is opt-in only
 - ✅ **Minimal Permissions:** Only accesses public Google Scholar data
 - ✅ **Code Signed:** Uses ad-hoc signing for integrity
+
+## 🆕 What's New in v2.0.0
+
+### Major Features
+- 📊 **Complete Chart System**: Professional data visualization with interactive charts
+- 📱 **Modern UI**: Redesigned interface with native macOS styling
+- 💾 **Core Data Integration**: Robust data persistence with migration support
+- ☁️ **iCloud Sync**: Optional cloud synchronization across devices
+- 🔔 **Smart Notifications**: Intelligent alerts for citation changes
+- 🛠️ **Data Management**: Advanced tools for data repair and maintenance
+
+### Technical Improvements
+- Memory-safe async operations with proper cleanup
+- Enhanced error handling and user feedback
+- Background data collection service
+- Fixed calendar display issues in date pickers
+- Improved performance and stability
 
 ## 📝 Contributing
 
@@ -159,5 +200,5 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 <div align="center">
   <strong>Made with ❤️ for the global academic community</strong>
   <br>
-  <em>Effortlessly track your research impact, in your language</em>
-</div> 
+  <em>Visualize your research impact with professional charts and analytics</em>
+</div>
