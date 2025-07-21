@@ -7,6 +7,76 @@
         <language>en</language>
         
         <item>
+            <title>Version 2.0.0</title>
+            <description><![CDATA[
+                <h2>🎉 CiteTrack v2.0.0 - Professional Charts & Analytics System</h2>
+                
+                <h3>🚀 Major Release - Complete Chart System</h3>
+                <p>CiteTrack v2.0.0 transforms from a simple monitoring tool into a comprehensive academic citation analytics platform with professional-grade data visualization and management capabilities.</p>
+                
+                <h3>📊 New Chart System</h3>
+                <ul>
+                    <li><strong>Interactive Visualizations</strong>: Line charts, bar charts, and area charts with real-time data</li>
+                    <li><strong>Historical Tracking</strong>: Complete citation history with Core Data persistence</li>
+                    <li><strong>Time Range Filtering</strong>: View data by week, month, quarter, year, or custom ranges</li>
+                    <li><strong>Advanced Analytics</strong>: Trend analysis, growth rates, and statistical insights</li>
+                    <li><strong>Data Export</strong>: Export charts and data to CSV/JSON formats</li>
+                    <li><strong>Apple-Style UI</strong>: Native date pickers with fixed calendar display issues</li>
+                </ul>
+                
+                <h3>💾 Enhanced Data Management</h3>
+                <ul>
+                    <li><strong>Core Data Integration</strong>: Robust data persistence with automatic migration</li>
+                    <li><strong>iCloud Sync</strong>: Optional cloud synchronization across devices</li>
+                    <li><strong>Data Repair Tools</strong>: Built-in tools for data validation and repair</li>
+                    <li><strong>Background Collection</strong>: Intelligent data collection with configurable intervals</li>
+                </ul>
+                
+                <h3>🔔 Smart Notification System</h3>
+                <ul>
+                    <li><strong>Intelligent Alerts</strong>: Smart detection of citation count changes</li>
+                    <li><strong>Configurable Thresholds</strong>: Customizable notification settings</li>
+                    <li><strong>Multi-language Support</strong>: Notifications in your preferred language</li>
+                </ul>
+                
+                <h3>🌍 Complete Multilingual Support</h3>
+                <ul>
+                    <li><strong>7 Languages</strong>: English, Chinese, Japanese, Korean, Spanish, French, German</li>
+                    <li><strong>Auto-detection</strong>: Automatically detects system language</li>
+                    <li><strong>Live Switching</strong>: Change languages without restarting the app</li>
+                </ul>
+                
+                <h3>🎨 Modern User Interface</h3>
+                <ul>
+                    <li><strong>Native macOS Design</strong>: Follows Apple's Human Interface Guidelines</li>
+                    <li><strong>Dark Mode Support</strong>: Seamless adaptation to system themes</li>
+                    <li><strong>Responsive Layout</strong>: Optimized for different window sizes</li>
+                    <li><strong>Professional Menu Bar</strong>: Lightweight integration with status indicators</li>
+                </ul>
+                
+                <h3>🚀 How to Access Charts</h3>
+                <p><strong>After updating</strong>: Click the menu bar icon and select "Charts" to explore the new visualization features!</p>
+                
+                <h3>📊 Technical Specifications</h3>
+                <ul>
+                    <li><strong>Application Size</strong>: ~4.9MB (with charts)</li>
+                    <li><strong>System Requirements</strong>: macOS 10.15+</li>
+                    <li><strong>Architecture</strong>: Universal (Intel & Apple Silicon)</li>
+                    <li><strong>New Frameworks</strong>: Core Data, UserNotifications</li>
+                </ul>
+            ]]></description>
+            <pubDate>Sun, 21 Jul 2024 10:00:00 +0000</pubDate>
+            <sparkle:releaseNotesLink>https://github.com/tao-shen/CiteTrack/releases/tag/v2.0.0</sparkle:releaseNotesLink>
+            <enclosure 
+                url="https://github.com/tao-shen/CiteTrack/releases/download/v2.0.0/CiteTrack-Charts-v2.0.0.dmg"
+                sparkle:version="2.0.0"
+                sparkle:shortVersionString="2.0.0"
+                length="2151007"
+                type="application/octet-stream" />
+            <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
+        </item>
+        
+        <item>
             <title>Version 1.1.3</title>
             <description><![CDATA[
                 <h2>CiteTrack v1.1.3 - Automatic Updates Support 🔄</h2>
