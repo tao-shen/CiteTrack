@@ -152,6 +152,8 @@ cat > "${APP_BUNDLE}/Contents/Info.plist" << EOF
     <string>86400</string>
     <key>SUAllowsAutomaticUpdates</key>
     <true/>
+    <key>SUPublicEDKey</key>
+    <string>NGyuMsWn3sOkH87MuJA3vvUmg7ZNH/mKt01pvlSqaqw=</string>
     <key>NSUserNotificationAlertStyle</key>
     <string>alert</string>
     <key>NSUserNotificationsUsageDescription</key>

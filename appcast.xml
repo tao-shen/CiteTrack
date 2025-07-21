@@ -81,8 +81,8 @@
                 url="https://github.com/tao-shen/CiteTrack/releases/download/v2.0.0/CiteTrack-Charts-Professional-v2.0.0.dmg"
                 sparkle:version="2.0.0"
                 sparkle:shortVersionString="2.0.0"
-                sparkle:edSignature="DNg6phKJNVrJx9cwpjkqeSPXwOjDlAMe0BhwvgNx/+lBPxkkYheozWtiz7+ySu40AU0NvKQv142JXLSbHW6dBw=="
-                length="1967434"
+                sparkle:edSignature="6lFxIBWIWlI84+KkSbrMN0aySm252JdyJzHE8+XeG8rxItMnbESiaQpUDetETNdwQLzGkJ4oLZZmYYbIjOtfCw=="
+                length="1967458"
                 type="application/octet-stream" />
             <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
         </item>
@@ -127,8 +127,8 @@
                 url="https://github.com/tao-shen/CiteTrack/releases/download/v1.1.3/CiteTrack-Professional-v1.1.3.dmg"
                 sparkle:version="1.1.3"
                 sparkle:shortVersionString="1.1.3"
-                sparkle:edSignature="1taE7jN+G4w6KJiGMftD/ZuhcxiDJD+wzhRPWNQ8trMMhEIRStQjYdwKC6Ezc3hSAy74STDsIHhSiejLqfoRCA=="
-                length="1787074"
+                sparkle:edSignature="WAwrwF0kfqBbGvoxKU7EqP598nDL5tpMlSR8DBKMLm4RbbCQqO4MLcY+L+0dK+58QPsk/YWhoYw7GxgzfZZnCA=="
+                length="1787544"
                 type="application/octet-stream" />
             <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
         </item>
