@@ -11,8 +11,8 @@
             <description><![CDATA[
                 <h2>🎉 CiteTrack v2.0.0 - Professional Charts & Analytics System</h2>
                 
-                <h3>🚀 Major Release - Complete Chart System</h3>
-                <p>CiteTrack v2.0.0 transforms from a simple monitoring tool into a comprehensive academic citation analytics platform with professional-grade data visualization and management capabilities.</p>
+                <h3>🚀 Major Release - Complete Chart System with Professional Security</h3>
+                <p>CiteTrack v2.0.0 transforms from a simple monitoring tool into a comprehensive academic citation analytics platform with professional-grade data visualization, management capabilities, and cryptographic security.</p>
                 
                 <h3>📊 New Chart System</h3>
                 <ul>
@@ -39,6 +39,14 @@
                     <li><strong>Multi-language Support</strong>: Notifications in your preferred language</li>
                 </ul>
                 
+                <h3>🔒 Professional Security & Updates</h3>
+                <ul>
+                    <li><strong>EdDSA Signatures</strong>: Cryptographic verification for secure automatic updates</li>
+                    <li><strong>Verified Update Chain</strong>: Seamless updates from v1.1.3 with signature continuity</li>
+                    <li><strong>Enterprise Grade</strong>: Same signing infrastructure used by professional apps</li>
+                    <li><strong>Secure Downloads</strong>: All updates verified against tampering</li>
+                </ul>
+                
                 <h3>🌍 Complete Multilingual Support</h3>
                 <ul>
                     <li><strong>7 Languages</strong>: English, Chinese, Japanese, Korean, Spanish, French, German</li>
@@ -60,18 +68,21 @@
                 <h3>📊 Technical Specifications</h3>
                 <ul>
                     <li><strong>Application Size</strong>: ~4.9MB (with charts)</li>
+                    <li><strong>Installer Size</strong>: ~1.9MB (DMG)</li>
                     <li><strong>System Requirements</strong>: macOS 10.15+</li>
                     <li><strong>Architecture</strong>: Universal (Intel & Apple Silicon)</li>
                     <li><strong>New Frameworks</strong>: Core Data, UserNotifications</li>
+                    <li><strong>Security</strong>: EdDSA signed updates with professional verification</li>
                 </ul>
             ]]></description>
-            <pubDate>Sun, 21 Jul 2024 10:00:00 +0000</pubDate>
+            <pubDate>Sun, 21 Jul 2024 15:00:00 +0000</pubDate>
             <sparkle:releaseNotesLink>https://github.com/tao-shen/CiteTrack/releases/tag/v2.0.0</sparkle:releaseNotesLink>
             <enclosure 
-                url="https://github.com/tao-shen/CiteTrack/releases/download/v2.0.0/CiteTrack-Charts-v2.0.0.dmg"
+                url="https://github.com/tao-shen/CiteTrack/releases/download/v2.0.0/CiteTrack-Charts-Professional-v2.0.0.dmg"
                 sparkle:version="2.0.0"
                 sparkle:shortVersionString="2.0.0"
-                length="2150945"
+                sparkle:edSignature="DNg6phKJNVrJx9cwpjkqeSPXwOjDlAMe0BhwvgNx/+lBPxkkYheozWtiz7+ySu40AU0NvKQv142JXLSbHW6dBw=="
+                length="1967434"
                 type="application/octet-stream" />
             <sparkle:minimumSystemVersion>10.15</sparkle:minimumSystemVersion>
         </item>
