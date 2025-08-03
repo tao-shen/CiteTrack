@@ -89,6 +89,14 @@ Download the latest version from the [Releases page](https://github.com/tao-shen
 - **Insights Panel**: AI-powered insights about citation patterns
 - **Export Tools**: Save charts as images or export data
 
+### 📸 Example Screenshot
+
+<div align="center">
+  <img src="macOS/assets/hinton_citations_example.png" alt="CiteTrack Hinton Citations Example" width="800">
+  <br>
+  <em>Tracking Geoffrey Hinton's Google Scholar citations with interactive charts and analytics</em>
+</div>
+
 ## 🛠️ Development
 
 ### Requirements
