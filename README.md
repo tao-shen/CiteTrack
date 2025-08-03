@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" alt="CiteTrack Logo" width="128" height="128">
+  <img src="macOS/assets/logo.png" alt="CiteTrack Logo" width="128" height="128">
   
   # CiteTrack
   
