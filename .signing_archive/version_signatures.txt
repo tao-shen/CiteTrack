@@ -1,0 +1,27 @@
+# CiteTrack 版本签名记录
+# 记录每个发布版本的签名信息，便于追踪和验证
+
+## v1.1.3 (Professional)
+FILE_NAME=CiteTrack-Professional-v1.1.3.dmg
+FILE_SIZE=1787544
+SIGNATURE=WAwrwF0kfqBbGvoxKU7EqP598nDL5tpMlSR8DBKMLm4RbbCQqO4MLcY+L+0dK+58QPsk/YWhoYw7GxgzfZZnCA==
+RELEASE_URL=https://github.com/tao-shen/CiteTrack/releases/download/v1.1.3/CiteTrack-Professional-v1.1.3.dmg
+SIGNED_DATE=2024-07-21
+STATUS=✅ Active
+
+## v2.0.0 (Charts Professional)
+FILE_NAME=CiteTrack-Charts-Professional-v2.0.0.dmg
+FILE_SIZE=1967458
+SIGNATURE=6lFxIBWIWlI84+KkSbrMN0aySm252JdyJzHE8+XeG8rxItMnbESiaQpUDetETNdwQLzGkJ4oLZZmYYbIjOtfCw==
+RELEASE_URL=https://github.com/tao-shen/CiteTrack/releases/download/v2.0.0/CiteTrack-Charts-Professional-v2.0.0.dmg
+SIGNED_DATE=2024-07-21
+STATUS=✅ Active
+
+# 添加新版本时的模板:
+## vX.X.X (版本描述)
+# FILE_NAME=CiteTrack-描述-vX.X.X.dmg
+# FILE_SIZE=文件大小字节
+# SIGNATURE=生成的EdDSA签名
+# RELEASE_URL=GitHub Release下载链接
+# SIGNED_DATE=签名日期
+# STATUS=状态

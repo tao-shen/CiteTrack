@@ -96,6 +96,7 @@ build_temp/
 *.pem
 private_keys/
 secrets/
+# 注意: .signing_archive/ 文件夹包含签名信息，如果要开源需谨慎处理
 
 # 测试文件
 test_output/

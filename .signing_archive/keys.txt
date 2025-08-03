@@ -1,0 +1,15 @@
+# CiteTrack EdDSA 密钥对
+# 生成日期: 原始密钥，来自系统 Keychain
+# 账户名: ed25519
+
+# 私钥 (用于签名)
+PRIVATE_KEY=ef7vGj/o9yMPlo617hsxOOzDVJOy9r0R/lgYgeIb5Ik=
+
+# 公钥 (用于 Info.plist 中的 SUPublicEDKey)
+PUBLIC_KEY=NGyuMsWn3sOkH87MuJA3vvUmg7ZNH/mKt01pvlSqaqw=
+
+# 提取公钥命令
+# cd Frameworks/bin && echo "ef7vGj/o9yMPlo617hsxOOzDVJOy9r0R/lgYgeIb5Ik=" | ./generate_keys -p
+
+# 签名命令模板
+# echo "ef7vGj/o9yMPlo617hsxOOzDVJOy9r0R/lgYgeIb5Ik=" | ./Frameworks/bin/sign_update YOUR_DMG_FILE.dmg

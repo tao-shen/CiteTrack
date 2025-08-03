@@ -1,0 +1,35 @@
+# CiteTrack 构建模板
+# 包含正确的 Info.plist 配置模板，确保新版本使用正确的公钥
+
+## Info.plist SUPublicEDKey 配置
+# 必须在所有版本的 Info.plist 中包含以下配置:
+
+    <key>SUPublicEDKey</key>
+    <string>NGyuMsWn3sOkH87MuJA3vvUmg7ZNH/mKt01pvlSqaqw=</string>
+
+## appcast.xml 签名模板
+# 每个版本在 appcast.xml 中的配置模板:
+
+        <enclosure 
+            url="https://github.com/tao-shen/CiteTrack/releases/download/vX.X.X/CiteTrack-版本名-vX.X.X.dmg"
+            sparkle:version="X.X.X"
+            sparkle:shortVersionString="X.X.X"
+            sparkle:edSignature="在这里填入生成的签名"
+            length="在这里填入文件大小"
+            type="application/octet-stream" />
+
+## 构建脚本检查点
+在创建构建脚本时，确保包含:
+1. 正确的 SUPublicEDKey 值
+2. 正确的 CFBundleVersion 和 CFBundleShortVersionString
+3. 正确的 SUFeedURL (指向 appcast.xml)
+
+## 发布流程模板
+1. 更新源代码和版本号
+2. 运行构建脚本: ./scripts/build_xxx.sh
+3. 创建 DMG: ./scripts/create_xxx_dmg.sh
+4. 生成签名: echo "私钥" | ./Frameworks/bin/sign_update 文件.dmg
+5. 更新 appcast.xml 中的签名和文件大小
+6. 上传 DMG 到 GitHub Release
+7. 提交并推送 appcast.xml 更改
+8. 测试从旧版本更新
