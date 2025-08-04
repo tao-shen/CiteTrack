@@ -176,7 +176,7 @@ class iCloudSyncManager: ObservableObject {
         
         DispatchQueue.main.async {
             self.isImporting = true
-            self.syncStatus = "正在从iCloud导入..."
+            self.syncStatus = LocalizationManager.shared.localized("importing_from_icloud")
         }
         
         DispatchQueue.global(qos: .userInitiated).async {
@@ -186,13 +186,13 @@ class iCloudSyncManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.isImporting = false
                     self.lastSyncDate = Date()
-                    self.syncStatus = "导入完成"
+                    self.syncStatus = LocalizationManager.shared.localized("import_completed")
                     completion(.success(result))
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.isImporting = false
-                    self.syncStatus = "导入失败"
+                    self.syncStatus = LocalizationManager.shared.localized("import_failed")
                     if let iCloudError = error as? iCloudError {
                         completion(.failure(iCloudError))
                     } else {
@@ -217,6 +217,7 @@ class iCloudSyncManager: ObservableObject {
         // Check if citation data file exists
         guard fileManager.fileExists(atPath: citationURL.path) else {
             print("❌ [iCloud Import] Citation data file not found at: \(citationURL.path)")
+            
             throw iCloudError.noDataFound
         }
         
@@ -230,31 +231,42 @@ class iCloudSyncManager: ObservableObject {
         
         var importedScholars = 0
         var importedHistory = 0
+        var processedScholarIds = Set<String>()
         
         // Process citation data
         for entry in citationArray {
             guard let scholarId = entry["scholarId"] as? String,
                   let timestampString = entry["timestamp"] as? String,
-                  let _ = entry["citationCount"] as? Int else {
+                  let citationCount = entry["citationCount"] as? Int else {
                 print("⚠️ [iCloud Import] Skipping invalid entry: \(entry)")
                 continue
             }
             
             // Parse timestamp
             let formatter = ISO8601DateFormatter()
-            guard formatter.date(from: timestampString) != nil else {
+            guard let timestamp = formatter.date(from: timestampString) else {
                 print("⚠️ [iCloud Import] Invalid timestamp: \(timestampString)")
                 continue
             }
             
-            // Create or update scholar
-            let scholar = Scholar(id: scholarId, name: "学者 \(scholarId.prefix(8))")
-            SettingsManager.shared.addScholar(scholar)
-            importedScholars += 1
+            // Create or update scholar (only once per unique ID)
+            if !processedScholarIds.contains(scholarId) {
+                let scholar = Scholar(id: scholarId, name: "学者 \(scholarId.prefix(8))")
+                SettingsManager.shared.addScholar(scholar)
+                processedScholarIds.insert(scholarId)
+                importedScholars += 1
+            }
             
-            // Note: In a real implementation, you would save citation history to Core Data
-            // For now, we'll just count it
+            // 保存历史数据到SimpleHistoryManager
+            let historyEntry = SimpleCitationHistory(
+                scholarId: scholarId,
+                citationCount: citationCount,
+                timestamp: timestamp
+            )
+            SimpleHistoryManager.shared.saveHistory(historyEntry)
             importedHistory += 1
+            
+            print("📝 [iCloud Import] Saved history: \(scholarId) - \(citationCount) at \(timestamp)")
         }
         
         // Try to import config if available
@@ -316,7 +328,7 @@ class iCloudSyncManager: ObservableObject {
         
         DispatchQueue.main.async {
             self.isExporting = true
-            self.syncStatus = "正在导出到iCloud..."
+            self.syncStatus = LocalizationManager.shared.localized("exporting_to_icloud")
         }
         
         DispatchQueue.global(qos: .userInitiated).async {
@@ -326,13 +338,13 @@ class iCloudSyncManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.isExporting = false
                     self.lastSyncDate = Date()
-                    self.syncStatus = "导出完成"
+                    self.syncStatus = LocalizationManager.shared.localized("export_completed")
                     completion(.success(()))
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.isExporting = false
-                    self.syncStatus = "导出失败"
+                    self.syncStatus = LocalizationManager.shared.localized("export_failed")
                     if let iCloudError = error as? iCloudError {
                         completion(.failure(iCloudError))
                     } else {
@@ -449,7 +461,7 @@ class iCloudSyncManager: ObservableObject {
         
         guard isiCloudAvailable else {
             DispatchQueue.main.async {
-                self.syncStatus = "iCloud不可用"
+                self.syncStatus = LocalizationManager.shared.localized("icloud_not_available")
             }
             return
         }
@@ -480,14 +492,14 @@ class iCloudSyncManager: ObservableObject {
                     let formatter = DateFormatter()
                     formatter.dateStyle = .short
                     formatter.timeStyle = .short
-                    self.syncStatus = "上次同步: \(formatter.string(from: lastSync))"
+                    self.syncStatus = "\(LocalizationManager.shared.localized("last_sync")): \(formatter.string(from: lastSync))"
                 } else {
-                    self.syncStatus = "已找到iCloud数据"
+                    self.syncStatus = LocalizationManager.shared.localized("icloud_data_found")
                 }
             }
         } else {
             DispatchQueue.main.async {
-                self.syncStatus = "iCloud可用，未同步"
+                self.syncStatus = LocalizationManager.shared.localized("icloud_available_no_sync")
             }
         }
     }
@@ -503,21 +515,22 @@ struct ImportResult {
     
     var description: String {
         var parts: [String] = []
+        let localizationManager = LocalizationManager.shared
         
         if importedScholars > 0 {
-            parts.append("导入了 \(importedScholars) 位学者")
+            parts.append("\(localizationManager.localized("imported_scholars_count")) \(importedScholars) \(localizationManager.localized("scholars_unit"))")
         }
         
         if importedHistory > 0 {
-            parts.append("导入了 \(importedHistory) 条历史记录")
+            parts.append("\(localizationManager.localized("imported_history_count")) \(importedHistory) \(localizationManager.localized("history_entries_unit"))")
         }
         
         if configImported {
-            parts.append("导入了应用配置")
+            parts.append(localizationManager.localized("imported_config"))
         }
         
         if parts.isEmpty {
-            return "没有找到可导入的数据"
+            return localizationManager.localized("no_data_to_import")
         }
         
         return parts.joined(separator: "，")
@@ -534,17 +547,18 @@ enum iCloudError: LocalizedError {
     case importFailed(String)
     
     var errorDescription: String? {
+        let localizationManager = LocalizationManager.shared
         switch self {
         case .iCloudNotAvailable:
-            return "iCloud Drive不可用，请检查您的iCloud设置"
+            return localizationManager.localized("icloud_drive_unavailable")
         case .invalidURL:
-            return "无效的iCloud URL - 请确保iCloud Drive已启用"
+            return localizationManager.localized("invalid_icloud_url")
         case .noDataFound:
-            return "在iCloud中未找到CiteTrack数据"
+            return localizationManager.localized("no_citetrack_data_in_icloud")
         case .exportFailed(let message):
-            return "导出失败: \(message)"
+            return "\(localizationManager.localized("export_failed_with_message")): \(message)"
         case .importFailed(let message):
-            return "导入失败: \(message)"
+            return "\(localizationManager.localized("import_failed_with_message")): \(message)"
         }
     }
 } 
@@ -620,8 +634,8 @@ extension iCloudSyncManager {
             }) {
                 let citationCount = latestEntry["citationCount"] as? Int ?? 0
                 
-                // Create or update scholar in SettingsManager
-                let scholar = Scholar(
+                // Create or update scholar in DataManager
+                let scholar = ScholarInfo(
                     id: scholarId,
                     name: "获取中..." // 临时名称，稍后会更新
                 )
@@ -639,9 +653,25 @@ extension iCloudSyncManager {
                     updatedScholar.name = "学者 \(scholarId.prefix(8))"
                 }
                 
-                SettingsManager.shared.addScholar(updatedScholar)
+                DataManager.shared.addScholar(updatedScholar)
                 importedScholars += 1
                 print("📝 [Manual Import] Created scholar: \(updatedScholar.name) (\(scholarId)) - \(citationCount) citations")
+                
+                // Import all history records for this scholar
+                for entry in scholarEntries {
+                    if let citationCount = entry["citationCount"] as? Int,
+                       let timestampString = entry["timestamp"] as? String,
+                       let timestamp = ISO8601DateFormatter().date(from: timestampString) {
+                        
+                        // Save history record to DataManager
+                        DataManager.shared.saveHistoryIfChanged(
+                            scholarId: scholarId,
+                            citationCount: citationCount,
+                            timestamp: timestamp
+                        )
+                        importedHistory += 1
+                    }
+                }
                 
                 // Try to fetch real name from Google Scholar
                 if latestEntry["scholarName"] == nil {
@@ -649,9 +679,6 @@ extension iCloudSyncManager {
                 }
             }
         }
-        
-        // Count history entries
-        importedHistory = entries.count
         
         return ImportResult(
             importedScholars: importedScholars,
@@ -738,14 +765,14 @@ extension iCloudSyncManager {
                 switch result {
                 case .success(let info):
                     // Update scholar with real name
-                    let scholars = SettingsManager.shared.getScholars()
+                    let scholars = DataManager.shared.scholars
                     if let index = scholars.firstIndex(where: { $0.id == scholarId }) {
                         var updatedScholar = scholars[index]
                         updatedScholar.name = info.name
                         updatedScholar.citations = info.citations
                         updatedScholar.lastUpdated = Date()
                         
-                        SettingsManager.shared.updateScholar(updatedScholar)
+                        DataManager.shared.updateScholar(updatedScholar)
                         print("✅ [Manual Import] Updated scholar name: \(info.name) (\(scholarId))")
                     }
                     
@@ -753,7 +780,7 @@ extension iCloudSyncManager {
                     print("❌ [Manual Import] Failed to fetch scholar name for \(scholarId): \(error.localizedDescription)")
                     
                     // Fallback to descriptive name
-                    let scholars = SettingsManager.shared.getScholars()
+                    let scholars = DataManager.shared.scholars
                     if let index = scholars.firstIndex(where: { $0.id == scholarId }) {
                         var updatedScholar = scholars[index]
                         
@@ -767,7 +794,7 @@ extension iCloudSyncManager {
                                        citationCount > 1000 ? "研究员" : "学者"
                         
                         updatedScholar.name = "\(citationLevel) \(nameSuffix) \(readableId)"
-                        SettingsManager.shared.updateScholar(updatedScholar)
+                        DataManager.shared.updateScholar(updatedScholar)
                     }
                 }
             }

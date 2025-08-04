@@ -114,9 +114,12 @@ public class SettingsManager: ObservableObject {
     
     public func addScholar(_ scholar: Scholar) {
         var updatedScholars = getScholars()
-        updatedScholars.append(scholar)
-        saveScholars(updatedScholars)
-        self.scholars = updatedScholars
+        // Check if scholar already exists
+        if !updatedScholars.contains(where: { $0.id == scholar.id }) {
+            updatedScholars.append(scholar)
+            saveScholars(updatedScholars)
+            self.scholars = updatedScholars
+        }
     }
     
     public func removeScholar(id: String) {
@@ -214,13 +217,14 @@ public enum AppTheme: String, CaseIterable {
     case system = "system"
     
     public var displayName: String {
+        let localizationManager = LocalizationManager.shared
         switch self {
         case .light:
-            return "浅色模式"
+            return localizationManager.localized("light_mode")
         case .dark:
-            return "深色模式"
+            return localizationManager.localized("dark_mode")
         case .system:
-            return "跟随系统"
+            return localizationManager.localized("system_mode")
         }
     }
 }

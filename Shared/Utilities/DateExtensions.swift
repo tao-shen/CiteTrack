@@ -22,17 +22,20 @@ public extension Date {
         let now = Date()
         let interval = now.timeIntervalSince(self)
         
+        // 使用本地化字符串
+        let localizationManager = LocalizationManager.shared
+        
         if interval < 60 {
-            return "刚刚"
+            return localizationManager.localized("just_now")
         } else if interval < 3600 {
             let minutes = Int(interval / 60)
-            return "\(minutes)分钟前"
+            return "\(minutes) " + localizationManager.localized("minutes_ago")
         } else if interval < 86400 {
             let hours = Int(interval / 3600)
-            return "\(hours)小时前"
+            return "\(hours) " + localizationManager.localized("hours_ago")
         } else if interval < 86400 * 7 {
             let days = Int(interval / 86400)
-            return "\(days)天前"
+            return "\(days) " + localizationManager.localized("days_ago")
         } else {
             return shortDisplayString
         }
@@ -168,25 +171,27 @@ public enum DatePeriod: String, CaseIterable {
     case allTime = "allTime"
     
     public var displayName: String {
+        let localizationManager = LocalizationManager.shared
+        
         switch self {
         case .lastWeek:
-            return "过去一周"
+            return localizationManager.localized("past_week")
         case .lastMonth:
-            return "过去一个月"
+            return localizationManager.localized("past_month")
         case .last3Months:
-            return "过去三个月"
+            return localizationManager.localized("past_3_months")
         case .last6Months:
-            return "过去六个月"
+            return localizationManager.localized("past_6_months")
         case .lastYear:
-            return "过去一年"
+            return localizationManager.localized("past_year")
         case .thisWeek:
-            return "本周"
+            return localizationManager.localized("this_week")
         case .thisMonth:
-            return "本月"
+            return localizationManager.localized("this_month")
         case .thisYear:
-            return "今年"
+            return localizationManager.localized("this_year")
         case .allTime:
-            return "全部时间"
+            return localizationManager.localized("all_time")
         }
     }
     

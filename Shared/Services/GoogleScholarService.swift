@@ -28,21 +28,23 @@ public class GoogleScholarService: ObservableObject {
         case invalidScholarId
         
         public var errorDescription: String? {
+            let localizationManager = LocalizationManager.shared
+            
             switch self {
             case .invalidURL:
-                return "无效的URL"
+                return localizationManager.localized("invalid_url")
             case .noData:
-                return "没有数据返回"
+                return localizationManager.localized("no_data_returned")
             case .parsingError:
-                return "数据解析失败"
+                return localizationManager.localized("parsing_error")
             case .networkError(let error):
-                return "网络错误: \(error.localizedDescription)"
+                return localizationManager.localized("network_error") + ": \(error.localizedDescription)"
             case .rateLimited:
-                return "请求过于频繁，请稍后再试"
+                return localizationManager.localized("rate_limited_error")
             case .scholarNotFound:
-                return "未找到该学者"
+                return localizationManager.localized("scholar_not_found")
             case .invalidScholarId:
-                return "无效的学者ID"
+                return localizationManager.localized("invalid_scholar_id")
             }
         }
     }

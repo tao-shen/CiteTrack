@@ -15,6 +15,7 @@ struct ScholarListView: View {
     @State private var isRefreshing = false
     @State private var selectedScholar: Scholar?
     @State private var showingScholarDetail = false
+    @State private var showingScholarChart = false
     
     // MARK: - Computed Properties
     private var filteredScholars: [Scholar] {
@@ -72,9 +73,21 @@ struct ScholarListView: View {
                     addScholar(newScholar)
                 }
             }
-            .sheet(item: $selectedScholar) { scholar in
-                ScholarDetailView(scholar: scholar) { updatedScholar in
-                    updateScholar(updatedScholar)
+            .sheet(isPresented: $showingScholarDetail) {
+                if let scholar = selectedScholar {
+                    ScholarDetailView(scholar: scholar) { updatedScholar in
+                        updateScholar(updatedScholar)
+                    }
+                }
+            }
+            .sheet(isPresented: $showingScholarChart) {
+                if let scholar = selectedScholar {
+                    if #available(iOS 16.0, *) {
+                        ScholarChartDetailView(scholar: scholar)
+                    } else {
+                        Text("charts_require_ios16".localized)
+                            .padding()
+                    }
                 }
             }
             .refreshable {
@@ -124,10 +137,17 @@ struct ScholarListView: View {
     private var scholarsList: some View {
         List {
             ForEach(filteredScholars, id: \.id) { scholar in
-                ScholarRow(scholar: scholar) {
-                    selectedScholar = scholar
-                    showingScholarDetail = true
-                }
+                ScholarRow(
+                    scholar: scholar,
+                    onTap: {
+                        selectedScholar = scholar
+                        showingScholarDetail = true
+                    },
+                    onChartTap: {
+                        selectedScholar = scholar
+                        showingScholarChart = true
+                    }
+                )
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button("delete".localized, role: .destructive) {
                         deleteScholar(scholar)
@@ -283,31 +303,27 @@ struct ScholarListView: View {
 struct ScholarRow: View {
     let scholar: Scholar
     let onTap: () -> Void
+    let onChartTap: () -> Void
     
     var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                // 头像
-                Circle()
-                    .fill(Color(scholar.id.hashColor))
-                    .frame(width: 50, height: 50)
-                    .overlay(
-                        Text(scholar.name.initials())
-                            .font(.headline)
-                            .fontWeight(.medium)
-                            .foregroundColor(.white)
-                    )
-                
-                // 学者信息
+        HStack(spacing: 12) {
+            // 头像
+            Circle()
+                .fill(Color(scholar.id.hashColor))
+                .frame(width: 50, height: 50)
+                .overlay(
+                    Text(scholar.name.initials())
+                        .font(.headline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                )
+            
+            // 学者信息 - 点击查看详情
+            Button(action: onTap) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(scholar.displayName)
                         .font(.headline)
                         .foregroundColor(.primary)
-                        .lineLimit(1)
-                    
-                    Text("Scholar ID: \(scholar.id)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                         .lineLimit(1)
                     
                     HStack(spacing: 8) {
@@ -326,27 +342,34 @@ struct ScholarRow: View {
                         }
                     }
                 }
-                
-                Spacer()
-                
-                // 状态指示器
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            Spacer()
+            
+            // 图表按钮
+            Button(action: onChartTap) {
                 VStack(spacing: 4) {
-                    if scholar.citations != nil {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                    } else {
-                        Image(systemName: "clock.circle")
-                            .foregroundColor(.orange)
-                    }
+                    Image(systemName: "chart.xyaxis.line")
+                        .font(.title2)
+                        .foregroundColor(.blue)
                     
-                    Image(systemName: "chevron.right")
+                    Text("图表")
                         .font(.caption)
-                        .foregroundColor(.tertiary)
+                        .foregroundColor(.blue)
                 }
             }
-            .padding(.vertical, 8)
+            .buttonStyle(PlainButtonStyle())
+            
+            // 详情按钮
+            Button(action: onTap) {
+                Image(systemName: "chevron.right")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .buttonStyle(PlainButtonStyle())
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(.vertical, 8)
     }
 }
 
