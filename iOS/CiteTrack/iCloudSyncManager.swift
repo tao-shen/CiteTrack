@@ -52,66 +52,63 @@ class iCloudSyncManager: ObservableObject {
         print("🔍 [iCloud Debug] Bundle path: \(bundlePath)")
         print("🔍 [iCloud Debug] isSimulatorPath: \(isSimulatorPath)")
         
-        // Force simulator mode for testing - since we know we're in simulator
-        let finalIsSimulator = true // Force to true for now
-        print("🔍 [iCloud Debug] finalIsSimulator: \(finalIsSimulator)")
+        // Handle simulator vs device compilation
+        #if targetEnvironment(simulator)
+        print("🔍 [iCloud Debug] Running in simulator")
+        print("⚠️ [iCloud Debug] 注意：iOS模拟器无法访问真实手机的iCloud数据")
+        print("⚠️ [iCloud Debug] 模拟器只能访问自己的沙盒环境")
+        print("⚠️ [iCloud Debug] 真实iCloud同步需要真机测试")
         
-        if finalIsSimulator {
-            print("🔍 [iCloud Debug] Running in simulator")
-            print("⚠️ [iCloud Debug] 注意：iOS模拟器无法访问真实手机的iCloud数据")
-            print("⚠️ [iCloud Debug] 模拟器只能访问自己的沙盒环境")
-            print("⚠️ [iCloud Debug] 真实iCloud同步需要真机测试")
-            
-            // For simulator, use Documents directory as iCloud replacement
-            // This allows us to test the functionality without real iCloud access
-            let documentsPaths = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)
-            print("🔍 [iCloud Debug] Documents paths found: \(documentsPaths.count)")
-            
-            if let documentsPath = documentsPaths.first {
-                print("🔍 [iCloud Debug] First documents path: \(documentsPath)")
-                // Create a simulated iCloud path within Documents
-                let iCloudPath = documentsPath + "/iCloud"
-                let iCloudURL = URL(fileURLWithPath: iCloudPath)
-                print("🔍 [iCloud Debug] Simulator iCloud path: \(iCloudURL.path)")
-                print("📝 [iCloud Debug] 这是模拟器的测试路径，用于功能测试")
-                return iCloudURL
-            } else {
-                print("❌ [iCloud Debug] No documents path found")
-                return nil
-            }
+        // For simulator, use Documents directory as iCloud replacement
+        // This allows us to test the functionality without real iCloud access
+        let documentsPaths = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)
+        print("🔍 [iCloud Debug] Documents paths found: \(documentsPaths.count)")
+        
+        if let documentsPath = documentsPaths.first {
+            print("🔍 [iCloud Debug] First documents path: \(documentsPath)")
+            // Create a simulated iCloud path within Documents
+            let iCloudPath = documentsPath + "/iCloud"
+            let iCloudURL = URL(fileURLWithPath: iCloudPath)
+            print("🔍 [iCloud Debug] Simulator iCloud path: \(iCloudURL.path)")
+            print("📝 [iCloud Debug] 这是模拟器的测试路径，用于功能测试")
+            return iCloudURL
         } else {
-            print("🔍 [iCloud Debug] Running on real device")
-            
-            // Try to get the default container for real device
-            if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: nil) {
-                print("🔍 [iCloud Debug] Default container URL: \(containerURL.path)")
+            print("❌ [iCloud Debug] No documents path found")
+            return nil
+        }
+        #else
+        print("🔍 [iCloud Debug] Running on real device")
+        
+        // Try to get the default container for real device
+        if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: nil) {
+            print("🔍 [iCloud Debug] Default container URL: \(containerURL.path)")
+            return containerURL
+        }
+        
+        // Try with specific container identifier
+        let containerIdentifier = "iCloud.com.example.CiteTrack"
+        if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: containerIdentifier) {
+            print("🔍 [iCloud Debug] Specific container URL: \(containerURL.path)")
+            return containerURL
+        }
+        
+        // Try alternative container identifiers
+        let alternativeIdentifiers = [
+            "iCloud.CiteTrack",
+            "iCloud.com.citetrack.app",
+            "iCloud.com.citetrack.CiteTrack"
+        ]
+        
+        for identifier in alternativeIdentifiers {
+            if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: identifier) {
+                print("🔍 [iCloud Debug] Alternative container URL (\(identifier)): \(containerURL.path)")
                 return containerURL
-            }
-            
-            // Try with specific container identifier
-            let containerIdentifier = "iCloud.com.example.CiteTrack"
-            if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: containerIdentifier) {
-                print("🔍 [iCloud Debug] Specific container URL: \(containerURL.path)")
-                return containerURL
-            }
-            
-            // Try alternative container identifiers
-            let alternativeIdentifiers = [
-                "iCloud.CiteTrack",
-                "iCloud.com.citetrack.app",
-                "iCloud.com.citetrack.CiteTrack"
-            ]
-            
-            for identifier in alternativeIdentifiers {
-                if let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: identifier) {
-                    print("🔍 [iCloud Debug] Alternative container URL (\(identifier)): \(containerURL.path)")
-                    return containerURL
-                }
             }
         }
         
         print("❌ [iCloud Debug] No iCloud container found")
         return nil
+        #endif
     }
     
     /// Get Documents folder URL in iCloud
@@ -700,7 +697,7 @@ extension iCloudSyncManager {
             if let scholarName = entry["scholarName"] as? String,
                let citationCount = entry["citationCount"] as? Int,
                let timestampString = entry["timestamp"] as? String,
-               let timestamp = ISO8601DateFormatter().date(from: timestampString) {
+               let _ = ISO8601DateFormatter().date(from: timestampString) {
                 
                 // Here you would save to your local storage
                 // For now, we just count the entries

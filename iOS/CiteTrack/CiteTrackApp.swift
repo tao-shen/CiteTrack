@@ -411,6 +411,8 @@ struct NewScholarView: View {
         let scholars = dataManager.scholars
         guard !scholars.isEmpty else { return }
         
+        let scholarService = googleScholarService // Capture service reference in main actor context
+        
         await MainActor.run {
             isRefreshing = true
             totalScholars = scholars.count
@@ -423,7 +425,7 @@ struct NewScholarView: View {
                     try? await Task.sleep(nanoseconds: UInt64(index * 500_000_000))
                     
                     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                        googleScholarService.fetchScholarInfo(for: scholar.id) { result in
+                        scholarService.fetchScholarInfo(for: scholar.id) { result in
                             Task { @MainActor in
                                 refreshProgress += 1
                                 
@@ -1176,7 +1178,7 @@ struct ScholarRowWithChartAndManagement: View {
     @StateObject private var localizationManager = LocalizationManager.shared
     
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 8) {
             // 学者头像
             Circle()
                 .fill(Color.blue)
@@ -1219,10 +1221,10 @@ struct ScholarRowWithChartAndManagement: View {
                 }
             }
             
-            Spacer(minLength: 8)
+            Spacer()
             
             // 操作按钮组 - 靠近且右一点
-            HStack(spacing: 4) {
+            HStack(spacing: 0) {
                 // 更新按钮
                 Button(action: {
                     print("🔍 [Management Debug] 点击了更新按钮: \(scholar.displayName)")
@@ -1249,7 +1251,7 @@ struct ScholarRowWithChartAndManagement: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(isLoading)
-                .frame(minWidth: 50, maxWidth: 60) // 动态宽度适应不同语言
+                .frame(width: 50) // 固定宽度确保一致性
                 
                 // 图表按钮
                 Button(action: {
@@ -1270,8 +1272,9 @@ struct ScholarRowWithChartAndManagement: View {
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
-                .frame(minWidth: 50, maxWidth: 60) // 动态宽度适应不同语言
+                .frame(width: 50) // 固定宽度确保一致性
             }
+            .padding(.trailing, 8) // 增加右侧内边距让按钮组更靠右
         }
         .padding(.vertical, 8)
     }
