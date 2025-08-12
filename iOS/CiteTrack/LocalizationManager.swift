@@ -314,7 +314,16 @@ public class LocalizationManager: ObservableObject {
             "past_year": "Past Year",
             "this_week": "This Week",
             "this_month": "This Month",
+            "this_quarter": "This Quarter",
             "this_year": "This Year",
+            
+            // Growth statistics
+            "growth_statistics": "Growth Statistics",
+            "weekly_growth": "Weekly Growth",
+            "monthly_growth": "Monthly Growth",
+            "quarterly_growth": "Quarterly Growth",
+            "trend_analysis": "Trend Analysis",
+            "loading_growth_data": "Loading growth data...",
             "example_url": "Example: scholar.google.com/citations?user=XXXXXXXX",
             "invalid_scholar_id_format": "Invalid Scholar ID format",
             "rate_limited_error": "Too many requests, please try again later",
@@ -554,7 +563,16 @@ public class LocalizationManager: ObservableObject {
             "past_year": "过去一年",
             "this_week": "本周",
             "this_month": "本月",
+            "this_quarter": "本季度",
             "this_year": "今年",
+            
+            // Growth statistics
+            "growth_statistics": "增长统计",
+            "weekly_growth": "周增长",
+            "monthly_growth": "月增长", 
+            "quarterly_growth": "季度增长",
+            "trend_analysis": "趋势分析",
+            "loading_growth_data": "正在加载增长数据...",
             
             "example_url": "示例: scholar.google.com/citations?user=XXXXXXXX",
             "invalid_scholar_id_format": "学者ID格式无效",
@@ -797,8 +815,17 @@ public class LocalizationManager: ObservableObject {
             "past_6_months": "過去6ヶ月",
             "past_year": "過去1年",
             "this_week": "今週",
-            "this_month": "今月",
+            "this_month": "今月", 
+            "this_quarter": "今四半期",
             "this_year": "今年",
+            
+            // Growth statistics
+            "growth_statistics": "成長統計",
+            "weekly_growth": "週間成長",
+            "monthly_growth": "月間成長",
+            "quarterly_growth": "四半期成長", 
+            "trend_analysis": "トレンド分析",
+            "loading_growth_data": "成長データを読み込み中...",
             
             // Google Scholar Service 错误信息
             "invalid_url": "無効なURL",
@@ -1035,7 +1062,16 @@ public class LocalizationManager: ObservableObject {
             "past_year": "지난 1년",
             "this_week": "이번 주",
             "this_month": "이번 달",
+            "this_quarter": "이번 분기",
             "this_year": "올해",
+            
+            // Growth statistics
+            "growth_statistics": "성장 통계",
+            "weekly_growth": "주간 성장",
+            "monthly_growth": "월간 성장",
+            "quarterly_growth": "분기별 성장",
+            "trend_analysis": "동향 분석", 
+            "loading_growth_data": "성장 데이터 로딩 중...",
             
             // Google Scholar Service 错误信息
             "invalid_url": "잘못된 URL",
@@ -1274,7 +1310,16 @@ public class LocalizationManager: ObservableObject {
             "past_year": "Año Pasado",
             "this_week": "Esta Semana",
             "this_month": "Este Mes",
+            "this_quarter": "Este Trimestre",
             "this_year": "Este Año",
+            
+            // Growth statistics
+            "growth_statistics": "Estadísticas de Crecimiento",
+            "weekly_growth": "Crecimiento Semanal",
+            "monthly_growth": "Crecimiento Mensual",
+            "quarterly_growth": "Crecimiento Trimestral",
+            "trend_analysis": "Análisis de Tendencias",
+            "loading_growth_data": "Cargando datos de crecimiento...",
             
             // Google Scholar Service 错误信息
             "invalid_url": "URL Inválida",
@@ -1513,7 +1558,16 @@ public class LocalizationManager: ObservableObject {
             "past_year": "An Passé",
             "this_week": "Cette Semaine",
             "this_month": "Ce Mois",
+            "this_quarter": "Ce Trimestre",
             "this_year": "Cette Année",
+            
+            // Growth statistics
+            "growth_statistics": "Statistiques de Croissance",
+            "weekly_growth": "Croissance Hebdomadaire",
+            "monthly_growth": "Croissance Mensuelle",
+            "quarterly_growth": "Croissance Trimestrielle",
+            "trend_analysis": "Analyse des Tendances",
+            "loading_growth_data": "Chargement des données de croissance...",
             
             // Google Scholar Service 错误信息
             "invalid_url": "URL Invalide",
@@ -1752,7 +1806,16 @@ public class LocalizationManager: ObservableObject {
             "past_year": "Letztes Jahr",
             "this_week": "Diese Woche",
             "this_month": "Dieser Monat",
+            "this_quarter": "Dieses Quartal",
             "this_year": "Dieses Jahr",
+            
+            // Growth statistics
+            "growth_statistics": "Wachstumsstatistiken",
+            "weekly_growth": "Wöchentliches Wachstum",
+            "monthly_growth": "Monatliches Wachstum",
+            "quarterly_growth": "Quartalsweises Wachstum",
+            "trend_analysis": "Trendanalyse",
+            "loading_growth_data": "Lade Wachstumsdaten...",
             
             // Google Scholar Service 错误信息
             "invalid_url": "Ungültige URL",

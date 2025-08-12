@@ -31,7 +31,7 @@
 - **主要视图**: 完成了 `DashboardView`、`ScholarListView`、`ChartsView`、`SettingsView`
 - **组件库**: 开发了 `StatisticsCard`、`SyncStatusCard`、`EmptyStateView` 等可复用组件
 - **功能视图**: 实现了 `AddScholarView`、`ScholarDetailView`、`EditScholarView`
-- **Widget 支持**: 创建了 iOS Widget，支持小、中、大三种尺寸
+- **Widget 支持**: 创建了 iOS Widget，支持小、中、大三种尺寸；显示总引用与主学者近30天趋势曲线；每日自动刷新（次日凌晨）
 
 ### 6. 高级功能 ✅
 - **图表系统**: 集成 Swift Charts，支持折线图、柱状图、面积图

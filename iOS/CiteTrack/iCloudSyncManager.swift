@@ -632,7 +632,7 @@ extension iCloudSyncManager {
                 let citationCount = latestEntry["citationCount"] as? Int ?? 0
                 
                 // Create or update scholar in DataManager
-                let scholar = ScholarInfo(
+                let scholar = Scholar(
                     id: scholarId,
                     name: "获取中..." // 临时名称，稍后会更新
                 )

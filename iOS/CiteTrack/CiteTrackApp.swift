@@ -1,14 +1,40 @@
 import SwiftUI
+import BackgroundTasks
+import WidgetKit
 import UniformTypeIdentifiers
 
 @main
 struct CiteTrackApp: App {
     @StateObject private var settingsManager = SettingsManager.shared
+    @Environment(\.scenePhase) private var scenePhase
+    private static let refreshTaskIdentifier = "com.citetrack.citationRefresh"
+    
+    init() {
+        // 注册后台刷新任务
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTaskIdentifier, using: nil) { task in
+            guard let task = task as? BGAppRefreshTask else {
+                task.setTaskCompleted(success: false)
+                return
+            }
+            CiteTrackApp.handleAppRefresh(task: task)
+        }
+        // 预先安排一次刷新
+        CiteTrackApp.scheduleAppRefresh()
+    }
     
     var body: some Scene {
         WindowGroup {
             MainView()
                 .preferredColorScheme(colorScheme)
+                .onOpenURL { url in
+                    handleDeepLink(url: url)
+                }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                // 应用激活时尝试安排下一次刷新
+                CiteTrackApp.scheduleAppRefresh()
+            }
         }
     }
     
@@ -20,6 +46,108 @@ struct CiteTrackApp: App {
             return .dark
         case .system:
             return nil
+        }
+    }
+    
+    private func handleDeepLink(url: URL) {
+        print("🔗 [DeepLink] 接收到深度链接: \(url)")
+        
+        guard url.scheme == "citetrack" else {
+            print("❌ [DeepLink] 无效的URL scheme: \(url.scheme ?? "nil")")
+            return
+        }
+        
+        let host = url.host
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        
+        print("🔗 [DeepLink] Host: \(host ?? "nil"), Path: \(pathComponents)")
+        
+        switch host {
+        case "add-scholar":
+            // 切换到添加学者页面
+            NotificationCenter.default.post(name: .deepLinkAddScholar, object: nil)
+        case "scholars":
+            // 切换到学者管理页面
+            NotificationCenter.default.post(name: .deepLinkScholars, object: nil)
+        case "dashboard":
+            // 切换到仪表板页面
+            NotificationCenter.default.post(name: .deepLinkDashboard, object: nil)
+        case "scholar":
+            // 查看特定学者详情
+            if let scholarId = pathComponents.first {
+                NotificationCenter.default.post(name: .deepLinkScholarDetail, object: scholarId)
+            }
+        default:
+            print("❌ [DeepLink] 不支持的深度链接: \(url)")
+        }
+    }
+}
+
+// MARK: - Background Refresh Helpers
+extension CiteTrackApp {
+    private static func nextRefreshDate() -> Date {
+        var comps = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        comps.day = (comps.day ?? 0) + 1
+        comps.hour = 3
+        comps.minute = 0
+        comps.second = 0
+        return Calendar.current.date(from: comps) ?? Date().addingTimeInterval(24 * 60 * 60)
+    }
+
+    static func scheduleAppRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: CiteTrackApp.refreshTaskIdentifier)
+        request.earliestBeginDate = nextRefreshDate()
+        do {
+            try BGTaskScheduler.shared.submit(request)
+            print("📅 已安排后台刷新: \(request.earliestBeginDate?.description ?? "unknown")")
+        } catch {
+            print("❌ 安排后台刷新失败: \(error)")
+        }
+    }
+
+    static func handleAppRefresh(task: BGAppRefreshTask) {
+        // 安排下一次
+        scheduleAppRefresh()
+
+        let operationQueue = OperationQueue()
+        operationQueue.maxConcurrentOperationCount = 2
+
+        task.expirationHandler = {
+            operationQueue.cancelAllOperations()
+        }
+
+        let scholars = DataManager.shared.scholars
+        if scholars.isEmpty {
+            WidgetCenter.shared.reloadAllTimelines()
+            task.setTaskCompleted(success: true)
+            return
+        }
+
+        let limited = Array(scholars.prefix(5))
+
+        let group = DispatchGroup()
+        for scholar in limited {
+            group.enter()
+            GoogleScholarService.shared.fetchScholarInfo(for: scholar.id) { result in
+                DispatchQueue.main.async {
+                    switch result {
+                    case .success(let info):
+                        var updated = Scholar(id: scholar.id, name: info.name)
+                        updated.citations = info.citations
+                        updated.lastUpdated = Date()
+                        DataManager.shared.updateScholar(updated)
+                        DataManager.shared.saveHistoryIfChanged(scholarId: scholar.id, citationCount: info.citations)
+                    case .failure(let error):
+                        print("❌ 后台更新失败: \(scholar.id) - \(error.localizedDescription)")
+                    }
+                    group.leave()
+                }
+            }
+        }
+
+        group.notify(queue: .main) {
+            WidgetCenter.shared.reloadAllTimelines()
+            task.setTaskCompleted(success: true)
         }
     }
 }
@@ -51,6 +179,15 @@ struct MainView: View {
                     Text(localizationManager.localized("settings"))
                 }
                 .tag(2)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deepLinkAddScholar)) { _ in
+            selectedTab = 1 // 切换到学者管理页面
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deepLinkScholars)) { _ in
+            selectedTab = 1 // 切换到学者管理页面
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .deepLinkDashboard)) { _ in
+            selectedTab = 0 // 切换到仪表板页面
         }
     }
 }
@@ -134,8 +271,8 @@ struct NewScholarView: View {
     
     // 统一的sheet类型管理
     enum SheetType: Identifiable {
-        case chart(ScholarInfo)
-        case edit(ScholarInfo)
+        case chart(Scholar)
+        case edit(Scholar)
         case addScholar
         
         var id: String {
@@ -318,7 +455,7 @@ struct NewScholarView: View {
 
     // MARK: - 学者管理功能
 
-    private func fetchScholarInfo(for scholar: ScholarInfo) {
+    private func fetchScholarInfo(for scholar: Scholar) {
         isLoading = true
         loadingScholarId = scholar.id
         
@@ -329,12 +466,9 @@ struct NewScholarView: View {
                 
                 switch result {
                 case .success(let info):
-                    let updatedScholar = ScholarInfo(
-                        id: scholar.id,
-                        name: info.name,
-                        citations: info.citations,
-                        lastUpdated: Date()
-                    )
+                    var updatedScholar = Scholar(id: scholar.id, name: info.name)
+                    updatedScholar.citations = info.citations
+                    updatedScholar.lastUpdated = Date()
                     
                     dataManager.updateScholar(updatedScholar)
                     dataManager.saveHistoryIfChanged(
@@ -374,12 +508,9 @@ struct NewScholarView: View {
                         
                         switch result {
                         case .success(let info):
-                            let updatedScholar = ScholarInfo(
-                                id: scholar.id,
-                                name: info.name,
-                                citations: info.citations,
-                                lastUpdated: Date()
-                            )
+                            var updatedScholar = Scholar(id: scholar.id, name: info.name)
+                            updatedScholar.citations = info.citations
+                            updatedScholar.lastUpdated = Date()
                             
                             dataManager.updateScholar(updatedScholar)
                             dataManager.saveHistoryIfChanged(
@@ -431,12 +562,9 @@ struct NewScholarView: View {
                                 
                                 switch result {
                                 case .success(let info):
-                                    let updatedScholar = ScholarInfo(
-                                        id: scholar.id,
-                                        name: info.name,
-                                        citations: info.citations,
-                                        lastUpdated: Date()
-                                    )
+                                    var updatedScholar = Scholar(id: scholar.id, name: info.name)
+                                    updatedScholar.citations = info.citations
+                                    updatedScholar.lastUpdated = Date()
                                     
                                     dataManager.updateScholar(updatedScholar)
                                     dataManager.saveHistoryIfChanged(
@@ -471,7 +599,7 @@ struct NewScholarView: View {
         }
     }
 
-    private func deleteScholar(_ scholar: ScholarInfo) {
+    private func deleteScholar(_ scholar: Scholar) {
         dataManager.removeScholar(id: scholar.id)
     }
 
@@ -479,13 +607,13 @@ struct NewScholarView: View {
         dataManager.removeAllScholars()
     }
     
-    private func editScholar(_ scholar: ScholarInfo) {
+    private func editScholar(_ scholar: Scholar) {
         activeSheet = .edit(scholar)
     }
 }
 
 private struct ScholarChartRowView: View {
-    let scholar: ScholarInfo
+    let scholar: Scholar
     let onTap: () -> Void
 
     var body: some View {
@@ -495,10 +623,10 @@ private struct ScholarChartRowView: View {
 
 // 引用排名图表
 struct CitationRankingChart: View {
-    let scholars: [ScholarInfo]
+    let scholars: [Scholar]
     @StateObject private var localizationManager = LocalizationManager.shared
     
-    var sortedScholars: [ScholarInfo] {
+    var sortedScholars: [Scholar] {
         scholars.sorted { ($0.citations ?? 0) > ($1.citations ?? 0) }
     }
     
@@ -519,7 +647,7 @@ struct CitationRankingChart: View {
 
 private struct ScholarRankingRowView: View {
     let index: Int
-    let scholar: ScholarInfo
+    let scholar: Scholar
     var body: some View {
         HStack {
             Text("\(index + 1)")
@@ -546,7 +674,7 @@ private struct ScholarRankingRowView: View {
 
 // 引用分布图表
 struct CitationDistributionChart: View {
-    let scholars: [ScholarInfo]
+    let scholars: [Scholar]
     @StateObject private var localizationManager = LocalizationManager.shared
     
     var body: some View {
@@ -600,7 +728,7 @@ struct CitationDistributionChart: View {
 
 // 学者统计图表
 struct ScholarStatisticsChart: View {
-    let scholars: [ScholarInfo]
+    let scholars: [Scholar]
     @StateObject private var localizationManager = LocalizationManager.shared
     
     var body: some View {
@@ -945,7 +1073,7 @@ struct SettingsView: View {
 // 添加学者视图
 struct AddScholarView: View {
     @Environment(\.dismiss) var dismiss
-    let onAdd: (ScholarInfo) -> Void
+    let onAdd: (Scholar) -> Void
     @StateObject private var localizationManager = LocalizationManager.shared
     
     @State private var scholarId = ""
@@ -1005,7 +1133,7 @@ struct AddScholarView: View {
             isLoading = false
             
             let name = scholarName.isEmpty ? "\(localizationManager.localized("scholar")) \(scholarId.prefix(8))" : scholarName
-            var newScholar = ScholarInfo(id: scholarId, name: name)
+            var newScholar = Scholar(id: scholarId, name: name)
             newScholar.citations = Int.random(in: 100...1000)
             newScholar.lastUpdated = Date()
             
@@ -1018,14 +1146,14 @@ struct AddScholarView: View {
 // 编辑学者视图
 struct EditScholarView: View {
     @Environment(\.dismiss) var dismiss
-    let scholar: ScholarInfo
-    let onSave: (ScholarInfo) -> Void
+    let scholar: Scholar
+    let onSave: (Scholar) -> Void
     @StateObject private var localizationManager = LocalizationManager.shared
     
     @State private var scholarName: String
     @State private var hasChanges = false
     
-    init(scholar: ScholarInfo, onSave: @escaping (ScholarInfo) -> Void) {
+    init(scholar: Scholar, onSave: @escaping (Scholar) -> Void) {
         self.scholar = scholar
         self.onSave = onSave
         self._scholarName = State(initialValue: scholar.name)
@@ -1095,12 +1223,9 @@ struct EditScholarView: View {
     }
     
     private func saveScholar() {
-        let updatedScholar = ScholarInfo(
-            id: scholar.id,
-            name: scholarName.trimmingCharacters(in: .whitespacesAndNewlines),
-            citations: scholar.citations,
-            lastUpdated: scholar.lastUpdated
-        )
+        var updatedScholar = Scholar(id: scholar.id, name: scholarName.trimmingCharacters(in: .whitespacesAndNewlines))
+        updatedScholar.citations = scholar.citations
+        updatedScholar.lastUpdated = scholar.lastUpdated
         onSave(updatedScholar)
         dismiss()
     }
@@ -1137,7 +1262,7 @@ struct StatisticsCard: View {
 
 // 学者行组件
 struct ScholarRow: View {
-    let scholar: ScholarInfo
+    let scholar: Scholar
     @StateObject private var localizationManager = LocalizationManager.shared
     
     var body: some View {
@@ -1171,7 +1296,7 @@ struct ScholarRow: View {
 
 // 新的学者行组件（合并图表和管理功能）
 struct ScholarRowWithChartAndManagement: View {
-    let scholar: ScholarInfo
+    let scholar: Scholar
     let onChartTap: () -> Void
     let onUpdateTap: () -> Void
     let isLoading: Bool
@@ -1360,7 +1485,7 @@ struct FilePickerView: UIViewControllerRepresentable {
 
 // 学者图表行视图
 struct ScholarChartRow: View {
-    let scholar: ScholarInfo
+    let scholar: Scholar
     let onTap: () -> Void
     @StateObject private var localizationManager = LocalizationManager.shared
     
@@ -1429,7 +1554,7 @@ struct ScholarChartRow: View {
 
 // 学者图表详情视图
 struct ScholarChartDetailView: View {
-    let scholar: ScholarInfo
+    let scholar: Scholar
     @StateObject private var localizationManager = LocalizationManager.shared
     
     @Environment(\.dismiss) private var dismiss
@@ -1590,27 +1715,36 @@ struct ScholarChartDetailView: View {
                 // 实际图表
                 GeometryReader { geometry in
                     VStack {
-                        HStack(spacing: 4) { // 进一步减少间距
-                            VStack(alignment: .leading, spacing: 2) { // 进一步减少Y轴标签间距
-                                ForEach(chartData.reversed(), id: \.id) { point in
-                                    Text(formatNumber(point.value))
-                                        .font(.caption2) // 使用更小字体
+                        HStack(spacing: 8) { // 增加Y轴与图表间距
+                            VStack(alignment: .trailing, spacing: 0) { // 改为垂直对齐Y轴标签
+                                let maxValue = chartData.map(\.value).max() ?? 1
+                                let minValue = chartData.map(\.value).min() ?? 0
+                                let range = max(maxValue - minValue, 1)
+                                
+                                // 生成5个均匀分布的Y轴标签值
+                                ForEach(0..<5, id: \.self) { i in
+                                    let normalizedPosition = CGFloat(4 - i) / 4.0 // 从上到下
+                                    let value = minValue + Int(normalizedPosition * Double(range))
+                                    
+                                    Text(formatNumber(value))
+                                        .font(.caption)
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.6)
-                                        .frame(width: 35, alignment: .trailing) // 进一步减少宽度
+                                        .frame(width: 40, alignment: .trailing)
+                                        .frame(height: 32) // 固定每个标签高度为32，总高度160/5=32
                                 }
                             }
-                            .frame(width: 35) // 进一步减少Y轴宽度
+                            .frame(width: 40) // 增加Y轴宽度以避免文字被截断
                             
                             VStack {
                                 ZStack {
                                     // 网格线
                                     Path { path in
                                         for i in 0...4 {
-                                            let y = CGFloat(i) * 40
+                                            let y = CGFloat(i) * 32 + 32 // 网格线往下移一格半，微调对齐位置
                                             path.move(to: CGPoint(x: 0, y: y))
-                                            path.addLine(to: CGPoint(x: geometry.size.width - 80, y: y)) // 增加右边距
+                                            path.addLine(to: CGPoint(x: geometry.size.width - 90, y: y)) // 调整右边距匹配新Y轴宽度
                                         }
                                     }
                                     .stroke(Color.gray.opacity(0.2), lineWidth: 1)
@@ -1621,12 +1755,12 @@ struct ScholarChartDetailView: View {
                                             let maxValue = chartData.map(\.value).max() ?? 1
                                             let minValue = chartData.map(\.value).min() ?? 0
                                             let range = max(maxValue - minValue, 1)
-                                            let chartWidth = geometry.size.width - 80 // 增加右边距
+                                            let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
                                             
                                             for (index, point) in chartData.enumerated() {
-                                                let x = CGFloat(index) * (chartWidth / CGFloat(chartData.count - 1))
+                                                let x = CGFloat(index) * (chartWidth / CGFloat(max(chartData.count - 1, 1)))
                                                 let normalizedValue = CGFloat(point.value - minValue) / CGFloat(range)
-                                                let y = 160 - (normalizedValue * 160)
+                                                let y = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
                                                 
                                                 if index == 0 {
                                                     path.move(to: CGPoint(x: x, y: y))
@@ -1643,10 +1777,10 @@ struct ScholarChartDetailView: View {
                                         let maxValue = chartData.map(\.value).max() ?? 1
                                         let minValue = chartData.map(\.value).min() ?? 0
                                         let range = max(maxValue - minValue, 1)
-                                        let chartWidth = geometry.size.width - 80 // 增加右边距
-                                        let x = CGFloat(index) * (chartWidth / CGFloat(chartData.count - 1))
+                                        let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
+                                        let x = CGFloat(index) * (chartWidth / CGFloat(max(chartData.count - 1, 1)))
                                         let normalizedValue = CGFloat(point.value - minValue) / CGFloat(range)
-                                        let y = 160 - (normalizedValue * 160)
+                                        let y = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
                                         
                                         ZStack {
                                             // 选中时的外圈高亮
@@ -1711,23 +1845,24 @@ struct ScholarChartDetailView: View {
                                         }
                                 )
                                 
-                                // X轴标签 - 优化显示
-                                HStack(spacing: 2) { // 进一步减少标签间距
+                                // X轴标签 - 优化显示减少省略号
+                                HStack(spacing: 1) { // 减少标签间距
                                     ForEach(Array(chartData.enumerated()), id: \.element.id) { index, point in
-                                        if index % 2 == 0 { // 只显示偶数位置的标签
-                                            Text(DateFormatter.shortDate.string(from: point.date))
-                                                .font(.caption) // 使用更大的字体
+                                        let shouldShow = chartData.count <= 8 ? (index % 2 == 0) : (index % 3 == 0) // 根据数据量动态调整显示密度
+                                        
+                                        if shouldShow {
+                                            Text(DateFormatter.ultraShortDate.string(from: point.date))
+                                                .font(.caption) // 使用适合的字体大小，避免省略号
                                                 .foregroundColor(.secondary)
                                                 .lineLimit(1)
-                                                .minimumScaleFactor(0.7)
+                                                .minimumScaleFactor(1.0) // 不允许压缩，避免省略号
                                                 .frame(maxWidth: .infinity) // 平均分布
-                                        } else {
-                                            Text("")
-                                                .font(.caption)
-                                                .frame(maxWidth: .infinity)
+                                                .multilineTextAlignment(.center)
                                         }
+                                        // 移除隐藏标签的占位，让显示的标签有足够空间
                                     }
                                 }
+                                .offset(x: -20) // 整体往左移一格，调整横坐标位置
                                 .padding(.top, 4) // 增加与图表的间距
                             }
                         }
@@ -1744,15 +1879,15 @@ struct ScholarChartDetailView: View {
     
     private var statisticsView: some View {
         VStack(alignment: .leading, spacing: 12) {
-                            Text(localizationManager.localized("statistics_info"))
+            Text(localizationManager.localized("statistics_info"))
                 .font(.headline)
                 .foregroundColor(.primary)
             
             if !chartData.isEmpty {
                 let currentValue = chartData.last?.value ?? 0
-                let previousValue = chartData.count > 1 ? chartData[chartData.count - 2].value : 0
-                let change = currentValue - previousValue
-                let growth = previousValue > 0 ? Double(change) / Double(previousValue) * 100 : 0
+                // 根据时间段计算对应的变化：近一周/近一月/近三月
+                let periodDays = [7, 30, 90][selectedTimeRange]
+                let (change, growth) = calculatePeriodChange(periodDays: periodDays)
                 
                 LazyVGrid(columns: [
                     GridItem(.flexible()),
@@ -1791,6 +1926,37 @@ struct ScholarChartDetailView: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
+    }
+    
+    private func calculatePeriodChange(periodDays: Int) -> (change: Int, growth: Double) {
+        guard !chartData.isEmpty else { return (0, 0) }
+        
+        let currentValue = chartData.last?.value ?? 0
+        
+        // 找到对应时间段前的数据点
+        let targetDate = Calendar.current.date(byAdding: .day, value: -periodDays, to: Date()) ?? Date()
+        
+        // 在chartData中找到最接近目标日期的数据点
+        var previousValue = currentValue
+        var minTimeDiff = TimeInterval.greatestFiniteMagnitude
+        
+        for dataPoint in chartData {
+            let timeDiff = abs(dataPoint.date.timeIntervalSince(targetDate))
+            if timeDiff < minTimeDiff {
+                minTimeDiff = timeDiff
+                previousValue = dataPoint.value
+            }
+        }
+        
+        // 如果没有找到合适的历史数据点，使用第一个数据点
+        if minTimeDiff == TimeInterval.greatestFiniteMagnitude && !chartData.isEmpty {
+            previousValue = chartData.first?.value ?? currentValue
+        }
+        
+        let change = currentValue - previousValue
+        let growth = previousValue > 0 ? Double(change) / Double(previousValue) * 100 : 0
+        
+        return (change, growth)
     }
     
     private func loadRealHistoryData() {
@@ -1878,7 +2044,7 @@ struct ScholarChartDetailView: View {
     }
     
     private func findClosestDataPoint(to point: CGPoint, in geometry: GeometryProxy) -> ChartDataPoint? {
-        let chartWidth = geometry.size.width - 80 // 增加右边距
+        let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
         let chartHeight: CGFloat = 160 // 图表高度
         
         let x = point.x
@@ -1889,8 +2055,8 @@ struct ScholarChartDetailView: View {
         var minDistance: CGFloat = CGFloat.infinity
         
         for (index, dataPoint) in chartData.enumerated() {
-            let dataPointX = CGFloat(index) * (chartWidth / CGFloat(chartData.count - 1))
-            let dataPointY = 160 - (CGFloat(dataPoint.value - minValue) / CGFloat(range) * 160)
+            let dataPointX = CGFloat(index) * (chartWidth / CGFloat(max(chartData.count - 1, 1)))
+            let dataPointY = 160 - (CGFloat(dataPoint.value - minValue) / CGFloat(range) * 128) // 范围从32到160，与网格线精确匹配
             
             let distance = hypot(x - dataPointX, y - dataPointY)
             
@@ -1962,6 +2128,12 @@ extension DateFormatter {
     static let shortDate: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MM/dd"
+        return formatter
+    }()
+    
+    static let ultraShortDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M/d" // 更简洁的日期格式，减少字符数
         return formatter
     }()
     
@@ -2066,4 +2238,12 @@ class SimpleHistoryManager {
         saveAllHistories(filteredHistories)
         print("🧹 清理旧历史数据，保留 \(filteredHistories.count) 条记录")
     }
+}
+
+// MARK: - Deep Link Notifications
+extension Notification.Name {
+    static let deepLinkAddScholar = Notification.Name("deepLinkAddScholar")
+    static let deepLinkScholars = Notification.Name("deepLinkScholars")
+    static let deepLinkDashboard = Notification.Name("deepLinkDashboard")
+    static let deepLinkScholarDetail = Notification.Name("deepLinkScholarDetail")
 }
