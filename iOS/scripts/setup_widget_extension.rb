@@ -5,7 +5,7 @@ require 'fileutils'
 PROJECT_PATH = 'iOS/CiteTrack.xcodeproj'
 APP_TARGET_NAME = 'CiteTrack'
 WIDGET_TARGET_NAME = 'CiteTrackWidgetExtension'
-APP_GROUP_ID = 'group.com.citetrack'
+APP_GROUP_ID = 'group.com.example.CiteTrack'
 
 # Ensure essential files exist
 widget_dir = 'iOS/CiteTrackWidgetExtension'
@@ -21,23 +21,23 @@ abort("App target '#{APP_TARGET_NAME}' not found") unless app_target
 widget_target = project.targets.find { |t| t.name == WIDGET_TARGET_NAME }
 if widget_target.nil?
   # Create app extension target in default Products group
-  widget_target = project.new_target(:app_extension, WIDGET_TARGET_NAME, :ios, '16.0')
+  widget_target = project.new_target(:app_extension, WIDGET_TARGET_NAME, :ios, '17.0')
   widget_target.product_type = 'com.apple.product-type.app-extension'
   widget_target.build_configurations.each do |config|
-    config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.citetrack.widget'
+    config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.example.CiteTrack.widget'
     config.build_settings['INFOPLIST_FILE'] = 'iOS/CiteTrackWidgetExtension/WidgetInfo.plist'
     config.build_settings['SWIFT_VERSION'] = '5.0'
-    config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+    config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
     config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'iOS/CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements'
     config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
   end
 
   # Create a new group for Widget files if not present
-widgets_group = project.main_group.find_subpath('CiteTrackWidgetExtension', true)
+  widgets_group = project.main_group.find_subpath('iOS/CiteTrackWidgetExtension', true)
   widgets_group.set_source_tree('SOURCE_ROOT')
 
   # Create Info.plist if missing
-info_plist_path = 'CiteTrackWidgetExtension/WidgetInfo.plist'
+  info_plist_path = 'iOS/CiteTrackWidgetExtension/WidgetInfo.plist'
   unless File.exist?(info_plist_path)
     plist_content = <<~PLIST
       <?xml version="1.0" encoding="UTF-8"?>
@@ -59,7 +59,7 @@ info_plist_path = 'CiteTrackWidgetExtension/WidgetInfo.plist'
   widgets_group.new_file(info_plist_path)
 
   # Create Entitlements
-entitlements_path = 'CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements'
+  entitlements_path = 'iOS/CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements'
   unless File.exist?(entitlements_path)
     ent_content = <<~ENT
       <?xml version="1.0" encoding="UTF-8"?>
@@ -131,8 +131,16 @@ if app_entitlements_path.nil? || app_entitlements_path.empty?
   end
   project.main_group.new_file(app_entitlements_path)
 else
-  content = File.read(app_entitlements_path)
-  unless content.include?(APP_GROUP_ID)
+  # Try reading entitlements relative to repo root and project dir
+  content = nil
+  if File.exist?(app_entitlements_path)
+    content = File.read(app_entitlements_path)
+  else
+    candidate = File.join('iOS', app_entitlements_path)
+    content = File.read(candidate) if File.exist?(candidate)
+    app_entitlements_path = candidate if File.exist?(candidate)
+  end
+  unless content.nil? || content.include?(APP_GROUP_ID)
     content = content.sub(%r{</array>}, "  <string>#{APP_GROUP_ID}</string>\n    </array>")
     File.write(app_entitlements_path, content)
   end
@@ -147,6 +155,11 @@ if embed_phase.nil?
 end
 product_ref = widget_target.product_reference
 embed_phase.add_file_reference(product_ref) unless embed_phase.files_references.include?(product_ref)
+
+# Ensure the app builds the widget extension by adding a target dependency
+unless app_target.dependencies.any? { |d| d.target == widget_target }
+  app_target.add_dependency(widget_target)
+end
 
 project.save
 puts '✅ Widget extension configured. Open Xcode to finish signing if needed.'

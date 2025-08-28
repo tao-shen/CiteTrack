@@ -1,5 +1,9 @@
 import Foundation
 import WidgetKit
+import SwiftUI
+
+// MARK: - 数字格式化扩展
+// Widget number formatting moved to Shared/Models/WidgetModels.swift
 
 // MARK: - 统一数据模型
 
@@ -25,46 +29,16 @@ public struct CitationHistory: Codable, Identifiable, Equatable {
     }
 }
 
-
-
-
-
-// MARK: - 数据管理器
-
-// MARK: - 小组件专用数据模型
-public struct WidgetScholarInfo: Codable {
-    public let id: String
-    public let displayName: String
-    public let institution: String?
-    public let citations: Int?
-    public let hIndex: Int?
-    public let lastUpdated: Date?
-    public let weeklyGrowth: Int?
-    public let monthlyGrowth: Int?
-    public let quarterlyGrowth: Int?
-    
-    public init(id: String, displayName: String, institution: String?, citations: Int?, hIndex: Int?, lastUpdated: Date?, weeklyGrowth: Int? = nil, monthlyGrowth: Int? = nil, quarterlyGrowth: Int? = nil) {
-        self.id = id
-        self.displayName = displayName
-        self.institution = institution
-        self.citations = citations
-        self.hIndex = hIndex
-        self.lastUpdated = lastUpdated
-        self.weeklyGrowth = weeklyGrowth
-        self.monthlyGrowth = monthlyGrowth
-        self.quarterlyGrowth = quarterlyGrowth
-    }
-}
+// Widget models moved to Shared/Models/WidgetModels.swift
 
 /// 统一的数据管理器
 public class DataManager: ObservableObject {
     public static let shared = DataManager()
-    // Fallback App Group identifier for cases where shared constants are not in the target membership yet
-    private static let appGroupIdentifier: String = "group.com.example.CiteTrack"
+    // 使用全局定义的 appGroupIdentifier
     
     private let userDefaults: UserDefaults = {
         // 优先尝试使用 App Group，失败则回退到标准 UserDefaults
-        if let appGroupDefaults = UserDefaults(suiteName: DataManager.appGroupIdentifier) {
+        if let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier) {
             print("✅ [DataManager] 使用 App Group UserDefaults")
             return appGroupDefaults
         } else {
@@ -79,7 +53,7 @@ public class DataManager: ObservableObject {
     @Published public var scholars: [Scholar] = []
     
     private init() {
-        print("🔍 [DataManager] 初始化，App Group ID: \(DataManager.appGroupIdentifier)")
+        print("🔍 [DataManager] 初始化，App Group ID: \(appGroupIdentifier)")
         testAppGroupAccess()
         performAppGroupMigrationIfNeeded()
         loadScholars()
@@ -93,7 +67,7 @@ public class DataManager: ObservableObject {
     private func testAppGroupAccess() {
         print("🔍 [DataManager] 测试 App Group 访问权限...")
         
-        if let groupDefaults = UserDefaults(suiteName: DataManager.appGroupIdentifier) {
+        if let groupDefaults = UserDefaults(suiteName: appGroupIdentifier) {
             // 测试写入和读取 - 使用同步方式避免CFPreferences警告
             let testKey = "TestAppGroupAccess"
             let testValue = "测试数据_\(Date().timeIntervalSince1970)"
@@ -178,7 +152,7 @@ public class DataManager: ObservableObject {
     // MARK: - Migration
     /// 将旧版（标准 UserDefaults）中的数据迁移到 App Group，避免升级后数据“丢失”
     private func performAppGroupMigrationIfNeeded() {
-        guard let groupDefaults = UserDefaults(suiteName: DataManager.appGroupIdentifier) else { return }
+        guard let groupDefaults = UserDefaults(suiteName: appGroupIdentifier) else { return }
         let migrationFlagKey = "DidMigrateToAppGroup"
         if groupDefaults.bool(forKey: migrationFlagKey) { return }
 
@@ -233,6 +207,8 @@ public class DataManager: ObservableObject {
         if let index = scholars.firstIndex(where: { $0.id == scholar.id }) {
             scholars[index] = scholar
             saveScholars()
+            // 标记该学者刷新完成：写入 LastRefreshTime_<id> 并清除进行中标记
+            markRefreshDone(for: scholar.id)
             #if os(iOS)
             WidgetCenter.shared.reloadAllTimelines()
             #endif
@@ -241,6 +217,27 @@ public class DataManager: ObservableObject {
             // 如果不存在则添加
             addScholar(scholar)
         }
+    }
+    
+    /// 标记某个学者的刷新完成（写入 LastRefreshTime_<id>，清除 RefreshInProgress_<id>/RefreshStartTime_<id>）
+    private func markRefreshDone(for scholarId: String, at date: Date = Date()) {
+        let groupID = appGroupIdentifier
+        let lastKey = "LastRefreshTime_\(scholarId)"
+        let inKey = "RefreshInProgress_\(scholarId)"
+        let startKey = "RefreshStartTime_\(scholarId)"
+        
+        if let appGroup = UserDefaults(suiteName: groupID) {
+            appGroup.set(date, forKey: lastKey)
+            appGroup.set(date, forKey: "LastRefreshTime") // 兼容全局回退
+            appGroup.set(false, forKey: inKey)
+            appGroup.removeObject(forKey: startKey)
+            appGroup.synchronize()
+        }
+        UserDefaults.standard.set(date, forKey: lastKey)
+        UserDefaults.standard.set(date, forKey: "LastRefreshTime")
+        UserDefaults.standard.set(false, forKey: inKey)
+        UserDefaults.standard.removeObject(forKey: startKey)
+        print("✅ [DataManager] 标记刷新完成: sid=\(scholarId) at=\(date)")
     }
     
     /// 删除学者

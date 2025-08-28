@@ -2,6 +2,7 @@ import SwiftUI
 import BackgroundTasks
 import WidgetKit
 import UniformTypeIdentifiers
+import AppIntents
 
 @main
 struct CiteTrackApp: App {
@@ -77,8 +78,75 @@ struct CiteTrackApp: App {
             if let scholarId = pathComponents.first {
                 NotificationCenter.default.post(name: .deepLinkScholarDetail, object: scholarId)
             }
+        case "refresh":
+            // Widget刷新按钮点击
+            print("🔄 [DeepLink] 收到刷新请求")
+            handleWidgetRefresh()
+        case "switch":
+            // Widget切换按钮点击
+            print("🎯 [DeepLink] 收到切换学者请求")
+            handleWidgetScholarSwitch()
         default:
             print("❌ [DeepLink] 不支持的深度链接: \(url)")
+        }
+    }
+    
+    // MARK: - Widget Action Handlers
+    private func handleWidgetRefresh() {
+        print("🔄 [Widget] 开始处理刷新请求")
+        
+        // 设置刷新时间戳，Widget会检测到这个时间戳并播放动画
+        UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
+        
+        // 如果有学者数据，触发实际的数据刷新
+        let dataManager = DataManager.shared
+        let scholars = dataManager.scholars
+        
+        if !scholars.isEmpty {
+            // 刷新第一个学者的数据作为示例
+            if let firstScholar = scholars.first {
+                print("🔄 [Widget] 刷新学者数据: \(firstScholar.displayName)")
+                
+                // 这里可以调用实际的数据刷新逻辑
+                // GoogleScholarService.shared.fetchScholarInfo(for: firstScholar.id) { ... }
+                
+                // 暂时模拟刷新完成
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    WidgetCenter.shared.reloadAllTimelines()
+                    print("✅ [Widget] 刷新完成，更新小组件")
+                }
+            }
+        } else {
+            // 没有学者数据，直接更新小组件
+            WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+    
+    private func handleWidgetScholarSwitch() {
+        print("🎯 [Widget] 开始处理学者切换请求")
+        
+        // 设置切换时间戳，Widget会检测到这个时间戳并播放动画
+        UserDefaults.standard.set(Date(), forKey: "LastScholarSwitchTime")
+        
+        let dataManager = DataManager.shared
+        let scholars = dataManager.scholars
+        
+        if scholars.count > 1 {
+            // 获取当前显示的学者索引
+            let currentIndex = UserDefaults.standard.integer(forKey: "CurrentScholarIndex")
+            let nextIndex = (currentIndex + 1) % scholars.count
+            
+            // 保存新的索引
+            UserDefaults.standard.set(nextIndex, forKey: "CurrentScholarIndex")
+            
+            print("🎯 [Widget] 切换到学者 \(nextIndex): \(scholars[nextIndex].displayName)")
+            
+            // 更新小组件
+            WidgetCenter.shared.reloadAllTimelines()
+        } else {
+            print("🎯 [Widget] 学者数量不足，无法切换")
+            // 仍然更新小组件以提供反馈
+            WidgetCenter.shared.reloadAllTimelines()
         }
     }
 }
