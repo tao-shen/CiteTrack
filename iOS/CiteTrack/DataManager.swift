@@ -1,6 +1,7 @@
 import Foundation
 import WidgetKit
 import SwiftUI
+import UIKit
 
 // MARK: - 数字格式化扩展
 // Widget number formatting moved to Shared/Models/WidgetModels.swift
@@ -48,19 +49,48 @@ public class DataManager: ObservableObject {
     }()
     private let scholarsKey = "ScholarsList"
     private let historyKey = "CitationHistoryData"
+    private let pinnedKey = "PinnedScholarIDs"
+    private let orderKey = "ScholarDisplayOrder"
     
     // 发布的数据
     @Published public var scholars: [Scholar] = []
+    @Published public var lastRefreshTime: Date? = nil
+    @Published public var pinnedIds: Set<String> = []
+    @Published public var displayOrder: [String] = []
     
     private init() {
         print("🔍 [DataManager] 初始化，App Group ID: \(appGroupIdentifier)")
         testAppGroupAccess()
         performAppGroupMigrationIfNeeded()
         loadScholars()
+        // 加载置顶集合
+        if let arr = userDefaults.array(forKey: pinnedKey) as? [String] {
+            pinnedIds = Set(arr)
+            print("🧪 [DataManager] 加载置顶学者: \(pinnedIds.count) 个")
+        }
+        // 加载显示顺序
+        if let arr = userDefaults.array(forKey: orderKey) as? [String] {
+            displayOrder = arr
+            print("🧪 [DataManager] 加载排序序列: \(displayOrder.count) 项")
+        }
+        // 若未初始化顺序，以当前学者顺序构建
+        if displayOrder.isEmpty { displayOrder = scholars.map { $0.id }; saveOrder() }
+        // 初始化全局上次刷新时间（优先App Group）
+        if let ag = UserDefaults(suiteName: appGroupIdentifier),
+           let t = ag.object(forKey: "LastRefreshTime") as? Date {
+            lastRefreshTime = t
+            print("🧪 [DataManager] 初始化读取 LastRefreshTime(AppGroup)=\(t)")
+        } else if let t = UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date {
+            lastRefreshTime = t
+            print("🧪 [DataManager] 初始化读取 LastRefreshTime(Standard)=\(t)")
+        }
         
         // 初始化时主动同步小组件数据
         saveWidgetData()
         print("🔄 [DataManager] 初始化完成，已触发小组件数据同步")
+
+        // 启动监听与轮询，确保主App能感知小组件写入
+        setupLastRefreshObservers()
     }
     
     /// 测试 App Group 访问权限
@@ -107,7 +137,53 @@ public class DataManager: ObservableObject {
             // 同时为小组件保存数据到标准位置
             saveWidgetData()
         }
+        // 确保顺序中包含所有现有学者
+        let currentIds = Set(scholars.map { $0.id })
+        var newOrder: [String] = []
+        for id in displayOrder where currentIds.contains(id) { newOrder.append(id) }
+        for id in scholars.map({ $0.id }) where !newOrder.contains(id) { newOrder.append(id) }
+        if newOrder != displayOrder { displayOrder = newOrder; saveOrder() }
     }
+
+    /// 保存置顶集合
+    private func savePinned() {
+        userDefaults.set(Array(pinnedIds), forKey: pinnedKey)
+    }
+
+    /// 保存自定义显示顺序
+    private func saveOrder() {
+        userDefaults.set(displayOrder, forKey: orderKey)
+    }
+
+    /// 列表展示顺序：置顶优先，其余保持原有顺序
+    public var scholarsForList: [Scholar] {
+        let indexInOrder: [String: Int] = Dictionary(uniqueKeysWithValues: displayOrder.enumerated().map { ($0.element, $0.offset) })
+        return scholars.sorted { a, b in
+            let aPinned = pinnedIds.contains(a.id)
+            let bPinned = pinnedIds.contains(b.id)
+            if aPinned != bPinned { return aPinned && !bPinned }
+            let ia = indexInOrder[a.id] ?? Int.max
+            let ib = indexInOrder[b.id] ?? Int.max
+            return ia < ib
+        }
+    }
+
+    public func isPinned(_ id: String) -> Bool { pinnedIds.contains(id) }
+    public func pinScholar(id: String) {
+        pinnedIds.insert(id)
+        // 置顶时将其移动到显示顺序最前
+        displayOrder.removeAll { $0 == id }
+        displayOrder.insert(id, at: 0)
+        savePinned(); saveOrder()
+        print("📌 [DataManager] 已置顶学者并移动到顶部: \(id)")
+    }
+    public func unpinScholar(id: String) {
+        if pinnedIds.remove(id) != nil {
+            savePinned(); saveOrder()
+            print("📌 [DataManager] 已取消置顶学者: \(id)")
+        }
+    }
+    public func togglePin(id: String) { isPinned(id) ? unpinScholar(id: id) : pinScholar(id: id) }
     
     /// 专门为小组件保存数据
     private func saveWidgetData() {
@@ -135,6 +211,93 @@ public class DataManager: ObservableObject {
             UserDefaults.standard.set(encoded, forKey: "WidgetScholars")
             
             print("✅ [DataManager] 已为小组件保存 \(widgetScholars.count) 位学者数据（App Group + 标准存储）")
+        }
+    }
+
+    // MARK: - LastRefreshTime 同步（监听Darwin通知 + 轮询兜底）
+    private func setupLastRefreshObservers() {
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        CFNotificationCenterAddObserver(center, Unmanaged.passUnretained(self).toOpaque(), { (_, observer, name, _, _) in
+            guard let name = name else { return }
+            let n = name.rawValue as String
+            if n == "com.citetrack.lastRefreshTimeUpdated" {
+                DispatchQueue.main.async {
+                    let manager = Unmanaged<DataManager>.fromOpaque(observer!).takeUnretainedValue()
+                    let ag = UserDefaults(suiteName: appGroupIdentifier)
+                    let t = (ag?.object(forKey: "LastRefreshTime") as? Date) ?? (UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date)
+                    let old = manager.lastRefreshTime
+                    manager.lastRefreshTime = t
+                    print("🧪 [DataManager] 收到Darwin通知，更新 lastRefreshTime: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
+                    // 合并来自Widget的最新每学者数据，保持App与Widget一致
+                    manager.mergeLatestScholarsFromWidget()
+                }
+            }
+        }, "com.citetrack.lastRefreshTimeUpdated" as CFString, nil, .deliverImmediately)
+
+        // 轮询兜底
+        Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let ag = UserDefaults(suiteName: appGroupIdentifier)
+            let t = (ag?.object(forKey: "LastRefreshTime") as? Date) ?? (UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date)
+            if self.lastRefreshTime == nil || self.lastRefreshTime != t {
+                let old = self.lastRefreshTime
+                self.lastRefreshTime = t
+                print("🧪 [DataManager] 轮询捕获 LastRefreshTime 变更: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
+                self.mergeLatestScholarsFromWidget()
+            }
+        }
+
+        // 应用进入前台时，立即同步一次
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self = self else { return }
+            let ag = UserDefaults(suiteName: appGroupIdentifier)
+            let t = (ag?.object(forKey: "LastRefreshTime") as? Date) ?? (UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date)
+            if self.lastRefreshTime != t {
+                let old = self.lastRefreshTime
+                self.lastRefreshTime = t
+                print("🧪 [DataManager] 前台激活同步 LastRefreshTime: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
+                self.mergeLatestScholarsFromWidget()
+            } else {
+                print("🧪 [DataManager] 前台激活检查 LastRefreshTime 无变化: \(t?.description ?? "nil")")
+                // 即使时间没变化，也尝试一次合并，防止上次错过
+                self.mergeLatestScholarsFromWidget()
+            }
+        }
+    }
+
+    /// 从 App Group 的 WidgetScholars 合并最新每学者数据到主应用数据源
+    private func mergeLatestScholarsFromWidget() {
+        guard let data = (UserDefaults(suiteName: appGroupIdentifier)?.data(forKey: "WidgetScholars") ?? UserDefaults.standard.data(forKey: "WidgetScholars")) else {
+            return
+        }
+        guard let widgetScholars = try? JSONDecoder().decode([WidgetScholarInfo].self, from: data) else { return }
+        var changed = false
+        var updated = scholars
+        for (idx, s) in scholars.enumerated() {
+            if let w = widgetScholars.first(where: { $0.id == s.id }) {
+                var newS = s
+                // 同步引用数
+                if newS.citations != w.citations {
+                    newS.citations = w.citations
+                    changed = true
+                }
+                // 同步每学者更新时间（优先按学者的 LastRefreshTime_<id>，否则用全局，最后回退 w.lastUpdated）
+                let lastKey = "LastRefreshTime_\(s.id)"
+                let perScholarTime = (UserDefaults(suiteName: appGroupIdentifier)?.object(forKey: lastKey) as? Date) ?? (UserDefaults.standard.object(forKey: lastKey) as? Date)
+                let candidateTime = perScholarTime ?? self.lastRefreshTime ?? w.lastUpdated
+                if newS.lastUpdated != candidateTime {
+                    newS.lastUpdated = candidateTime
+                    changed = true
+                }
+                updated[idx] = newS
+            }
+        }
+        if changed {
+            scholars = updated
+            saveScholars()
+            print("🧪 [DataManager] 已合并 WidgetScholars 到主应用数据：学者数=\(updated.count)")
+        } else {
+            print("🧪 [DataManager] 合并检查：无需要更新的学者数据")
         }
     }
     
@@ -243,6 +406,11 @@ public class DataManager: ObservableObject {
     /// 删除学者
     public func removeScholar(id: String) {
         scholars.removeAll { $0.id == id }
+        // 移除置顶状态
+        if pinnedIds.contains(id) { pinnedIds.remove(id); savePinned() }
+        // 移除排序中的该项
+        displayOrder.removeAll { $0 == id }
+        saveOrder()
         saveScholars()
         
         // 同时删除相关历史记录
@@ -251,6 +419,16 @@ public class DataManager: ObservableObject {
         WidgetCenter.shared.reloadAllTimelines()
         #endif
         print("✅ [DataManager] 删除学者: \(id)")
+    }
+
+    // MARK: - 排序拖拽
+    public func applyMove(from source: IndexSet, to destination: Int) {
+        var ids = scholarsForList.map { $0.id }
+        ids.move(fromOffsets: source, toOffset: destination)
+        // 用新的显示顺序覆盖 displayOrder 的相对顺序
+        displayOrder = ids
+        saveOrder()
+        print("🧪 [DataManager] 已应用拖拽排序: count=\(ids.count)")
     }
     
     /// 删除所有学者

@@ -7,6 +7,7 @@ import AppIntents
 @main
 struct CiteTrackApp: App {
     @StateObject private var settingsManager = SettingsManager.shared
+    @StateObject private var dataManager = DataManager.shared
     @Environment(\.scenePhase) private var scenePhase
     private static let refreshTaskIdentifier = "com.citetrack.citationRefresh"
     
@@ -27,6 +28,7 @@ struct CiteTrackApp: App {
         WindowGroup {
             MainView()
                 .preferredColorScheme(colorScheme)
+                .environmentObject(dataManager)
                 .onOpenURL { url in
                     handleDeepLink(url: url)
                 }
@@ -35,6 +37,12 @@ struct CiteTrackApp: App {
             if newPhase == .active {
                 // 应用激活时尝试安排下一次刷新
                 CiteTrackApp.scheduleAppRefresh()
+                // 前台激活时，立即同步全局 LastRefreshTime
+                let ag = UserDefaults(suiteName: appGroupIdentifier)
+                let t = (ag?.object(forKey: "LastRefreshTime") as? Date) ?? (UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date)
+                let old = DataManager.shared.lastRefreshTime
+                DataManager.shared.lastRefreshTime = t
+                print("🧪 [CiteTrackApp] scenePhase.active 同步 LastRefreshTime: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
             }
         }
     }
@@ -96,29 +104,53 @@ struct CiteTrackApp: App {
         print("🔄 [Widget] 开始处理刷新请求")
         
         // 设置刷新时间戳，Widget会检测到这个时间戳并播放动画
-        UserDefaults.standard.set(Date(), forKey: "LastRefreshTime")
+        let now = Date()
+        UserDefaults.standard.set(now, forKey: "LastRefreshTime")
+        if let appGroup = UserDefaults(suiteName: appGroupIdentifier) {
+            appGroup.set(now, forKey: "LastRefreshTime")
+            appGroup.synchronize()
+            print("🧪 [CiteTrackApp] AppGroup 写入 LastRefreshTime=\(now)")
+        }
+        print("🧪 [CiteTrackApp] Standard 写入 LastRefreshTime=\(now)")
+        // 发送Darwin通知，提示主应用各管理器同步
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        CFNotificationCenterPostNotification(center, CFNotificationName("com.citetrack.lastRefreshTimeUpdated" as CFString), nil, nil, true)
+        print("🧪 [CiteTrackApp] 已发送 Darwin 通知: com.citetrack.lastRefreshTimeUpdated")
         
         // 如果有学者数据，触发实际的数据刷新
-        let dataManager = DataManager.shared
         let scholars = dataManager.scholars
         
         if !scholars.isEmpty {
-            // 刷新第一个学者的数据作为示例
-            if let firstScholar = scholars.first {
-                print("🔄 [Widget] 刷新学者数据: \(firstScholar.displayName)")
-                
-                // 这里可以调用实际的数据刷新逻辑
-                // GoogleScholarService.shared.fetchScholarInfo(for: firstScholar.id) { ... }
-                
-                // 暂时模拟刷新完成
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    WidgetCenter.shared.reloadAllTimelines()
-                    print("✅ [Widget] 刷新完成，更新小组件")
+            print("🔄 [Widget] 刷新 \(scholars.count) 位学者数据")
+            
+            let group = DispatchGroup()
+            for scholar in scholars {
+                group.enter()
+                GoogleScholarService.shared.fetchScholarInfo(for: scholar.id) { result in
+                    DispatchQueue.main.async {
+                        switch result {
+                        case .success(let info):
+                            var updated = Scholar(id: scholar.id, name: info.name)
+                            updated.citations = info.citations
+                            updated.lastUpdated = Date()
+                            self.dataManager.updateScholar(updated)
+                            self.dataManager.saveHistoryIfChanged(scholarId: scholar.id, citationCount: info.citations)
+                        case .failure(let error):
+                            print("❌ Widget刷新失败: \(scholar.id) - \(error.localizedDescription)")
+                        }
+                        group.leave()
+                    }
                 }
+            }
+            
+            group.notify(queue: .main) {
+                // 🎯 使用DataManager的refreshWidgets来计算并保存变化数据
+                self.dataManager.refreshWidgets()
+                print("✅ [Widget] 刷新完成，更新小组件")
             }
         } else {
             // 没有学者数据，直接更新小组件
-            WidgetCenter.shared.reloadAllTimelines()
+            dataManager.refreshWidgets()
         }
     }
     
@@ -128,7 +160,6 @@ struct CiteTrackApp: App {
         // 设置切换时间戳，Widget会检测到这个时间戳并播放动画
         UserDefaults.standard.set(Date(), forKey: "LastScholarSwitchTime")
         
-        let dataManager = DataManager.shared
         let scholars = dataManager.scholars
         
         if scholars.count > 1 {
@@ -214,7 +245,8 @@ extension CiteTrackApp {
         }
 
         group.notify(queue: .main) {
-            WidgetCenter.shared.reloadAllTimelines()
+            // 🎯 使用DataManager的refreshWidgets来刷新已计算好的数据
+            DataManager.shared.refreshWidgets()
             task.setTaskCompleted(success: true)
         }
     }
@@ -416,7 +448,8 @@ struct NewScholarView: View {
 
     private var scholarListView: some View {
         List {
-            ForEach(dataManager.scholars, id: \.id) { scholar in
+
+            ForEach(dataManager.scholarsForList, id: \.id) { scholar in
                 ScholarRowWithChartAndManagement(
                     scholar: scholar,
                     onChartTap: {
@@ -428,6 +461,15 @@ struct NewScholarView: View {
                     },
                     isLoading: loadingScholarId == scholar.id
                 )
+                .overlay(alignment: .topLeading) {
+                    if dataManager.isPinned(scholar.id) {
+                        Image(systemName: "pin.fill")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                            .padding(.leading, 2)
+                            .padding(.top, 2)
+                    }
+                }
                 .swipeActions(edge: .trailing) {
                     Button(localizationManager.localized("delete"), role: .destructive) {
                         deleteScholar(scholar)
@@ -437,10 +479,22 @@ struct NewScholarView: View {
                         editScholar(scholar)
                     }
                     .tint(.orange)
+                    
+                    Button {
+                        dataManager.togglePin(id: scholar.id)
+                    } label: {
+                        Label(dataManager.isPinned(scholar.id) ? localizationManager.localized("unpin") : localizationManager.localized("pin_to_top"), systemImage: dataManager.isPinned(scholar.id) ? "pin.slash" : "pin")
+                    }
+                    .tint(.blue)
                 }
             }
             .onDelete(perform: deleteScholars)
+            .onMove { indices, newOffset in
+                dataManager.applyMove(from: indices, to: newOffset)
+            }
         }
+        .coordinateSpace(name: "pullSpace")
+        .toolbar { EditButton() }
     }
 
     @ToolbarContentBuilder
@@ -904,6 +958,50 @@ struct ThemeSelectionView: View {
     }
 }
 
+// Widget 主题选择视图
+struct WidgetThemeSelectionView: View {
+    @StateObject private var localizationManager = LocalizationManager.shared
+    @StateObject private var settingsManager = SettingsManager.shared
+    @Environment(\.dismiss) var dismiss
+    
+    var body: some View {
+        List {
+            ForEach(AppTheme.allCases, id: \.self) { theme in
+                HStack(spacing: 12) {
+                    Image(systemName: theme == .light ? "sun.max.fill" : theme == .dark ? "moon.fill" : "gear")
+                        .font(.title2)
+                        .foregroundColor(theme == .light ? .orange : theme == .dark ? .purple : .blue)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(localizationManager.localized(theme == .light ? "light_mode" : theme == .dark ? "dark_mode" : "system_mode"))
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Spacer()
+                    
+                    if settingsManager.widgetTheme == theme {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.blue)
+                            .font(.title2)
+                    }
+                }
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    settingsManager.widgetTheme = theme
+                    // 略延时，确保写入完成
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        dismiss()
+                    }
+                }
+            }
+        }
+        .navigationTitle(localizationManager.localized("widget_theme"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 // 语言选择视图
 struct LanguageSelectionView: View {
     @StateObject private var localizationManager = LocalizationManager.shared
@@ -983,6 +1081,16 @@ struct SettingsView: View {
                             Text(localizationManager.localized("theme"))
                             Spacer()
                             Text(settingsManager.theme.displayName)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    NavigationLink(destination: WidgetThemeSelectionView()) {
+                        HStack {
+                            Image(systemName: "square.grid.2x2")
+                                .foregroundColor(.teal)
+                            Text(localizationManager.localized("widget_theme"))
+                            Spacer()
+                            Text(settingsManager.widgetTheme.displayName)
                                 .foregroundColor(.secondary)
                         }
                     }
@@ -1408,7 +1516,7 @@ struct ScholarRowWithChartAndManagement: View {
                 }
                 
                 if let lastUpdated = scholar.lastUpdated {
-                    Text(localizationManager.localized("last_updated") + " \(DateFormatter.relative.string(from: lastUpdated))")
+                    Text(localizationManager.localized("last_updated") + " \(lastUpdated.timeAgoString)")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -1595,7 +1703,7 @@ struct ScholarChartRow: View {
                     }
                     
                     if let lastUpdated = scholar.lastUpdated {
-                        Text(localizationManager.localized("updated_at") + " \(DateFormatter.relative.string(from: lastUpdated))")
+                        Text(localizationManager.localized("updated_at") + " \(lastUpdated.timeAgoString)")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -2314,4 +2422,6 @@ extension Notification.Name {
     static let deepLinkScholars = Notification.Name("deepLinkScholars")
     static let deepLinkDashboard = Notification.Name("deepLinkDashboard")
     static let deepLinkScholarDetail = Notification.Name("deepLinkScholarDetail")
+    static let widgetRefreshTriggered = Notification.Name("widgetRefreshTriggered")
+    static let widgetScholarSwitched = Notification.Name("widgetScholarSwitched")
 }

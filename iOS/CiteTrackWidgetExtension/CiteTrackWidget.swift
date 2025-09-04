@@ -1,4 +1,11 @@
 import SwiftUI
+import CoreFoundation
+// 发送跨进程 Darwin 通知，通知主App从 App Group 拉取最新时间
+private func postDarwinNotification(_ name: String) {
+    let center = CFNotificationCenterGetDarwinNotifyCenter()
+    CFNotificationCenterPostNotification(center, CFNotificationName(name as CFString), nil, nil, true)
+    print("🧪 [Widget] 已发送 Darwin 通知: \(name)")
+}
 import WidgetKit
 import AppIntents
 import os.log
@@ -6,7 +13,258 @@ import os.log
 // 导入共享模块
 import Foundation
 
+// MARK: - 背景色助手（根据 WidgetTheme 显式给出颜色）
+@inline(__always)
+fileprivate func widgetBackgroundColor(for theme: WidgetTheme) -> Color {
+    switch theme {
+    case .light:
+        return Color.white
+    case .dark:
+        return Color.black
+    case .system:
+        // 跟随系统时交给系统材质，由容器或系统决定
+        return .clear
+    }
+}
 
+// MARK: - Widget专用数据服务 (内联版本)
+/// 避免Xcode项目配置问题，直接在Widget文件中定义
+class WidgetDataService {
+    static let shared = WidgetDataService()
+    
+    private init() {}
+    
+    func getWidgetData() async throws -> WidgetData {
+        // 优先从App Group读取
+        let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier)
+        let standardDefaults = UserDefaults.standard
+        
+        // 🎯 使用DataManager已计算好的Widget数据，而不是重新计算
+        var scholars: [WidgetScholarInfo] = []
+        
+        // 优先从App Group读取已计算好的WidgetScholars数据
+        if let appGroupDefaults = appGroupDefaults,
+           let data = appGroupDefaults.data(forKey: "WidgetScholars"),
+           let decodedScholars = try? JSONDecoder().decode([WidgetScholarInfo].self, from: data) {
+            scholars = decodedScholars
+            print("✅ [WidgetDataService] 从App Group加载了 \(scholars.count) 位学者的已计算数据")
+        } else if let data = standardDefaults.data(forKey: "WidgetScholars"),
+                  let decodedScholars = try? JSONDecoder().decode([WidgetScholarInfo].self, from: data) {
+            scholars = decodedScholars
+            print("✅ [WidgetDataService] 从标准存储加载了 \(scholars.count) 位学者的已计算数据")
+        } else {
+            // 🚨 后备方案：如果没有WidgetScholars数据，读取原始数据（但不重新计算变化）
+            print("⚠️ [WidgetDataService] 未找到WidgetScholars数据，使用原始ScholarsList")
+            if let appGroupDefaults = appGroupDefaults,
+               let data = appGroupDefaults.data(forKey: "ScholarsList"),
+               let decodedScholars = try? JSONDecoder().decode([SimpleScholar].self, from: data) {
+                scholars = decodedScholars.map { scholar in
+                    WidgetScholarInfo(
+                        id: scholar.id,
+                        displayName: scholar.name,
+                        institution: nil,
+                        citations: scholar.citations,
+                        hIndex: nil,
+                        lastUpdated: scholar.lastUpdated,
+                        monthlyGrowth: nil  // 不在Widget中计算，等待主应用提供
+                    )
+                }
+            } else if let data = standardDefaults.data(forKey: "ScholarsList"),
+                      let decodedScholars = try? JSONDecoder().decode([SimpleScholar].self, from: data) {
+                scholars = decodedScholars.map { scholar in
+                    WidgetScholarInfo(
+                        id: scholar.id,
+                        displayName: scholar.name,
+                        institution: nil,
+                        citations: scholar.citations,
+                        hIndex: nil,
+                        lastUpdated: scholar.lastUpdated,
+                        monthlyGrowth: nil  // 不在Widget中计算，等待主应用提供
+                    )
+                }
+            }
+        }
+        
+        // 获取选中的学者ID
+        let selectedScholarId = appGroupDefaults?.string(forKey: "SelectedWidgetScholarId") ??
+                               standardDefaults.string(forKey: "SelectedWidgetScholarId")
+        
+        // 计算总引用数
+        let totalCitations = scholars.reduce(0) { $0 + ($1.citations ?? 0) }
+        
+        // 获取最后更新时间
+        let lastUpdateTime = appGroupDefaults?.object(forKey: "LastRefreshTime") as? Date ??
+                            standardDefaults.object(forKey: "LastRefreshTime") as? Date
+        
+        return WidgetData(
+            scholars: scholars,
+            selectedScholarId: selectedScholarId,
+            totalCitations: totalCitations,
+            lastUpdateTime: lastUpdateTime
+        )
+    }
+    
+    func recordRefreshAction() async {
+        let now = Date()
+        let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier)
+        let standardDefaults = UserDefaults.standard
+        
+        standardDefaults.set(now, forKey: "LastRefreshTime")
+        standardDefaults.set(now, forKey: "RefreshTriggerTime")
+        standardDefaults.set(true, forKey: "RefreshTriggered")
+        
+        appGroupDefaults?.set(now, forKey: "LastRefreshTime")
+        appGroupDefaults?.set(now, forKey: "RefreshTriggerTime")
+        appGroupDefaults?.set(true, forKey: "RefreshTriggered")
+        appGroupDefaults?.synchronize()
+    }
+    
+    func recordScholarSwitchAction() async {
+        let now = Date()
+        let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier)
+        let standardDefaults = UserDefaults.standard
+        
+        standardDefaults.set(now, forKey: "LastScholarSwitchTime")
+        standardDefaults.set(true, forKey: "ScholarSwitched")
+        
+        appGroupDefaults?.set(now, forKey: "LastScholarSwitchTime")
+        appGroupDefaults?.set(true, forKey: "ScholarSwitched")
+        appGroupDefaults?.synchronize()
+    }
+    
+    // ✅ 已移除calculateMonthlyGrowth函数 - Widget不再负责计算，只负责显示DataManager计算好的数据
+    
+    func switchToNextScholar() async throws {
+        let data = try await getWidgetData()
+        
+        guard !data.scholars.isEmpty else {
+            return
+        }
+        
+        let currentIndex: Int
+        if let selectedId = data.selectedScholarId,
+           let index = data.scholars.firstIndex(where: { $0.id == selectedId }) {
+            currentIndex = index
+        } else {
+            currentIndex = -1
+        }
+        
+        let nextIndex = (currentIndex + 1) % data.scholars.count
+        let nextScholar = data.scholars[nextIndex]
+        
+        // 更新选中的学者
+        let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier)
+        let standardDefaults = UserDefaults.standard
+        
+        standardDefaults.set(nextScholar.id, forKey: "SelectedWidgetScholarId")
+        standardDefaults.set(nextScholar.displayName, forKey: "SelectedWidgetScholarName")
+        
+        appGroupDefaults?.set(nextScholar.id, forKey: "SelectedWidgetScholarId")
+        appGroupDefaults?.set(nextScholar.displayName, forKey: "SelectedWidgetScholarName")
+        appGroupDefaults?.synchronize()
+        
+        await recordScholarSwitchAction()
+    }
+}
+
+// 简化的Scholar模型用于解码
+private struct SimpleScholar: Codable {
+    let id: String
+    let name: String
+    let citations: Int?
+    let lastUpdated: Date?
+}
+
+// 简化的CitationHistory模型用于解码
+private struct SimpleCitationHistory: Codable {
+    let scholarId: String
+    let citationCount: Int
+    let timestamp: Date
+}
+
+// 保存历史记录的辅助函数
+private func saveHistoryEntry(_ entry: SimpleCitationHistory, to groupIdentifier: String) {
+    let historyKey = "CitationHistory_\(entry.scholarId)"
+    
+    // 获取现有历史记录
+    var existingHistory: [SimpleCitationHistory] = []
+    
+    // 优先从App Group读取
+    if let appGroupDefaults = UserDefaults(suiteName: groupIdentifier),
+       let data = appGroupDefaults.data(forKey: historyKey),
+       let decoded = try? JSONDecoder().decode([SimpleCitationHistory].self, from: data) {
+        existingHistory = decoded
+    } else if let data = UserDefaults.standard.data(forKey: historyKey),
+              let decoded = try? JSONDecoder().decode([SimpleCitationHistory].self, from: data) {
+        existingHistory = decoded
+    }
+    
+    // 检查是否需要保存（避免重复记录相同引用数）
+    if let lastEntry = existingHistory.last,
+       lastEntry.citationCount == entry.citationCount &&
+       abs(entry.timestamp.timeIntervalSince(lastEntry.timestamp)) < 3600 { // 1小时内的相同引用数
+        print("📝 [Widget] 引用数未变化，跳过保存历史记录: \(entry.scholarId) (上次: \(lastEntry.citationCount), 本次: \(entry.citationCount))")
+        return
+    }
+    
+    // 添加新记录
+    existingHistory.append(entry)
+    
+    // 保持最近90天的记录
+    let cutoffDate = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
+    existingHistory = existingHistory.filter { $0.timestamp >= cutoffDate }
+    
+    // 保存回存储
+    if let encoded = try? JSONEncoder().encode(existingHistory) {
+        // 保存到App Group
+        if let appGroupDefaults = UserDefaults(suiteName: groupIdentifier) {
+            appGroupDefaults.set(encoded, forKey: historyKey)
+            appGroupDefaults.synchronize()
+        }
+        // 同时保存到标准存储
+        UserDefaults.standard.set(encoded, forKey: historyKey)
+        UserDefaults.standard.synchronize()
+        
+        print("✅ [Widget] 已保存引用历史: \(entry.scholarId) - \(entry.citationCount) 条记录数: \(existingHistory.count)")
+    }
+}
+
+// 基于保存的历史记录计算增长（天数为周期）
+private func computeGrowth(for scholarId: String, days: Int, currentCitations: Int, groupIdentifier: String) -> Int? {
+    let historyKey = "CitationHistory_\(scholarId)"
+    var history: [SimpleCitationHistory] = []
+    if let appGroupDefaults = UserDefaults(suiteName: groupIdentifier),
+       let data = appGroupDefaults.data(forKey: historyKey),
+       let decoded = try? JSONDecoder().decode([SimpleCitationHistory].self, from: data) {
+        history = decoded
+    } else if let data = UserDefaults.standard.data(forKey: historyKey),
+              let decoded = try? JSONDecoder().decode([SimpleCitationHistory].self, from: data) {
+        history = decoded
+    }
+    guard !history.isEmpty else { return nil }
+    let now = Date()
+    let targetDate = Calendar.current.date(byAdding: .day, value: -days, to: now) ?? now
+    // 选择接近目标日期的历史记录（若无精确匹配，取最早的一条）
+    let sorted = history.sorted { $0.timestamp < $1.timestamp }
+    let previous = sorted.last { $0.timestamp <= targetDate } ?? sorted.first
+    let previousCitations = previous?.citationCount ?? currentCitations
+    return currentCitations - previousCitations
+}
+
+// Widget数据结构 (内联定义)
+struct WidgetData: Codable {
+    let scholars: [WidgetScholarInfo]
+    let selectedScholarId: String?
+    let totalCitations: Int
+    let lastUpdateTime: Date?
+    
+    init(scholars: [WidgetScholarInfo], selectedScholarId: String?, totalCitations: Int, lastUpdateTime: Date?) {
+        self.scholars = scholars
+        self.selectedScholarId = selectedScholarId
+        self.totalCitations = totalCitations
+        self.lastUpdateTime = lastUpdateTime
+    }
+}
 
 // MARK: - 数字格式化扩展（从共享模块导入）
 
@@ -83,13 +341,36 @@ struct CiteTrackWidgetEntry: TimelineEntry {
     let primaryScholar: WidgetScholarInfo?
     let totalCitations: Int
     var lastRefreshTime: Date?
+    var widgetTheme: WidgetTheme = .system
+}
+
+// MARK: - 读取 Widget 主题（直接从 App Group）
+private func readWidgetTheme() -> WidgetTheme {
+    if let ag = UserDefaults(suiteName: appGroupIdentifier) {
+        let raw = ag.string(forKey: "WidgetTheme")
+        print("🧪 [Widget] AppGroup(\(appGroupIdentifier)) 读取 WidgetTheme=\(raw ?? "nil")")
+        if let raw, let t = WidgetTheme(rawValue: raw) { return t }
+    }
+    // 回退：标准存储
+    let rawStd = UserDefaults.standard.string(forKey: "WidgetTheme")
+    print("🧪 [Widget] Standard 读取 WidgetTheme=\(rawStd ?? "nil")")
+    if let rawStd, let t = WidgetTheme(rawValue: rawStd) { return t }
+    return .system
 }
 
 // MARK: - 数据提供者：专注数据，无杂音
 struct CiteTrackWidgetProvider: TimelineProvider {
     
+    private let widgetDataService = WidgetDataService.shared
+    
+    // 辅助方法：从学者列表中获取选中的学者
+    private func getSelectedScholar(from scholars: [WidgetScholarInfo], selectedId: String?) -> WidgetScholarInfo? {
+        guard let selectedId = selectedId else { return nil }
+        return scholars.first { $0.id == selectedId }
+    }
+    
     func placeholder(in context: Context) -> CiteTrackWidgetEntry {
-        print("🚨🚨🚨 WIDGET EXTENSION 启动 - 这是修改后的代码！🚨🚨🚨")
+        print("🚨🚨🚨 WIDGET EXTENSION 启动 - 使用新的数据架构！🚨🚨🚨")
         return CiteTrackWidgetEntry(
             date: Date(),
             scholars: [],
@@ -100,72 +381,97 @@ struct CiteTrackWidgetProvider: TimelineProvider {
     }
     
     func getSnapshot(in context: Context, completion: @escaping (CiteTrackWidgetEntry) -> ()) {
-        print("🔄 [Widget] getSnapshot 被调用 - 强制刷新触发")
+        print("🔄 [Widget] getSnapshot 被调用 - 使用新的数据架构")
         
-        // 检查是否是强制刷新触发的
-        if let forceRefreshTime = UserDefaults.standard.object(forKey: "ForceRefreshTriggered") as? Date {
-            print("🔄 [Widget] 检测到强制刷新标记，时间: \(forceRefreshTime)")
-            // 清除标记
-            UserDefaults.standard.removeObject(forKey: "ForceRefreshTriggered")
-            UserDefaults.standard.synchronize()
+        Task {
+            do {
+                let widgetData = try await widgetDataService.getWidgetData()
+                let scholars = widgetData.scholars
+                
+                // 获取选中的学者或引用数最多的学者
+                let primary = getSelectedScholar(from: scholars, selectedId: widgetData.selectedScholarId) ?? 
+                             scholars.max(by: { ($0.citations ?? 0) < ($1.citations ?? 0) })
+                
+                let theme = readWidgetTheme()
+                let entry = CiteTrackWidgetEntry(
+                    date: Date(),
+                    scholars: Array(scholars.prefix(4)),
+                    primaryScholar: primary,
+                    totalCitations: widgetData.totalCitations,
+                    lastRefreshTime: widgetData.lastUpdateTime,
+                    widgetTheme: theme
+                )
+                
+                completion(entry)
+            } catch {
+                print("❌ [Widget] getSnapshot 加载数据失败: \(error)")
+                // 提供空数据作为回退
+                completion(CiteTrackWidgetEntry(
+                    date: Date(),
+                    scholars: [],
+                    primaryScholar: nil,
+                    totalCitations: 0,
+                    lastRefreshTime: nil,
+                    widgetTheme: .system
+                ))
+            }
         }
-        
-        let scholars = loadScholars()
-        let primary = scholars.max(by: { ($0.citations ?? 0) < ($1.citations ?? 0) })
-        let total = scholars.compactMap { $0.citations }.reduce(0, +)
-        
-        completion(CiteTrackWidgetEntry(
-            date: Date(),
-            scholars: Array(scholars.prefix(4)),
-            primaryScholar: primary,
-            totalCitations: total,
-            lastRefreshTime: getLastRefreshTime()
-        ))
     }
     
     func getTimeline(in context: Context, completion: @escaping (Timeline<CiteTrackWidgetEntry>) -> ()) {
-        print("🔄 [Widget] getTimeline 被调用 - 强制刷新触发")
+        print("🔄 [Widget] getTimeline 被调用 - 使用新的数据架构")
         
-        // 检查是否是强制刷新触发的
-        if let forceRefreshTime = UserDefaults.standard.object(forKey: "ForceRefreshTriggered") as? Date {
-            print("🔄 [Widget] 检测到强制刷新标记，时间: \(forceRefreshTime)")
-            // 清除标记
-            UserDefaults.standard.removeObject(forKey: "ForceRefreshTriggered")
-            UserDefaults.standard.synchronize()
+        Task {
+            do {
+                let widgetData = try await widgetDataService.getWidgetData()
+                let scholars = widgetData.scholars
+                
+                // 获取选中的学者或引用数最多的学者
+                let primary = getSelectedScholar(from: scholars, selectedId: widgetData.selectedScholarId) ?? 
+                             scholars.max(by: { ($0.citations ?? 0) < ($1.citations ?? 0) })
+                
+                // 创建带有刷新时间和主题的条目
+                let theme = readWidgetTheme()
+                let entryWithRefreshTime = CiteTrackWidgetEntry(
+                    date: Date(),
+                    scholars: Array(scholars.prefix(4)),
+                    primaryScholar: primary,
+                    totalCitations: widgetData.totalCitations,
+                    lastRefreshTime: widgetData.lastUpdateTime,
+                    widgetTheme: theme
+                )
+                
+                // 根据数据更新频率调整刷新策略
+                let nextUpdate: Date
+                if context.isPreview {
+                    // 预览模式下不需要频繁更新
+                    nextUpdate = Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date()
+                } else {
+                    // 正常模式下每15分钟检查一次数据更新
+                    nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
+                }
+                
+                let timeline = Timeline(entries: [entryWithRefreshTime], policy: .after(nextUpdate))
+                completion(timeline)
+                
+            } catch {
+                print("❌ [Widget] getTimeline 加载数据失败: \(error)")
+                
+                // 提供空数据作为回退
+                let fallbackEntry = CiteTrackWidgetEntry(
+                    date: Date(),
+                    scholars: [],
+                    primaryScholar: nil,
+                    totalCitations: 0,
+                    lastRefreshTime: nil,
+                    widgetTheme: .system
+                )
+                
+                let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: Date()) ?? Date()
+                let timeline = Timeline(entries: [fallbackEntry], policy: .after(nextUpdate))
+                completion(timeline)
+            }
         }
-        
-        let scholars = loadScholars()
-        
-        // 优先使用用户选择的学者，否则使用引用数最多的学者
-        let primary = getSelectedScholar(from: scholars) ?? scholars.max(by: { ($0.citations ?? 0) < ($1.citations ?? 0) })
-        let total = scholars.compactMap { $0.citations }.reduce(0, +)
-        
-        // 创建带有刷新时间的条目
-        let entryWithRefreshTime = CiteTrackWidgetEntry(
-            date: Date(),
-            scholars: Array(scholars.prefix(4)),
-            primaryScholar: primary,
-            totalCitations: total,
-            lastRefreshTime: getLastRefreshTime()
-        )
-
-        // 尝试对当前学者进行刷新状态对齐：若全局 LastRefreshTime 晚于该学者的 RefreshStartTime，则视为完成
-        if let currentId = primary?.id {
-            reconcilePerScholarRefreshCompletion(for: currentId)
-        }
-        
-        // 根据数据更新频率调整刷新策略
-        let nextUpdate: Date
-        if context.isPreview {
-            // 预览模式下不需要频繁更新
-            nextUpdate = Calendar.current.date(byAdding: .hour, value: 24, to: Date()) ?? Date()
-        } else {
-            // 正常模式下每15分钟检查一次数据更新
-            nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
-        }
-        
-        let timeline = Timeline(entries: [entryWithRefreshTime], policy: .after(nextUpdate))
-        completion(timeline)
     }
 
     /// 若检测到"全局完成时间"晚于该学者的开始时间，则写入该学者 LastRefreshTime_<id> 并清除进行中标记
@@ -477,86 +783,87 @@ struct QuickRefreshIntent: AppIntent {
     static var openAppWhenRun: Bool = false
     
     func perform() async throws -> some IntentResult {
-        NSLog("🚨🚨🚨 QuickRefreshIntent 被触发！！！")
-        print("🚨🚨🚨 [Intent] QuickRefreshIntent 被触发！！！")
+        let intentStartTime = Date()
+        let startTimestamp = intentStartTime.timeIntervalSince1970
+        NSLog("🚨🚨🚨 QuickRefreshIntent 被触发！！！ 时间戳: \(startTimestamp)")
+        print("🚨🚨🚨 [Intent] QuickRefreshIntent 被触发！！！ 时间戳: \(startTimestamp)")
         print("🔄 [Intent] ===== 新版本代码 - 用户触发小组件刷新 =====")
+        print("⏱️ [Intent] 🎯 计时开始: \(intentStartTime)")
         
         let groupIdentifier = appGroupIdentifier
         let timestamp = Date()
-        // 配置：最短 InProg 可见时长（秒），可通过 App Group/Standard 键 `WidgetMinInProgSeconds` 配置（0.3~3.0）
-        func minInProgSeconds() -> TimeInterval {
-            let key = "WidgetMinInProgSeconds"
-            var v: TimeInterval = 0.8
-            if let ag = UserDefaults(suiteName: groupIdentifier), ag.object(forKey: key) != nil {
-                v = TimeInterval(ag.double(forKey: key))
-            } else if UserDefaults.standard.object(forKey: key) != nil {
-                v = TimeInterval(UserDefaults.standard.double(forKey: key))
-            }
-            if v < 0.3 { return 0.3 }
-            if v > 3.0 { return 3.0 }
-            return v
-        }
-
         
-        print("🔄 [Intent] 使用 groupIdentifier: \(groupIdentifier)")
-        
-        // 标记刷新开始：记录开始时间与进行中（按当前选中学者与通用键），不写入 LastRefreshTime（由数据写入方更新）
+        // 🎯 修复：立即设置刷新状态标记，确保按钮点击后立即模糊
         var selectedScholarId: String?
-        if let appGroupDefaults = UserDefaults(suiteName: groupIdentifier) {
-            print("🔄 [Intent] App Group UserDefaults 创建成功")
-            // 读取当前选中学者ID
-            selectedScholarId = appGroupDefaults.string(forKey: "SelectedWidgetScholarId")
-            // 写通用键（兜底）
-            let startKey = "RefreshStartTime"
-            let inKey = "RefreshInProgress"
-            let trigKey = "RefreshTriggered"
-            let trigTimeKey = "RefreshTriggerTime"
-            appGroupDefaults.set(timestamp, forKey: startKey)
-            appGroupDefaults.set(true, forKey: trigKey)
-            appGroupDefaults.set(timestamp, forKey: trigTimeKey)
-            appGroupDefaults.set(true, forKey: inKey)
-            appGroupDefaults.synchronize()
-            print("🔄 [Intent] App Group 刷新开始标记完成")
-            // 立即刷新时间线以呈现 InProg
-            WidgetCenter.shared.reloadAllTimelines()
-            // 若拿到具体学者，再补写按学者键，提升小组件检测成功率
-            if let sidAG = selectedScholarId, !sidAG.isEmpty {
-                appGroupDefaults.set(timestamp, forKey: "RefreshStartTime_\(sidAG)")
-                appGroupDefaults.set(true, forKey: "RefreshInProgress_\(sidAG)")
-                appGroupDefaults.set(timestamp, forKey: "RefreshTriggerTime_\(sidAG)")
-                appGroupDefaults.synchronize()
-                WidgetCenter.shared.reloadAllTimelines()
-                print("🔄 [Intent] App Group 已补写学者专属标记: sid=\(sidAG)")
-            }
-        } else {
-            print("🔄 [Intent] ❌ App Group UserDefaults 创建失败")
-        }
         
+        // 首先获取当前选中的学者ID
+        if let appGroupDefaults = UserDefaults(suiteName: groupIdentifier) {
+            selectedScholarId = appGroupDefaults.string(forKey: "SelectedWidgetScholarId")
+        }
         if selectedScholarId == nil {
             selectedScholarId = UserDefaults.standard.string(forKey: "SelectedWidgetScholarId")
         }
         
-        print("🔄 [Intent] 设置 Standard UserDefaults（后备）")
-        let sidStd = UserDefaults.standard.string(forKey: "SelectedWidgetScholarId")
-        // 先写通用键
-        UserDefaults.standard.set(timestamp, forKey: "RefreshStartTime")
-        UserDefaults.standard.set(true, forKey: "RefreshTriggered")
-        UserDefaults.standard.set(timestamp, forKey: "RefreshTriggerTime")
-        UserDefaults.standard.set(true, forKey: "RefreshInProgress")
-        // 若拿到具体学者，再写专属键
-        let effectiveSid = selectedScholarId ?? sidStd
-        if let esid = effectiveSid, !esid.isEmpty {
-            UserDefaults.standard.set(timestamp, forKey: "RefreshStartTime_\(esid)")
-            UserDefaults.standard.set(true, forKey: "RefreshInProgress_\(esid)")
-            UserDefaults.standard.set(timestamp, forKey: "RefreshTriggerTime_\(esid)")
+        let effectiveScholarId = selectedScholarId ?? ""
+        print("🔄 [Intent] 有效学者ID: \(effectiveScholarId)")
+        
+        // 🎯 关键修复：立即设置所有必要的刷新标记
+        func setRefreshMarkers(to defaults: UserDefaults, scholarId: String?) {
+            // 通用键
+            defaults.set(timestamp, forKey: "RefreshStartTime")
+            defaults.set(true, forKey: "RefreshTriggered")
+            defaults.set(timestamp, forKey: "RefreshTriggerTime")
+            
+            // 学者专属键
+            if let sid = scholarId, !sid.isEmpty {
+                defaults.set(timestamp, forKey: "RefreshStartTime_\(sid)")
+                defaults.set(timestamp, forKey: "RefreshTriggerTime_\(sid)")
+                print("🔄 [Intent] 设置学者专属刷新标记: \(sid)")
+            }
+            defaults.synchronize()
         }
-        UserDefaults.standard.synchronize()
-        print("🔄 [Intent] Standard 刷新开始标记完成")
-        // 立即刷新时间线以呈现 InProg
+        
+        let markersSetTime = Date()
+        let markersElapsed = markersSetTime.timeIntervalSince(intentStartTime) * 1000
+        print("⏱️ [Intent] 获取学者ID用时: \(String(format: "%.1f", markersElapsed))ms")
+        
+        // App Group UserDefaults
+        if let appGroupDefaults = UserDefaults(suiteName: groupIdentifier) {
+            setRefreshMarkers(to: appGroupDefaults, scholarId: effectiveScholarId)
+            let agSetTime = Date()
+            let agElapsed = agSetTime.timeIntervalSince(markersSetTime) * 1000
+            print("⏱️ [Intent] App Group 标记设置用时: \(String(format: "%.1f", agElapsed))ms")
+        }
+        
+        // Standard UserDefaults (兜底)
+        setRefreshMarkers(to: UserDefaults.standard, scholarId: effectiveScholarId)
+        let stdSetTime = Date()
+        let stdElapsed = stdSetTime.timeIntervalSince(markersSetTime) * 1000
+        print("⏱️ [Intent] Standard 标记设置用时: \(String(format: "%.1f", stdElapsed))ms")
+        
+
+        
+        let beforeReloadTime = Date()
         WidgetCenter.shared.reloadAllTimelines()
-        print("🔄 [Intent] 小组件已立即刷新以显示 InProg 态（标准兜底）")
+        let afterReloadTime = Date()
+        let reloadElapsed = afterReloadTime.timeIntervalSince(beforeReloadTime) * 1000
+        let totalElapsedSoFar = afterReloadTime.timeIntervalSince(intentStartTime) * 1000
+        print("⏱️ [Intent] 立即设置模糊状态并刷新Widget")
+        print("⏱️ [Intent] reloadAllTimelines 调用用时: \(String(format: "%.1f", reloadElapsed))ms")
+        print("⏱️ [Intent] 🎯 从点击到模糊设置完成总用时: \(String(format: "%.1f", totalElapsedSoFar))ms")
+        
+        // 🎯 存储开始时间戳，供Widget检测使用
+        if let appGroupDefaults = UserDefaults(suiteName: groupIdentifier) {
+            appGroupDefaults.set(intentStartTime, forKey: "IntentStartTime")
+            appGroupDefaults.synchronize()
+        }
+        UserDefaults.standard.set(intentStartTime, forKey: "IntentStartTime")
+        UserDefaults.standard.synchronize()
         
         print("✅ [Intent] 🔄 刷新标记已设置: RefreshTriggered = true")
+        
+        // 🎯 修复：立即开始网络请求，不等待，确保最快响应
+        print("🔄 [Intent] 立即开始后台数据获取")
         
         // 在 Intent 内直接后台拉取并写回数据（使用 async/await，确保返回前完成并清理标记）
         if let sid = selectedScholarId, !sid.isEmpty {
@@ -621,6 +928,7 @@ struct QuickRefreshIntent: AppIntent {
                         citations: info.citations,
                         hIndex: old.hIndex,
                         lastUpdated: now,
+                        // 统一以后端预计算结果为准，保留旧的增长值，避免Widget侧自算
                         weeklyGrowth: old.weeklyGrowth,
                         monthlyGrowth: old.monthlyGrowth,
                         quarterlyGrowth: old.quarterlyGrowth
@@ -631,67 +939,92 @@ struct QuickRefreshIntent: AppIntent {
                     if let appGroup = UserDefaults(suiteName: groupIdentifier) {
                         appGroup.set(encoded, forKey: "WidgetScholars")
                         appGroup.set(now, forKey: "LastRefreshTime_\(sid)")
+                        appGroup.set(now, forKey: "LastRefreshTime") // 写全局更新时间
                         appGroup.synchronize()
+                        print("🧪 [Widget] AppGroup 写入 LastRefreshTime & LastRefreshTime_\(sid): \(now)")
                     }
                     UserDefaults.standard.set(encoded, forKey: "WidgetScholars")
                     UserDefaults.standard.set(now, forKey: "LastRefreshTime_\(sid)")
+                    UserDefaults.standard.set(now, forKey: "LastRefreshTime") // 写全局更新时间
                     UserDefaults.standard.synchronize()
+                    print("🧪 [Widget] Standard 写入 LastRefreshTime & LastRefreshTime_\(sid): \(now)")
+                    // 通知主App刷新读取
+                    postDarwinNotification("com.citetrack.lastRefreshTimeUpdated")
                 }
+                
+                // 历史记录统一由后端数据层维护，Widget侧不再落库，避免与图表数据不一致
+                
+                // 🎯 新方案：数据返回后立即清除模糊状态
+                print("🔄 [Intent] 数据更新完成，立即清除模糊状态")
+                
+                // 立即清除所有模糊相关标记
+                func clearAllBlurMarkers(from defaults: UserDefaults, scholarId: String) {
+                    // 清除旧的标记
+                    defaults.removeObject(forKey: "RefreshInProgress_\(scholarId)")
+                    defaults.removeObject(forKey: "RefreshStartTime_\(scholarId)")
+                    defaults.removeObject(forKey: "RefreshTriggerTime_\(scholarId)")
+                    defaults.synchronize()
+                    print("🔄 [Intent] ✅ 已清除刷新标记")
+                }
+                
+                if let ag = UserDefaults(suiteName: groupIdentifier) {
+                    clearAllBlurMarkers(from: ag, scholarId: sid)
+                }
+                clearAllBlurMarkers(from: UserDefaults.standard, scholarId: sid)
+                
+                // 🎯 立即设置对勾状态，无需等待Widget检查
+                let ackKey = "ShowRefreshAck_\(sid)"
+                if let ag = UserDefaults(suiteName: groupIdentifier) {
+                    ag.set(true, forKey: ackKey)
+                    ag.synchronize()
+                    print("⚡ [Intent] 立即设置对勾状态: \(ackKey) = true (App Group)")
+                }
+                UserDefaults.standard.set(true, forKey: ackKey)
+                print("⚡ [Intent] 立即设置对勾状态: \(ackKey) = true (Standard)")
+                
+                // 立即刷新widget以显示对勾
                 WidgetCenter.shared.reloadAllTimelines()
                 print("✅ [Intent] 后台刷新完成并写回: sid=\(sid), citations=\(info.citations)")
-
-                // 保证最短 InProg 可见时长后再清理进行中标记
-                let startKey = "RefreshStartTime_\(sid)"
-                var startAt: Date? = nil
-                if let ag = UserDefaults(suiteName: groupIdentifier) { startAt = ag.object(forKey: startKey) as? Date }
-                if startAt == nil { startAt = UserDefaults.standard.object(forKey: startKey) as? Date }
-                let hold = minInProgSeconds()
-                if let sAt = startAt {
-                    let elapsed = Date().timeIntervalSince(sAt)
-                    if elapsed < hold {
-                        let remain = hold - elapsed
-                        try? await Task.sleep(nanoseconds: UInt64(remain * 1_000_000_000))
-                    }
-                }
-                if let ag = UserDefaults(suiteName: groupIdentifier) {
-                    ag.removeObject(forKey: "RefreshInProgress_\(sid)")
-                    ag.removeObject(forKey: "RefreshStartTime_\(sid)")
-                    ag.synchronize()
-                }
-                UserDefaults.standard.removeObject(forKey: "RefreshInProgress_\(sid)")
-                UserDefaults.standard.removeObject(forKey: "RefreshStartTime_\(sid)")
-                UserDefaults.standard.synchronize()
-                WidgetCenter.shared.reloadAllTimelines()
+                print("✅ [Intent] 已保存引用历史记录: \(info.citations) at \(now)")
+                print("✅ [Intent] 对勾状态已立即设置完成")
             } catch {
                 let now = Date()
-                // 失败也要写入完成时间并清理进行中标记，避免卡死
-                if let ag = UserDefaults(suiteName: groupIdentifier) { ag.set(now, forKey: "LastRefreshTime_\(sid)"); ag.synchronize() }
-                UserDefaults.standard.set(now, forKey: "LastRefreshTime_\(sid)")
-                UserDefaults.standard.synchronize()
-
-                // 同样保证最短 InProg 可见后再清理
-                let startKey = "RefreshStartTime_\(sid)"
-                var startAt: Date? = nil
-                if let ag = UserDefaults(suiteName: groupIdentifier) { startAt = ag.object(forKey: startKey) as? Date }
-                if startAt == nil { startAt = UserDefaults.standard.object(forKey: startKey) as? Date }
-                let hold = minInProgSeconds()
-                if let sAt = startAt {
-                    let elapsed = Date().timeIntervalSince(sAt)
-                    if elapsed < hold {
-                        let remain = hold - elapsed
-                        try? await Task.sleep(nanoseconds: UInt64(remain * 1_000_000_000))
-                    }
-                }
-                if let ag = UserDefaults(suiteName: groupIdentifier) {
-                    ag.removeObject(forKey: "RefreshInProgress_\(sid)")
-                    ag.removeObject(forKey: "RefreshStartTime_\(sid)")
-                    ag.synchronize()
-                }
-                UserDefaults.standard.removeObject(forKey: "RefreshInProgress_\(sid)")
-                UserDefaults.standard.removeObject(forKey: "RefreshStartTime_\(sid)")
-                UserDefaults.standard.synchronize()
-                WidgetCenter.shared.reloadAllTimelines()
                 print("❌ [Intent] 后台拉取失败: sid=\(sid), error=\(error.localizedDescription)")
+                
+                // 失败也要写入完成时间并立即清理进行中标记，避免卡死
+                if let ag = UserDefaults(suiteName: groupIdentifier) { 
+                    ag.set(now, forKey: "LastRefreshTime_\(sid)")
+                    ag.set(now, forKey: "LastRefreshTime") // 失败时也更新全局
+                    ag.synchronize() 
+                    print("🧪 [Widget] AppGroup(失败) 写入 LastRefreshTime & LastRefreshTime_\(sid): \(now)")
+                }
+                UserDefaults.standard.set(now, forKey: "LastRefreshTime_\(sid)")
+                UserDefaults.standard.set(now, forKey: "LastRefreshTime") // 失败时也更新全局
+                UserDefaults.standard.synchronize()
+                print("🧪 [Widget] Standard(失败) 写入 LastRefreshTime & LastRefreshTime_\(sid): \(now)")
+                // 通知主App刷新读取
+                postDarwinNotification("com.citetrack.lastRefreshTimeUpdated")
+
+                // 🎯 修复：失败时也立即清除模糊状态
+                print("🔄 [Intent] 失败情况，立即清除模糊状态")
+                
+                func clearAllBlurMarkersOnFailure(from defaults: UserDefaults, scholarId: String) {
+                    // 清除旧的标记
+                    defaults.removeObject(forKey: "RefreshInProgress_\(scholarId)")
+                    defaults.removeObject(forKey: "RefreshStartTime_\(scholarId)")
+                    defaults.removeObject(forKey: "RefreshTriggerTime_\(scholarId)")
+                    defaults.synchronize()
+                    print("🔄 [Intent] ✅ 失败时已清除刷新标记")
+                }
+                
+                if let ag = UserDefaults(suiteName: groupIdentifier) {
+                    clearAllBlurMarkersOnFailure(from: ag, scholarId: sid)
+                }
+                clearAllBlurMarkersOnFailure(from: UserDefaults.standard, scholarId: sid)
+                
+                // 立即刷新widget以清除模糊效果
+                WidgetCenter.shared.reloadAllTimelines()
+                print("🔄 [Intent] 失败情况下模糊状态立即清除完成")
             }
         } else {
             print("⚠️ [Intent] 未找到 SelectedWidgetScholarId，跳过后台拉取")
@@ -783,15 +1116,55 @@ struct CiteTrackWidgetView: View {
     @Environment(\.widgetFamily) var family
     
     var body: some View {
-        switch family {
-        case .systemSmall:
-            SmallWidgetView(entry: entry)
-        case .systemMedium:
-            MediumWidgetView(entry: entry)
-        case .systemLarge:
-            LargeWidgetView(entry: entry)
-        default:
-            SmallWidgetView(entry: entry)
+        func widgetBackgroundColor(for theme: WidgetTheme) -> Color {
+            switch theme {
+            case .light:
+                return Color.white
+            case .dark:
+                return Color.black
+            case .system:
+                return Color.clear // 交给系统材质
+            }
+        }
+        // 智能主题应用：考虑系统当前颜色方案
+        let appliedScheme: ColorScheme = {
+            switch entry.widgetTheme {
+            case .light:
+                // 浅色主题：始终使用浅色
+                return .light
+            case .dark:
+                // 深色主题：始终使用深色
+                return .dark
+            case .system:
+                // 跟随系统：在 Widget 中默认使用浅色，但让系统决定最终渲染
+                return .light
+            }
+        }()
+        
+        // 构造内容并按需注入颜色方案（使用类型擦除便于返回一致类型）
+        let baseContent: AnyView = {
+            switch family {
+            case .systemSmall:
+                return AnyView(SmallWidgetView(entry: entry))
+            case .systemMedium:
+                return AnyView(MediumWidgetView(entry: entry))
+            case .systemLarge:
+                return AnyView(LargeWidgetView(entry: entry))
+            default:
+                return AnyView(SmallWidgetView(entry: entry))
+            }
+        }()
+        
+        // 应用主题：仅在浅/深色时强制注入；跟随系统时完全交给系统，避免字体配色错乱
+        if entry.widgetTheme == .system {
+            print("🎨 [Widget] 应用主题: system -> defer to system color scheme")
+            return AnyView(baseContent)
+        } else {
+            print("🎨 [Widget] 应用主题: \(entry.widgetTheme.rawValue) -> \(appliedScheme)")
+            let themedContent = baseContent
+                .environment(\.colorScheme, appliedScheme)
+                .preferredColorScheme(appliedScheme)
+            return AnyView(themedContent)
         }
     }
 }
@@ -804,8 +1177,27 @@ struct SmallWidgetView: View {
     @State private var animationTrigger: Bool = false
     @State private var isRefreshing: Bool = false
     @State private var isSwitching: Bool = false
+    // 🎯 从UserDefaults读取对号状态，避免Xcode调试时被重置
     @State private var showRefreshAck: Bool = false
-    @State private var refreshInProgress: Bool = false
+    
+    // 🎯 当前显示的学者ID，用于对号状态绑定
+    private var currentScholarId: String? {
+        return entry.primaryScholar?.id
+    }
+    
+    // 🎯 检查当前学者是否应该显示对号状态
+    private var shouldShowRefreshAck: Bool {
+        guard let scholarId = currentScholarId else { return false }
+        
+        // 从持久化存储中读取对号状态
+        let key = "ShowRefreshAck_\(scholarId)"
+        
+        if let appGroup = UserDefaults(suiteName: appGroupIdentifier) {
+            return appGroup.bool(forKey: key)
+        }
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
     @State private var refreshBlinkOn: Bool = false
     // 刷新时主体内容转场：淡出+轻微缩放，再淡入
     @State private var contentScale: Double = 1.0
@@ -820,6 +1212,8 @@ struct SmallWidgetView: View {
     @State private var switchHighlight: Bool = false
     
     var body: some View {
+        let widgetRenderTime = Date()
+        let _ = print("📱 [Widget] SmallWidgetView body 被调用 - 时间: \(widgetRenderTime)")
         
         if let scholar = entry.primaryScholar {
             ZStack {
@@ -836,9 +1230,9 @@ struct SmallWidgetView: View {
                             
                             Spacer()
                             
-                            // 状态指示器：默认灰色，今天更新则绿色
+                            // 状态指示器：默认灰色，今天有刷新则绿色
                             Circle()
-                                .fill(isUpdatedToday(entry.lastRefreshTime) ? Color.green : Color.gray)
+                                .fill(isScholarUpdatedToday(scholar.id) ? Color.green : Color.gray)
                                 .frame(width: 6, height: 6)
                         }
                         
@@ -872,19 +1266,21 @@ struct SmallWidgetView: View {
                             .foregroundColor(.primary)
                             .minimumScaleFactor(0.5) // 允许更大缩放范围
                             .lineLimit(1)
-                            .blur(radius: (isRefreshVisuallyActive(for: scholar.id)) ? 3.5 : 0)
+
                         
                         Text("引用数")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                            .blur(radius: (isRefreshVisuallyActive(for: scholar.id)) ? 2.2 : 0)
+
                         }
                         .padding(.horizontal, 6)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .scaleEffect(contentScale)
                         .opacity(contentOpacity)
+
                         .animation(.spring(response: 0.22, dampingFraction: 0.85), value: contentScale)
                         .animation(.easeInOut(duration: 0.18), value: contentOpacity)
+
                     }
                     
                     Spacer()
@@ -949,7 +1345,7 @@ struct SmallWidgetView: View {
                             .lineLimit(1)
                             Spacer()
                         }
-                        .blur(radius: (isRefreshVisuallyActive(for: scholar.id)) ? 2.2 : 0)
+
                         .frame(minWidth: 80) // 增加中间区域宽度以避免省略号
                         
                         Spacer()
@@ -961,11 +1357,12 @@ struct SmallWidgetView: View {
                                     // 背景根据刷新状态高亮
                                     RoundedRectangle(cornerRadius: 16)
                                         .fill(Color.green)
-                                        .opacity(isValidInProgress(for: entry.primaryScholar?.id) ? (refreshBlinkOn ? 0.7 : 0.35) : 0.15)
+                                        .opacity(0.15)
                                         .frame(width: 32, height: 32)
 
                                     // 刷新中：转圈图标；完成：对勾
                                     Group {
+                                        // 仅在不处于模糊/进行中时才显示对勾
                                         if showRefreshAck {
                                             Image(systemName: "checkmark")
                                                 .font(.system(size: 16, weight: .bold))
@@ -995,33 +1392,18 @@ struct SmallWidgetView: View {
                     .padding(.bottom, 2) // 恢复按钮原来的位置
                 }
 
-                // 右上角调试状态角标（按当前学者显示）
-                if debugOverlayEnabled() {
-                    let currentId = entry.primaryScholar?.id
-                    let debug = refreshDebugStatus(for: currentId)
-                    VStack {
-                        HStack {
-                            Spacer()
-                            Text(debug.text)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(debug.color.opacity(0.9))
-                                .cornerRadius(6)
-                                .padding(.top, 4)
-                                .padding(.trailing, 4)
-                        }
-                        Spacer()
-                    }
-                }
+
             }
-            .containerBackground(.fill.tertiary, for: .widget)
+            .containerBackground(widgetBackgroundColor(for: entry.widgetTheme), for: .widget)
             // .overlay(调试信息已移除)
             .onAppear {
+                #if DEBUG
                 print("📱 [Widget] ===== SmallWidgetView onAppear =====")
                 print("📱 [Widget] 当前 refreshAngle: \(refreshAngle)")
                 print("📱 [Widget] 当前 isRefreshing: \(isRefreshing)")
+                #endif
+                // 🎯 从持久化存储中加载对号状态（每个学者独立）
+                loadRefreshAckState()
                 // 确保切换按钮初始为原始大小
                 // 复位脉冲与高亮状态
                 showSwitchPulse = false
@@ -1031,8 +1413,6 @@ struct SmallWidgetView: View {
                 // 检查动画触发标记（按学者）
                 checkRefreshAnimationOnly(for: entry.primaryScholar?.id)
                 checkSwitchAnimationOnly()
-                // 启动时校正进行中状态（若已完成则复位）
-                checkRefreshCompletion(for: entry.primaryScholar?.id)
             }
             .onChange(of: entry.date) {
                 print("📱 [Widget] ===== Entry date changed =====")
@@ -1041,54 +1421,101 @@ struct SmallWidgetView: View {
                 // 条目更新时再次检查动画（按学者）
                 checkRefreshAnimationOnly(for: entry.primaryScholar?.id)
                 checkSwitchAnimationOnly()
-                checkRefreshCompletion(for: entry.primaryScholar?.id)
+                
+                // 🎯 Intent已立即设置对勾状态，无需检查
+            }
+            .onChange(of: entry.primaryScholar?.id) { oldId, newId in
+                print("📱 [Widget] ===== 学者切换: \(oldId ?? "nil") -> \(newId ?? "nil") =====")
+                // 🎯 学者切换时清除对号状态
+                if oldId != newId {
+                    showRefreshAck = false
+                    print("🔄 [Widget] 学者切换，清除对号状态并持久化为刷新按钮")
+                    // 持久化：新学者默认显示刷新按钮
+                    if let targetId = newId {
+                        saveRefreshAckState(false, for: targetId)
+                        // 清理新学者的进行中标记与时间键，避免残留导致误判
+                        if let app = UserDefaults(suiteName: appGroupIdentifier) {
+                            app.set(false, forKey: "RefreshInProgress_\(targetId)")
+                            app.removeObject(forKey: "RefreshStartTime_\(targetId)")
+                            app.removeObject(forKey: "RefreshTriggerTime_\(targetId)")
+                            app.synchronize()
+                            print("🧹 [Widget] 已清理新学者的刷新标记与时间键: \(targetId)")
+                        } else {
+                            UserDefaults.standard.set(false, forKey: "RefreshInProgress_\(targetId)")
+                            UserDefaults.standard.removeObject(forKey: "RefreshStartTime_\(targetId)")
+                            UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime_\(targetId)")
+                            print("🧹 [Widget] 已清理(Std)新学者的刷新标记与时间键: \(targetId)")
+                        }
+                    }
+                }
             }
             
         } else {
             // 空状态：优雅的引导设计
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 Spacer()
                 
-                VStack(spacing: 8) {
-                    Image(systemName: "graduationcap.circle")
-                        .font(.title)
+                VStack(spacing: 15) {
+                    // 主图标：学术帽
+                    Image(systemName: "graduationcap.circle.fill")
+                        .font(.system(size: 32))
+                        .foregroundColor(.blue.opacity(0.7))
+                    
+                    // 主标题
+                    Text("开始追踪")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    // 副标题：引导用户
+                    Text("添加学者开始追踪")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                }
+                
+                // Spacer()
+                
+                // 底部提示：轻触打开App
+                HStack(spacing: 6) {
+                    Image(systemName: "hand.tap")
+                        .font(.caption2)
                         .foregroundColor(.blue.opacity(0.6))
                     
-                    VStack(spacing: 4) {
-                        Text("开始追踪")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                        Text("在主App中添加学者")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                    }
+                    Text("轻触打开App添加学者")
+                        .font(.caption2)
+                        .foregroundColor(.blue.opacity(0.6))
                 }
-                
-                // 添加测试按钮
-                Button(intent: DebugTestIntent()) {
-                    Text("调试测试")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .padding(.top, 4)
-                
-                // 添加强制刷新按钮
-                Button(intent: ForceRefreshIntent()) {
-                    Text("强制刷新")
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                
-                Spacer()
+                .padding(.bottom, 8)
             }
             .padding()
-            .containerBackground(.fill.tertiary, for: .widget)
+            .containerBackground(widgetBackgroundColor(for: entry.widgetTheme), for: .widget)
+            .widgetURL(URL(string: "citetrack://add-scholar"))
         }
     }
     
     /// 检查是否今天更新过
     private func isUpdatedToday(_ lastRefreshTime: Date?) -> Bool {
+        guard let lastRefresh = lastRefreshTime else { return false }
+        
+        let calendar = Calendar.current
+        let today = Date()
+        
+        return calendar.isDate(lastRefresh, inSameDayAs: today)
+    }
+    
+    /// 检查特定学者今日是否有刷新
+    private func isScholarUpdatedToday(_ scholarId: String) -> Bool {
+        let lastKey = "LastRefreshTime_\(scholarId)"
+        
+        var lastRefreshTime: Date? = nil
+        if let appGroup = UserDefaults(suiteName: appGroupIdentifier) {
+            lastRefreshTime = appGroup.object(forKey: lastKey) as? Date
+        } else {
+            lastRefreshTime = UserDefaults.standard.object(forKey: lastKey) as? Date
+        }
+        
         guard let lastRefresh = lastRefreshTime else { return false }
         
         let calendar = Calendar.current
@@ -1160,66 +1587,37 @@ struct SmallWidgetView: View {
         print("🔍 [Widget] ===== 开始检查刷新动画 =====")
         let refreshManager = RefreshButtonManager.shared
         var shouldRefresh = refreshManager.shouldPlayAnimation()
-        // 同时读取"进行中"状态与开始时间，驱动按钮常亮和模糊（按学者）
+        // 检查最近触发时间，驱动刷新动画
         let groupID = appGroupIdentifier
-        var inProgress = false
-        var startTime: Date? = nil
         let sid = scholarId ?? (entry.primaryScholar?.id)
-        let inProgressKey = sid != nil ? "RefreshInProgress_\(sid!)" : "RefreshInProgress"
-        let startKey = sid != nil ? "RefreshStartTime_\(sid!)" : "RefreshStartTime"
         let triggerKey = sid != nil ? "RefreshTriggerTime_\(sid!)" : "RefreshTriggerTime"
         let forceWindow: TimeInterval = 2.5
         var recentTriggered = false
-        print("🔎 [Widget] checkRefreshAnimationOnly for sid=\(sid ?? "nil") inKey=\(inProgressKey) startKey=\(startKey)")
+        #if DEBUG
+        print("🔎 [Widget] checkRefreshAnimationOnly for sid=\(sid ?? "nil") triggerKey=\(triggerKey)")
+        #endif
         if let appGroupDefaults = UserDefaults(suiteName: groupID) {
-            inProgress = appGroupDefaults.bool(forKey: inProgressKey)
-            startTime = appGroupDefaults.object(forKey: startKey) as? Date
             if let trig = appGroupDefaults.object(forKey: triggerKey) as? Date {
                 recentTriggered = Date().timeIntervalSince(trig) <= forceWindow
             }
         } else {
-            inProgress = UserDefaults.standard.bool(forKey: inProgressKey)
-            startTime = UserDefaults.standard.object(forKey: startKey) as? Date
             if let trig = UserDefaults.standard.object(forKey: triggerKey) as? Date {
                 recentTriggered = Date().timeIntervalSince(trig) <= forceWindow
             }
         }
-        print("🔎 [Widget] read inProgress=\(inProgress) startTime=\(String(describing: startTime))")
+        #if DEBUG
+        print("🔎 [Widget] read recentTriggered=\(recentTriggered)")
+        #endif
         if !shouldRefresh && recentTriggered {
             print("🔄 [Widget] 兜底：检测到最近触发时间戳，强制 shouldRefresh = true")
             shouldRefresh = true
         }
-        // 兜底：最近触发则立即进入本地 InProg 视觉态（即刻闪烁+模糊）
-        if recentTriggered && !refreshInProgress {
-            refreshInProgress = true
+        // 兜底：最近触发则立即启动刷新动画
+        if recentTriggered {
             startRefreshBlink()
             if !isRefreshing {
                 print("🔄 [Widget] 兜底：recentTriggered 命中，立即启动 performRefreshAnimation")
                 performRefreshAnimation()
-            }
-        }
-        // 若没有开始时间，则不应处于进行中，强制复位
-        if startTime == nil && inProgress {
-            print("🔄 [Widget] 检测到无开始时间但处于进行中，强制复位")
-            inProgress = false
-            refreshInProgress = false
-            if let appGroupDefaults = UserDefaults(suiteName: groupID) {
-                appGroupDefaults.set(false, forKey: inProgressKey)
-                appGroupDefaults.synchronize()
-            } else {
-                UserDefaults.standard.set(false, forKey: inProgressKey)
-            }
-            stopRefreshBlink()
-        }
-        if refreshInProgress != inProgress {
-            refreshInProgress = inProgress
-            print("🔄 [Widget] 刷新进行中状态更新: \(inProgress)")
-            if inProgress {
-                // 开始按钮闪烁
-                startRefreshBlink()
-            } else {
-                // 停止闪烁
-                stopRefreshBlink()
             }
         }
         
@@ -1243,8 +1641,9 @@ struct SmallWidgetView: View {
         let sid = scholarId ?? (entry.primaryScholar?.id)
         let startKey = sid != nil ? "RefreshStartTime_\(sid!)" : "RefreshStartTime"
         let lastKey = sid != nil ? "LastRefreshTime_\(sid!)" : "LastRefreshTime"
-        let inProgressKey = sid != nil ? "RefreshInProgress_\(sid!)" : "RefreshInProgress"
+        #if DEBUG
         print("🔎 [Widget] checkRefreshCompletion for sid=\(sid ?? "nil") startKey=\(startKey) lastKey=\(lastKey)")
+        #endif
         if let appGroupDefaults = UserDefaults(suiteName: groupID) {
             startTime = appGroupDefaults.object(forKey: startKey) as? Date
             lastTime = appGroupDefaults.object(forKey: lastKey) as? Date
@@ -1260,79 +1659,99 @@ struct SmallWidgetView: View {
             print("🔎 [Widget] fallback check: globalLast=\(String(describing: global)) start=\(String(describing: sOpt))")
             if let g = global, let s = sOpt, g > s {
                 lOpt = global
-                // 回写学者 last，并清 inProgress
+                // 回写学者 last
                 if let appGroupDefaults = UserDefaults(suiteName: groupID) {
                     appGroupDefaults.set(g, forKey: "LastRefreshTime_\(sid)")
-                    appGroupDefaults.set(false, forKey: "RefreshInProgress_\(sid)")
                     appGroupDefaults.synchronize()
                 }
                 UserDefaults.standard.set(g, forKey: "LastRefreshTime_\(sid)")
-                UserDefaults.standard.set(false, forKey: "RefreshInProgress_\(sid)")
                 print("✅ [Widget] 使用全局Last回写完成: sid=\(sid) last=\(g)")
             }
         }
+        #if DEBUG
         print("🔎 [Widget] completion compare: start=\(String(describing: sOpt)) last=\(String(describing: lOpt))")
+        #endif
         // A. 标准路径：存在 start 并且 last > start
         if let s = sOpt, let l = lOpt, l > s {
             // 刷新完成：复位进行中与闪烁
-            refreshInProgress = false
             stopRefreshBlink()
             isRefreshing = false
-            // 显示对勾反馈一小段时间
-            showRefreshAck = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                showRefreshAck = false
+            
+            // 🎯 更新：刷新完成即刻切换为对勾 - 避免重复设置
+            if !self.showRefreshAck {
+                self.showRefreshAck = true
+                self.saveRefreshAckState(true, for: self.currentScholarId)
+                
+                // 清除动画活跃标记
+                let animationKey = "RefreshAnimationActive_\(self.currentScholarId ?? "default")"
+                UserDefaults.standard.removeObject(forKey: animationKey)
+                
+                print("✅ [Widget] 刷新完成，立即显示对勾")
             }
-            print("✅ [Widget] 检测到刷新完成，已复位进行中状态")
-            // 清理标记（尽量在 App Group），同时清除触发时间键以避免兜底窗口继续判定进行中，并强制刷新时间线
-            if let appGroupDefaults = UserDefaults(suiteName: groupID) {
-                appGroupDefaults.removeObject(forKey: inProgressKey)
-                if let sid = sid {
-                    appGroupDefaults.removeObject(forKey: "RefreshStartTime_\(sid)")
-                    appGroupDefaults.removeObject(forKey: "RefreshTriggerTime_\(sid)")
-                }
-                appGroupDefaults.removeObject(forKey: "RefreshTriggerTime")
-                appGroupDefaults.synchronize()
-                WidgetCenter.shared.reloadAllTimelines()
-            } else {
-                UserDefaults.standard.removeObject(forKey: inProgressKey)
-                if let sid = sid {
-                    UserDefaults.standard.removeObject(forKey: "RefreshStartTime_\(sid)")
-                    UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime_\(sid)")
-                }
-                UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime")
-                WidgetCenter.shared.reloadAllTimelines()
-            }
-            return
-        }
-        // B. 兜底路径：无 start 但最近有 last（3s 内），也判定完成
-        if let l = lOpt {
-            if Date().timeIntervalSince(l) <= 1.5 {
-                refreshInProgress = false
-                stopRefreshBlink()
-                isRefreshing = false
-                showRefreshAck = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                    showRefreshAck = false
-                }
+            
+            print("✅ [Widget] 检测到刷新完成")
+            // 🎯 延迟清理标记（后台），不阻塞对勾显示
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                 if let appGroupDefaults = UserDefaults(suiteName: groupID) {
                     if let sid = sid {
-                        appGroupDefaults.removeObject(forKey: "RefreshInProgress_\(sid)")
                         appGroupDefaults.removeObject(forKey: "RefreshStartTime_\(sid)")
                         appGroupDefaults.removeObject(forKey: "RefreshTriggerTime_\(sid)")
                     }
                     appGroupDefaults.removeObject(forKey: "RefreshTriggerTime")
                     appGroupDefaults.synchronize()
                     WidgetCenter.shared.reloadAllTimelines()
+                } else {
+                    if let sid = sid {
+                        UserDefaults.standard.removeObject(forKey: "RefreshStartTime_\(sid)")
+                        UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime_\(sid)")
+                    }
+                    UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime")
+                    WidgetCenter.shared.reloadAllTimelines()
                 }
-                if let sid = sid {
-                    UserDefaults.standard.removeObject(forKey: "RefreshInProgress_\(sid)")
-                    UserDefaults.standard.removeObject(forKey: "RefreshStartTime_\(sid)")
-                    UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime_\(sid)")
+                print("✅ [Widget] 标准路径：延迟清理标记完成")
+            }
+            return
+        }
+        // B. 兜底路径：无 start 但最近有 last（延长到5s 内），也判定完成
+        if let l = lOpt {
+            if Date().timeIntervalSince(l) <= 5.0 { // 从1.5改为5.0秒
+                stopRefreshBlink()
+                isRefreshing = false
+                
+                // 🎯 更新：刷新完成即刻切换为对勾（兜底路径）- 避免重复设置
+                if !self.showRefreshAck {
+                    self.showRefreshAck = true
+                    self.saveRefreshAckState(true, for: self.currentScholarId)
+                    
+                    // 清除动画活跃标记
+                    let animationKey = "RefreshAnimationActive_\(self.currentScholarId ?? "default")"
+                    UserDefaults.standard.removeObject(forKey: animationKey)
+                    
+                    print("✅ [Widget] 刷新完成，立即显示对勾(兜底)")
                 }
-                UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime")
-                WidgetCenter.shared.reloadAllTimelines()
-                print("✅ [Widget] 兜底完成：last 新近写入，显示对勾并清理进行中标记")
+                
+                // 🎯 延迟清除标记（后台），不阻塞对勾显示
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    if let appGroupDefaults = UserDefaults(suiteName: groupID) {
+                        if let sid = sid {
+                            appGroupDefaults.removeObject(forKey: "RefreshStartTime_\(sid)")
+                            appGroupDefaults.removeObject(forKey: "RefreshTriggerTime_\(sid)")
+                        }
+                        appGroupDefaults.removeObject(forKey: "RefreshTriggerTime")
+                        appGroupDefaults.synchronize()
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
+                    if let sid = sid {
+                        UserDefaults.standard.removeObject(forKey: "RefreshStartTime_\(sid)")
+                        UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime_\(sid)")
+                    }
+                    UserDefaults.standard.removeObject(forKey: "RefreshTriggerTime")
+                    WidgetCenter.shared.reloadAllTimelines()
+                    print("✅ [Widget] 兜底完成：延迟清理标记完成")
+                }
+                #if DEBUG
+                print("✅ [Widget] 兜底完成：last 新近写入，已显示对勾")
+                #endif
             }
         }
     }
@@ -1344,9 +1763,7 @@ struct SmallWidgetView: View {
             refreshBlinkOn.toggle()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            if refreshInProgress {
-                startRefreshBlink()
-            }
+            startRefreshBlink()
         }
     }
 
@@ -1370,66 +1787,7 @@ struct SmallWidgetView: View {
         return value
     }
 
-    /// 校验进行中是否有效：需有开始时间，且未超时
-    private func isValidInProgress(for scholarId: String?) -> Bool {
-        let groupID = appGroupIdentifier
-        let now = Date()
-        let timeout: TimeInterval = refreshTimeoutSeconds()
-        // 兜底：触发后短时间内强制认为 InProg，避免未及时读到开始键（窗口不要过长，避免完成后仍被判定进行中）
-        let forceWindow: TimeInterval = 0.7
-        var inProgress = false
-        var startTime: Date? = nil
-        let sid = scholarId ?? (entry.primaryScholar?.id)
-        let inProgressKey = sid != nil ? "RefreshInProgress_\(sid!)" : "RefreshInProgress"
-        let startKey = sid != nil ? "RefreshStartTime_\(sid!)" : "RefreshStartTime"
-        let triggerKey = sid != nil ? "RefreshTriggerTime_\(sid!)" : "RefreshTriggerTime"
-        let triggerKeyGlobal = "RefreshTriggerTime"
-        if let appGroupDefaults = UserDefaults(suiteName: groupID) {
-            inProgress = appGroupDefaults.bool(forKey: inProgressKey)
-            startTime = appGroupDefaults.object(forKey: startKey) as? Date
-            // 兜底：最近触发时间命中窗口也视为进行中
-            if !inProgress && startTime == nil {
-                if let trig = appGroupDefaults.object(forKey: triggerKey) as? Date, now.timeIntervalSince(trig) <= forceWindow {
-                    inProgress = true
-                } else if let gtrig = appGroupDefaults.object(forKey: triggerKeyGlobal) as? Date, now.timeIntervalSince(gtrig) <= forceWindow {
-                    inProgress = true
-                }
-            }
-        } else {
-            inProgress = UserDefaults.standard.bool(forKey: inProgressKey)
-            startTime = UserDefaults.standard.object(forKey: startKey) as? Date
-            if !inProgress && startTime == nil {
-                if let trig = UserDefaults.standard.object(forKey: triggerKey) as? Date, now.timeIntervalSince(trig) <= forceWindow {
-                    inProgress = true
-                } else if let gtrig = UserDefaults.standard.object(forKey: triggerKeyGlobal) as? Date, now.timeIntervalSince(gtrig) <= forceWindow {
-                    inProgress = true
-                }
-            }
-        }
-        // 若因兜底进入进行中但 start 仍未写入，也要让UI显示模糊
-        if inProgress && startTime == nil { return true }
-        guard inProgress, let s = startTime else { return false }
-        if now.timeIntervalSince(s) > timeout {
-            let sidText = sid ?? "nil"
-            print("⏱️ [Widget] 刷新超时: sid=\(sidText) start=\(s) timeout=\(Int(timeout))s, 自动清理标记")
-            // 超时清理放到异步，避免在视图更新周期直接改状态
-            DispatchQueue.main.async {
-                if let appGroupDefaults = UserDefaults(suiteName: groupID) {
-                    appGroupDefaults.removeObject(forKey: inProgressKey)
-                    appGroupDefaults.removeObject(forKey: startKey)
-                    appGroupDefaults.synchronize()
-                }
-                UserDefaults.standard.removeObject(forKey: inProgressKey)
-                UserDefaults.standard.removeObject(forKey: startKey)
-                // 停止本地动画状态
-                refreshInProgress = false
-                stopRefreshBlink()
-                isRefreshing = false
-            }
-            return false
-        }
-        return true
-    }
+
 
     /// 读取 App Group 与标准存储的刷新时间戳信息
     private func getRefreshTimestamps(for scholarId: String?) -> (inProgress: Bool, start: Date?, last: Date?) {
@@ -1454,40 +1812,7 @@ struct SmallWidgetView: View {
         return (inProgress, startTime, lastTime)
     }
 
-    /// 计算当前是否应当显示“刷新进行中”的视觉态（用于模糊等），完全基于持久化时间戳，避免依赖本地 @State。
-    private func isRefreshVisuallyActive(for scholarId: String?) -> Bool {
-        let groupID = appGroupIdentifier
-        let now = Date()
-        let timeout: TimeInterval = refreshTimeoutSeconds()
-        let sid = scholarId ?? (entry.primaryScholar?.id)
-        let startKey = sid != nil ? "RefreshStartTime_\(sid!)" : "RefreshStartTime"
-        let lastKey = sid != nil ? "LastRefreshTime_\(sid!)" : "LastRefreshTime"
-        let trigKey = sid != nil ? "RefreshTriggerTime_\(sid!)" : "RefreshTriggerTime"
-        var startTime: Date? = nil
-        var lastTime: Date? = nil
-        var trigTime: Date? = nil
-        if let app = UserDefaults(suiteName: groupID) {
-            startTime = app.object(forKey: startKey) as? Date
-            lastTime = app.object(forKey: lastKey) as? Date
-            trigTime = app.object(forKey: trigKey) as? Date
-        } else {
-            startTime = UserDefaults.standard.object(forKey: startKey) as? Date
-            lastTime = UserDefaults.standard.object(forKey: lastKey) as? Date
-            trigTime = UserDefaults.standard.object(forKey: trigKey) as? Date
-        }
-        // 若刚触发（短窗口内），直接显示进行中视觉态
-        if let t = trigTime, now.timeIntervalSince(t) <= 0.9 { return true }
-        // 若存在 start 且未超时，并且尚未检测到完成（last <= start 或 last 为 nil），则显示进行中
-        if let s = startTime {
-            if now.timeIntervalSince(s) <= timeout {
-                if let l = lastTime {
-                    return l <= s
-                }
-                return true
-            }
-        }
-        return false
-    }
+
 
     /// 刷新调试状态文本与颜色（Idle/InProg/Done/Timeout）
     private func refreshDebugStatus(for scholarId: String?) -> (text: String, color: Color) {
@@ -1549,26 +1874,103 @@ struct SmallWidgetView: View {
     
 
     
-    /// 执行刷新动画 - 简化版本
+    /// 执行刷新动画 - 优化版本
     private func performRefreshAnimation() {
+        #if DEBUG
         print("🔄 [Widget] ===== performRefreshAnimation 开始执行 =====")
         print("🔄 [Widget] 当前 isRefreshing 状态: \(isRefreshing)")
+        #endif
         
-        guard !isRefreshing else { 
-            print("🔄 [Widget] ⚠️ 刷新动画已在进行，跳过")
+        // 🎯 双重保护：检查本地状态和持久化状态
+        let animationKey = "RefreshAnimationActive_\(currentScholarId ?? "default")"
+        let isAnimationActive = UserDefaults.standard.bool(forKey: animationKey)
+        
+        guard !isRefreshing && !isAnimationActive else { 
+            #if DEBUG
+            print("🔄 [Widget] ⚠️ 刷新动画已在进行，跳过 (local: \(isRefreshing), persistent: \(isAnimationActive))")
+            #endif
             return 
         }
         
-        isRefreshing = true
-        print("🔄 [Widget] 设置 isRefreshing = true")
-        print("🔄 [Widget] 进入刷新进行中：按钮闪烁 + 中心模糊")
-        showRefreshAck = false
-        refreshInProgress = true
-        startRefreshBlink()
-
-        // 不触发切换式效果
+        // 立即设置持久化标记，防止重复调用
+        UserDefaults.standard.set(true, forKey: animationKey)
         
+        // 🎯 性能优化：立即设置所有状态，减少卡顿
+        isRefreshing = true
+        showRefreshAck = false  // 🎯 清除对号状态，开始新的刷新
+        
+        #if DEBUG
+        print("🔄 [Widget] 设置 isRefreshing = true")
+        print("🔄 [Widget] 开始刷新动画")
+        #endif
+        
+
+        
+        // 🎯 性能优化：在主线程启动UI动画
+        DispatchQueue.main.async {
+            // 🚫 不再清除对勾状态，由Intent负责设置
+            self.startRefreshBlink()
+        }
+
+        // 🎯 Intent已立即设置对勾状态，不需要延迟检查
+        // Widget只需读取状态即可
+        
+        // 不触发切换式效果
         // 不在此处复位，由数据到达后复位
+    }
+    
+    // 🎯 持久化对号状态，避免Widget重新加载时丢失
+    private func saveRefreshAckState(_ state: Bool, for scholarId: String?) {
+        let key = scholarId != nil ? "ShowRefreshAck_\(scholarId!)" : "ShowRefreshAck"
+        
+        if let appGroup = UserDefaults(suiteName: appGroupIdentifier) {
+            appGroup.set(state, forKey: key)
+            appGroup.synchronize()
+            print("💾 [Widget] 保存对号状态: \(key) = \(state) (App Group)")
+        } else {
+            UserDefaults.standard.set(state, forKey: key)
+            print("💾 [Widget] 保存对号状态: \(key) = \(state) (Standard)")
+        }
+    }
+    
+    // 🎯 从持久化存储中加载对号状态（与当前学者绑定）
+    private func loadRefreshAckState() {
+        let scholarId = currentScholarId
+        let key = scholarId != nil ? "ShowRefreshAck_\(scholarId!)" : "ShowRefreshAck"
+        
+        // 🎯 修复：默认显示刷新按钮，除非明确保存了对勾状态
+        var savedState = false
+        var lastTimeForScholar: Date? = nil
+        if let appGroup = UserDefaults(suiteName: appGroupIdentifier) {
+            savedState = appGroup.bool(forKey: key)
+            print("📖 [Widget] 加载对号状态: \(key) = \(savedState) (App Group)")
+            if let sid = scholarId {
+                lastTimeForScholar = appGroup.object(forKey: "LastRefreshTime_\(sid)") as? Date
+            }
+        } else {
+            savedState = UserDefaults.standard.bool(forKey: key)
+            print("📖 [Widget] 加载对号状态: \(key) = \(savedState) (Standard)")
+            if let sid = scholarId {
+                lastTimeForScholar = UserDefaults.standard.object(forKey: "LastRefreshTime_\(sid)") as? Date
+            }
+        }
+        
+        // 🎯 简化逻辑：基于时间控制对勾显示
+        if savedState, let last = lastTimeForScholar {
+            let elapsed = Date().timeIntervalSince(last)
+            if elapsed > 6.0 {
+                showRefreshAck = false
+                saveRefreshAckState(false, for: scholarId)
+                print("🧹 [Widget] 对勾超时(>6s)，恢复为刷新按钮")
+            } else {
+                showRefreshAck = true
+                print("🔄 [Widget] 保留对勾(\(String(format: "%.1f", elapsed))s 内)")
+            }
+        } else {
+            showRefreshAck = false
+            if savedState == true { saveRefreshAckState(false, for: scholarId) }
+            print("🔄 [Widget] 默认显示刷新按钮")
+        }
     }
 }
 
@@ -1690,20 +2092,20 @@ struct MediumWidgetView: View {
                         .padding(.horizontal, 10)
                 }
             }
-            .containerBackground(.fill.tertiary, for: .widget)
+            .containerBackground(widgetBackgroundColor(for: entry.widgetTheme), for: .widget)
             .widgetURL(URL(string: "citetrack://scholars"))
             
         } else {
             // 空状态：引导添加学者 - 优化布局
-            VStack(spacing: 12) {
+            VStack(spacing: 16) {
                 Spacer()
                 
-                VStack(spacing: 10) {
-                    Image(systemName: "trophy.circle")
-                        .font(.title)
-                        .foregroundColor(.orange.opacity(0.6))
+                VStack(spacing: 12) {
+                    Image(systemName: "trophy.circle.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(.orange.opacity(0.7))
                     
-                    VStack(spacing: 3) {
+                    VStack(spacing: 6) {
                         Text("学术排行榜")
                             .font(.subheadline)
                             .fontWeight(.bold)
@@ -1717,10 +2119,22 @@ struct MediumWidgetView: View {
                     }
                 }
                 
-                Spacer()
+                // Spacer()
+                
+                // 底部提示：轻触打开App
+                HStack(spacing: 6) {
+                    Image(systemName: "hand.tap")
+                        .font(.caption2)
+                        .foregroundColor(.orange.opacity(0.6))
+                    
+                    Text("轻触打开App添加学者")
+                        .font(.caption2)
+                        .foregroundColor(.orange.opacity(0.6))
+                }
+                .padding(.bottom, 6)
             }
             .padding(6)
-            .containerBackground(.fill.tertiary, for: .widget)
+            .containerBackground(widgetBackgroundColor(for: entry.widgetTheme), for: .widget)
             .widgetURL(URL(string: "citetrack://add-scholar"))
         }
     }
@@ -1975,7 +2389,7 @@ struct LargeWidgetView: View {
                     .padding(.bottom, 8)
                 }
             }
-            .containerBackground(.fill.tertiary, for: .widget)
+            .containerBackground(widgetBackgroundColor(for: entry.widgetTheme), for: .widget)
             .widgetURL(URL(string: "citetrack://dashboard"))
             
         } else {
@@ -2041,7 +2455,19 @@ struct LargeWidgetView: View {
                     .padding(.horizontal, 16)
                 }
                 
-                Spacer()
+                // Spacer()
+                
+                // 底部提示：轻触打开App
+                HStack(spacing: 6) {
+                    Image(systemName: "hand.tap")
+                        .font(.caption2)
+                        .foregroundColor(.blue.opacity(0.6))
+                    
+                    Text("轻触打开App添加学者")
+                        .font(.caption2)
+                        .foregroundColor(.blue.opacity(0.6))
+                }
+                .padding(.bottom, 8)
             }
             .padding(10)
             .containerBackground(.fill.tertiary, for: .widget)
@@ -2248,13 +2674,22 @@ struct CiteTrackWidget: Widget {
         }
         .configurationDisplayName("CiteTrack")
         .description("跟踪学者的引用数据和学术影响力")
-        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
+        .supportedFamilies([.systemSmall])
     }
 }
 
 // MARK: - Preview
 struct CiteTrackWidget_Previews: PreviewProvider {
     static var previews: some View {
+        // 空状态预览
+        let emptyEntry = CiteTrackWidgetEntry(
+            date: Date(),
+            scholars: [],
+            primaryScholar: nil,
+            totalCitations: 0,
+            lastRefreshTime: nil
+        )
+        
         let sampleEntry = CiteTrackWidgetEntry(
             date: Date(),
             scholars: [
@@ -2267,14 +2702,19 @@ struct CiteTrackWidget_Previews: PreviewProvider {
         )
         
         Group {
+            // 空状态预览
+            CiteTrackWidgetView(entry: emptyEntry)
+                .previewContext(WidgetPreviewContext(family: .systemSmall))
+                .previewDisplayName("Empty State - Small")
+            
+            // Medium/Large previews temporarily disabled
+            
+            // 有数据状态预览
             CiteTrackWidgetView(entry: sampleEntry)
                 .previewContext(WidgetPreviewContext(family: .systemSmall))
+                .previewDisplayName("With Data - Small")
             
-            CiteTrackWidgetView(entry: sampleEntry)
-                .previewContext(WidgetPreviewContext(family: .systemMedium))
-            
-            CiteTrackWidgetView(entry: sampleEntry)
-                .previewContext(WidgetPreviewContext(family: .systemLarge))
+            // Medium/Large previews temporarily disabled
         }
     }
 }

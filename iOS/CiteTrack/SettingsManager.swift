@@ -1,11 +1,15 @@
 import Foundation
 import Combine
+#if os(iOS)
+import WidgetKit
+#endif
 
 // MARK: - Settings Manager
 public class SettingsManager: ObservableObject {
     public static let shared = SettingsManager()
     
     private let userDefaults = UserDefaults.standard
+    private let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier)
     private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Published Properties
@@ -42,6 +46,22 @@ public class SettingsManager: ObservableObject {
         didSet { userDefaults.set(theme.rawValue, forKey: Keys.theme) }
     }
     
+    // Widget 专用主题（独立于主App），持久化到 App Group，供小组件读取
+    @Published public var widgetTheme: AppTheme {
+        didSet {
+            // 标准与 App Group 都写入，保证一致
+            userDefaults.set(widgetTheme.rawValue, forKey: Keys.widgetTheme)
+            appGroupDefaults?.set(widgetTheme.rawValue, forKey: Keys.widgetTheme)
+            appGroupDefaults?.synchronize()
+            print("🧪 [SettingsManager] 写入 WidgetTheme=\(widgetTheme.rawValue) -> standard+appGroup(\(appGroupIdentifier))")
+            // 通知小组件刷新以应用新主题
+            #if os(iOS)
+            WidgetCenter.shared.reloadAllTimelines()
+            print("🧪 [SettingsManager] 调用 WidgetCenter.reloadAllTimelines() 以应用新主题")
+            #endif
+        }
+    }
+    
     @Published public var chartConfiguration: ChartConfiguration {
         didSet { 
             if let data = try? JSONEncoder().encode(chartConfiguration) {
@@ -67,6 +87,17 @@ public class SettingsManager: ObservableObject {
         // 主题设置
         let themeRawValue = userDefaults.string(forKey: Keys.theme) ?? AppTheme.system.rawValue
         self.theme = AppTheme(rawValue: themeRawValue) ?? .system
+        
+        // Widget 主题（优先从 App Group 读取，其次标准，默认 system）
+        if let agValue = appGroupDefaults?.string(forKey: Keys.widgetTheme),
+           let t = AppTheme(rawValue: agValue) {
+            self.widgetTheme = t
+        } else if let stdValue = userDefaults.string(forKey: Keys.widgetTheme),
+                  let t = AppTheme(rawValue: stdValue) {
+            self.widgetTheme = t
+        } else {
+            self.widgetTheme = .system
+        }
         
         // 图表配置
         if let data = userDefaults.data(forKey: Keys.chartConfiguration),
@@ -94,6 +125,7 @@ public class SettingsManager: ObservableObject {
         static let chartConfiguration = "ChartConfiguration"
         static let lastUpdateDate = "LastUpdateDate"
         static let scholars = "Scholars"
+        static let widgetTheme = "WidgetTheme"
     }
     
     // MARK: - Scholar Management
@@ -177,6 +209,7 @@ public class SettingsManager: ObservableObject {
             "notificationsEnabled": notificationsEnabled,
             "language": language,
             "theme": theme.rawValue,
+            "widgetTheme": widgetTheme.rawValue,
             "chartConfiguration": chartConfiguration
         ]
     }
@@ -206,6 +239,10 @@ public class SettingsManager: ObservableObject {
         if let themeValue = dict["theme"] as? String,
            let appTheme = AppTheme(rawValue: themeValue) {
             theme = appTheme
+        }
+        if let widgetThemeValue = dict["widgetTheme"] as? String,
+           let wt = AppTheme(rawValue: widgetThemeValue) {
+            widgetTheme = wt
         }
     }
 }

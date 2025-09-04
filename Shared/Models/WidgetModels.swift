@@ -15,6 +15,11 @@ extension Int {
 }
 
 // MARK: - Widget Models
+public enum WidgetTheme: String, CaseIterable, Codable {
+    case light
+    case dark
+    case system
+}
 public enum CitationTrend {
     case up(Int)
     case down(Int)
@@ -40,7 +45,7 @@ public enum CitationTrend {
         switch self {
         case .up(let count): return "+\(count.formattedNumber)"
         case .down(let count): return "-\(count.formattedNumber)"
-        case .unchanged: return "0"
+        case .unchanged: return "—"  // 显示横线而不是0，避免显示-0的问题
         }
     }
 }
