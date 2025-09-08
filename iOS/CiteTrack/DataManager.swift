@@ -214,6 +214,27 @@ public class DataManager: ObservableObject {
         }
     }
 
+    /// 读取存储给 Widget 的学者数据（包含周/月/季增长）
+    private func loadWidgetScholars() -> [WidgetScholarInfo] {
+        let data = (UserDefaults(suiteName: appGroupIdentifier)?.data(forKey: "WidgetScholars") ?? UserDefaults.standard.data(forKey: "WidgetScholars"))
+        guard let data, let decoded = try? JSONDecoder().decode([WidgetScholarInfo].self, from: data) else {
+            return []
+        }
+        return decoded
+    }
+
+    /// 直接使用已保存的数据后台（本地持久化）中的增长值，避免前端重复计算
+    public func getStoredGrowth(for scholarId: String, days: Int) -> Int? {
+        let list = loadWidgetScholars()
+        guard let info = list.first(where: { $0.id == scholarId }) else { return nil }
+        switch days {
+        case 7: return info.weeklyGrowth
+        case 30: return info.monthlyGrowth
+        case 90: return info.quarterlyGrowth
+        default: return nil
+        }
+    }
+
     // MARK: - LastRefreshTime 同步（监听Darwin通知 + 轮询兜底）
     private func setupLastRefreshObservers() {
         let center = CFNotificationCenterGetDarwinNotifyCenter()

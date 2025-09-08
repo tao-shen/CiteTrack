@@ -9,7 +9,7 @@ class iCloudSyncManager: ObservableObject {
     @Published var isImporting = false
     @Published var isExporting = false
     @Published var lastSyncDate: Date?
-    @Published var syncStatus: String = "未同步"
+    @Published var syncStatus: String = "icloud_available_no_sync".localized
     @Published var showingFilePicker = false
     @Published var importResult: ImportResult?
     @Published var showingImportResult = false
@@ -248,19 +248,18 @@ class iCloudSyncManager: ObservableObject {
             
             // Create or update scholar (only once per unique ID)
             if !processedScholarIds.contains(scholarId) {
-                let scholar = Scholar(id: scholarId, name: "学者 \(scholarId.prefix(8))")
+                let scholar = Scholar(id: scholarId, name: "scholar_default_name".localized + " \(scholarId.prefix(8))")
                 SettingsManager.shared.addScholar(scholar)
                 processedScholarIds.insert(scholarId)
                 importedScholars += 1
             }
             
-            // 保存历史数据到SimpleHistoryManager
-            let historyEntry = SimpleCitationHistory(
+            // 保存历史数据到 DataManager（统一结构）
+            DataManager.shared.saveHistoryIfChanged(
                 scholarId: scholarId,
                 citationCount: citationCount,
                 timestamp: timestamp
             )
-            SimpleHistoryManager.shared.saveHistory(historyEntry)
             importedHistory += 1
             
             print("📝 [iCloud Import] Saved history: \(scholarId) - \(citationCount) at \(timestamp)")
@@ -361,7 +360,7 @@ class iCloudSyncManager: ObservableObject {
         
         // Export citation data
         if !exportCitationData() {
-            throw iCloudError.exportFailed("无法导出引用数据")
+            throw iCloudError.exportFailed("export_failed_with_message".localized)
         }
         
         // Export app config
@@ -395,28 +394,41 @@ class iCloudSyncManager: ObservableObject {
             return false
         }
         
-        // Create test data for export
-        let testData: [String: Any] = [
-            "exportDate": ISO8601DateFormatter().string(from: Date()),
-            "version": "1.0",
-            "citationHistory": [
-                [
-                    "scholarName": "Test Scholar 1",
-                    "citationCount": 150,
-                    "timestamp": ISO8601DateFormatter().string(from: Date()),
-                    "source": "iOS App"
-                ],
-                [
-                    "scholarName": "Test Scholar 2", 
-                    "citationCount": 300,
-                    "timestamp": ISO8601DateFormatter().string(from: Date().addingTimeInterval(-86400)),
-                    "source": "iOS App"
-                ]
-            ]
-        ]
-        
         do {
-            let jsonData = try JSONSerialization.data(withJSONObject: testData, options: .prettyPrinted)
+            // Build export payload from current data layer
+            // Flattened array format for broad compatibility with existing importers (macOS format)
+            let formatter = ISO8601DateFormatter()
+            let scholars = DataManager.shared.scholars
+            var exportEntries: [[String: Any]] = []
+            
+            for scholar in scholars {
+                // Export full history for each scholar
+                let histories = DataManager.shared.getHistory(for: scholar.id)
+                if histories.isEmpty {
+                    // If no history stored, still export current snapshot if available
+                    if let citations = scholar.citations {
+                        let ts = scholar.lastUpdated ?? Date()
+                        exportEntries.append([
+                            "scholarId": scholar.id,
+                            "scholarName": scholar.displayName,
+                            "timestamp": formatter.string(from: ts),
+                            "citationCount": citations
+                        ])
+                    }
+                } else {
+                    for h in histories {
+                        exportEntries.append([
+                            "scholarId": scholar.id,
+                            "scholarName": scholar.displayName,
+                            "timestamp": formatter.string(from: h.timestamp),
+                            "citationCount": h.citationCount
+                        ])
+                    }
+                }
+            }
+            
+            // Write array directly for compatibility with performImport()
+            let jsonData = try JSONSerialization.data(withJSONObject: exportEntries, options: .prettyPrinted)
             try jsonData.write(to: citationURL)
             print("✅ [iCloud Export] Citation data exported successfully")
             return true
@@ -599,16 +611,16 @@ extension iCloudSyncManager {
                         self.isImporting = false
                     }
                 } else {
-                    throw iCloudError.importFailed("无效的数据格式")
+                    throw iCloudError.importFailed("validation_error".localized)
                 }
             } else {
-                throw iCloudError.importFailed("不支持的文件格式")
+                throw iCloudError.importFailed("validation_error".localized)
             }
             
         } catch {
             print("❌ [Manual Import] Failed to import file: \(error)")
             DispatchQueue.main.async {
-                self.errorMessage = "导入失败: \(error.localizedDescription)"
+                self.errorMessage = "import_failed_with_message".localized + ": \(error.localizedDescription)"
                 self.showingErrorAlert = true
                 self.isImporting = false
             }
@@ -634,7 +646,7 @@ extension iCloudSyncManager {
                 // Create or update scholar in DataManager
                 let scholar = Scholar(
                     id: scholarId,
-                    name: "获取中..." // 临时名称，稍后会更新
+                    name: "loading".localized // 临时名称，稍后会更新
                 )
                 
                 // Update scholar with citation data
@@ -647,7 +659,7 @@ extension iCloudSyncManager {
                     updatedScholar.name = scholarName
                 } else {
                     // Use a temporary name that will be updated later
-                    updatedScholar.name = "学者 \(scholarId.prefix(8))"
+                    updatedScholar.name = "scholar_default_name".localized + " \(scholarId.prefix(8))"
                 }
                 
                 DataManager.shared.addScholar(updatedScholar)
@@ -723,19 +735,19 @@ extension iCloudSyncManager {
         let defaultData: [[String: Any]] = [
             [
                 "scholarId": "scholar_001",
-                "scholarName": "张伟教授",
+                "scholarName": "scholar_default_name".localized + " 1",
                 "timestamp": ISO8601DateFormatter().string(from: Date()),
                 "citationCount": 150
             ],
             [
                 "scholarId": "scholar_002",
-                "scholarName": "李敏博士",
+                "scholarName": "scholar_default_name".localized + " 2",
                 "timestamp": ISO8601DateFormatter().string(from: Date().addingTimeInterval(-86400)),
                 "citationCount": 300
             ],
             [
                 "scholarId": "scholar_003",
-                "scholarName": "王强研究员",
+                "scholarName": "scholar_default_name".localized + " 3",
                 "timestamp": ISO8601DateFormatter().string(from: Date().addingTimeInterval(-172800)),
                 "citationCount": 450
             ]
@@ -781,14 +793,14 @@ extension iCloudSyncManager {
                     if let index = scholars.firstIndex(where: { $0.id == scholarId }) {
                         var updatedScholar = scholars[index]
                         
-                        let citationLevel = citationCount > 100000 ? "著名学者" : 
-                                         citationCount > 10000 ? "知名学者" : 
-                                         citationCount > 1000 ? "活跃学者" : "学者"
+                        let citationLevel = citationCount > 100000 ? "scholar_default_name".localized : 
+                                         citationCount > 10000 ? "scholar_default_name".localized : 
+                                         citationCount > 1000 ? "scholar_default_name".localized : "scholar_default_name".localized
                         
                         let readableId = scholarId.prefix(8).uppercased()
-                        let nameSuffix = citationCount > 100000 ? "教授" : 
-                                       citationCount > 10000 ? "博士" : 
-                                       citationCount > 1000 ? "研究员" : "学者"
+                        let nameSuffix = citationCount > 100000 ? "scholar_default_name".localized :
+                                       citationCount > 10000 ? "scholar_default_name".localized : 
+                                       citationCount > 1000 ? "scholar_default_name".localized : "scholar_default_name".localized
                         
                         updatedScholar.name = "\(citationLevel) \(nameSuffix) \(readableId)"
                         DataManager.shared.updateScholar(updatedScholar)

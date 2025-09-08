@@ -4,6 +4,19 @@ import WidgetKit
 import UniformTypeIdentifiers
 import AppIntents
 
+// MARK: - Haptics Prewarm Helper
+enum HapticsManager {
+    static func prewarm() {
+        // Prepare commonly used haptic generators to avoid first-use jank
+        let light = UIImpactFeedbackGenerator(style: .light)
+        light.prepare()
+        let medium = UIImpactFeedbackGenerator(style: .medium)
+        medium.prepare()
+        let selection = UISelectionFeedbackGenerator()
+        selection.prepare()
+    }
+}
+
 @main
 struct CiteTrackApp: App {
     @StateObject private var settingsManager = SettingsManager.shared
@@ -31,6 +44,10 @@ struct CiteTrackApp: App {
                 .environmentObject(dataManager)
                 .onOpenURL { url in
                     handleDeepLink(url: url)
+                }
+                .onAppear {
+                    // Prewarm haptics early to prevent first-gesture hitch
+                    HapticsManager.prewarm()
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -296,6 +313,77 @@ struct MainView: View {
 struct DashboardView: View {
     @StateObject private var dataManager = DataManager.shared
     @StateObject private var localizationManager = LocalizationManager.shared
+    @State private var sortOption: SortOption = .total
+    
+    enum SortOption: String, CaseIterable {
+        case total
+        case week
+        case month
+        case quarter
+        
+        func title(_ lm: LocalizationManager) -> String {
+            switch self {
+            case .total: return lm.localized("total_citations")
+            case .week: return lm.localized("recent_week")
+            case .month: return lm.localized("recent_month")
+            case .quarter: return lm.localized("recent_three_months")
+            }
+        }
+    }
+    
+    private var sortedScholars: [Scholar] {
+        switch sortOption {
+        case .total:
+            return dataManager.scholars.sorted { ($0.citations ?? 0) > ($1.citations ?? 0) }
+        case .week:
+            return dataManager.scholars.sorted {
+                let a = dataManager.getStoredGrowth(for: $0.id, days: 7) ?? 0
+                let b = dataManager.getStoredGrowth(for: $1.id, days: 7) ?? 0
+                return a > b
+            }
+        case .month:
+            return dataManager.scholars.sorted {
+                let a = dataManager.getStoredGrowth(for: $0.id, days: 30) ?? 0
+                let b = dataManager.getStoredGrowth(for: $1.id, days: 30) ?? 0
+                return a > b
+            }
+        case .quarter:
+            return dataManager.scholars.sorted {
+                let a = dataManager.getStoredGrowth(for: $0.id, days: 90) ?? 0
+                let b = dataManager.getStoredGrowth(for: $1.id, days: 90) ?? 0
+                return a > b
+            }
+        }
+    }
+    
+    private func subtitle(for scholar: Scholar) -> String {
+        switch sortOption {
+        case .total:
+            let total = scholar.citations ?? 0
+            return localizationManager.localized("total_citations") + ": \(total)"
+        case .week:
+            let delta = dataManager.getStoredGrowth(for: scholar.id, days: 7) ?? 0
+            let sign = delta >= 0 ? "+" : ""
+            return localizationManager.localized("recent_week") + ": \(sign)\(delta)"
+        case .month:
+            let delta = dataManager.getStoredGrowth(for: scholar.id, days: 30) ?? 0
+            let sign = delta >= 0 ? "+" : ""
+            return localizationManager.localized("recent_month") + ": \(sign)\(delta)"
+        case .quarter:
+            let delta = dataManager.getStoredGrowth(for: scholar.id, days: 90) ?? 0
+            let sign = delta >= 0 ? "+" : ""
+            return localizationManager.localized("recent_three_months") + ": \(sign)\(delta)"
+        }
+    }
+    
+    private func moveSortSelection(offset: Int) {
+        let all = SortOption.allCases
+        guard let currentIndex = all.firstIndex(of: sortOption) else { return }
+        let newIndex = min(max(currentIndex + offset, 0), all.count - 1)
+        if newIndex != currentIndex {
+            withAnimation { sortOption = all[newIndex] }
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -318,14 +406,30 @@ struct DashboardView: View {
                         )
                     }
                     
-                    // 学者列表
+                    // 排序控件
+                    if !dataManager.scholars.isEmpty {
+                        Picker(localizationManager.localized("sort_by"), selection: $sortOption) {
+                            ForEach(SortOption.allCases, id: \.self) { option in
+                                Text(option.title(localizationManager)).tag(option)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                    
+                    // 学者列表（支持排序与前三名勋章）
                     if !dataManager.scholars.isEmpty {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text(localizationManager.localized("scholar_list"))
+                            Text(localizationManager.localized("citation_ranking"))
                                 .font(.headline)
                             
-                            ForEach(dataManager.scholars, id: \.id) { scholar in
-                                ScholarRow(scholar: scholar)
+                            ForEach(Array(sortedScholars.enumerated()), id: \.element.id) { index, scholar in
+                                HStack(spacing: 8) {
+                                    if index < 3 {
+                                        Image(systemName: "medal.fill")
+                                            .foregroundColor(index == 0 ? .yellow : (index == 1 ? .gray : .orange))
+                                    }
+                                    ScholarRow(scholar: scholar, subtitle: subtitle(for: scholar))
+                                }
                             }
                         }
                     } else {
@@ -347,6 +451,23 @@ struct DashboardView: View {
                     }
                 }
                 .padding()
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 10)
+                        .onEnded { value in
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            // 增强水平意图判定与阈值，避免与纵向滚动冲突
+                            guard abs(dx) > abs(dy) * 1.2, abs(dx) > 60 else { return }
+                            if dx < 0 {
+                                moveSortSelection(offset: 1)
+                            } else {
+                                moveSortSelection(offset: -1)
+                            }
+                            let impact = UIImpactFeedbackGenerator(style: .light)
+                            impact.impactOccurred()
+                        }
+                )
             }
             .navigationTitle(localizationManager.localized("dashboard_title"))
         }
@@ -367,6 +488,8 @@ struct NewScholarView: View {
     @State private var refreshProgress = 0
     @State private var totalScholars = 0
     @State private var isEditing = false
+    @State private var showingDeleteScholarAlert = false
+    @State private var pendingDeleteScholars: [Scholar] = []
     @State private var showingDeleteAllAlert = false
     
     // 统一的sheet类型管理
@@ -403,6 +526,7 @@ struct NewScholarView: View {
                 case .addScholar:
                     AddScholarView { newScholar in
                         dataManager.addScholar(newScholar)
+                        fetchScholarInfo(for: newScholar)
                     }
                 case .chart(let scholar):
                     ScholarChartDetailView(scholar: scholar)
@@ -425,6 +549,23 @@ struct NewScholarView: View {
                 Button(localizationManager.localized("delete"), role: .destructive) { deleteAllScholars() }
             } message: {
                 Text(localizationManager.localized("delete_all_scholars_message"))
+            }
+            .alert(localizationManager.localized("delete_scholar_title"), isPresented: $showingDeleteScholarAlert) {
+                Button(localizationManager.localized("cancel"), role: .cancel) {
+                    pendingDeleteScholars.removeAll()
+                }
+                Button(localizationManager.localized("delete"), role: .destructive) {
+                    for s in pendingDeleteScholars { deleteScholar(s) }
+                    pendingDeleteScholars.removeAll()
+                }
+            } message: {
+                if pendingDeleteScholars.count == 1, let name = pendingDeleteScholars.first?.displayName, !name.isEmpty {
+                    Text(String(format: localizationManager.localized("delete_scholar_message_with_name"), name))
+                } else if pendingDeleteScholars.count > 1 {
+                    Text(String(format: localizationManager.localized("delete_scholars_message_with_count"), pendingDeleteScholars.count))
+                } else {
+                    Text(localizationManager.localized("delete_scholar_message"))
+                }
             }
             .overlay(loadingOverlay)
         }
@@ -472,7 +613,8 @@ struct NewScholarView: View {
                 }
                 .swipeActions(edge: .trailing) {
                     Button(localizationManager.localized("delete"), role: .destructive) {
-                        deleteScholar(scholar)
+                        pendingDeleteScholars = [scholar]
+                        showingDeleteScholarAlert = true
                     }
                     
                     Button(localizationManager.localized("edit")) {
@@ -488,7 +630,15 @@ struct NewScholarView: View {
                     .tint(.blue)
                 }
             }
-            .onDelete(perform: deleteScholars)
+            .onDelete { offsets in
+                var targets: [Scholar] = []
+                for index in offsets {
+                    let s = dataManager.scholarsForList[index]
+                    targets.append(s)
+                }
+                pendingDeleteScholars = targets
+                showingDeleteScholarAlert = true
+            }
             .onMove { indices, newOffset in
                 dataManager.applyMove(from: indices, to: newOffset)
             }
@@ -1439,6 +1589,7 @@ struct StatisticsCard: View {
 // 学者行组件
 struct ScholarRow: View {
     let scholar: Scholar
+    var subtitle: String? = nil
     @StateObject private var localizationManager = LocalizationManager.shared
     
     var body: some View {
@@ -1447,14 +1598,20 @@ struct ScholarRow: View {
                 Text(scholar.displayName)
                     .font(.headline)
                 
-                if let citations = scholar.citations {
-                    Text("\(localizationManager.localized("citations_count")): \(citations)")
+                if let subtitle = subtitle {
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 } else {
-                    Text(localizationManager.localized("no_data_available"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if let citations = scholar.citations {
+                        Text("\(localizationManager.localized("citations_count")): \(citations)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(localizationManager.localized("no_data_available"))
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             
@@ -1740,6 +1897,8 @@ struct ScholarChartDetailView: View {
     @State private var selectedDataPoint: ChartDataPoint? = nil // 选中的数据点
     @State private var isDragging = false // 是否正在拖动
     @State private var dragLocation: CGPoint? = nil // 拖动位置
+    @State private var outerDragStartLocation: CGPoint? = nil // 外层手势起点
+    @State private var chartFrame: CGRect = .zero // 图表区域在本视图坐标空间内的frame
     
     var timeRanges: [String] {
         return [
@@ -1772,6 +1931,36 @@ struct ScholarChartDetailView: View {
                     statisticsView
                 }
                 .padding()
+                .coordinateSpace(name: "chartSpace")
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 10)
+                        .onChanged { value in
+                            if outerDragStartLocation == nil {
+                                outerDragStartLocation = value.startLocation
+                            }
+                        }
+                        .onEnded { value in
+                            defer { outerDragStartLocation = nil }
+                            // 仅在未选中数据点时处理左右切换，避免与图表手势冲突
+                            let start = outerDragStartLocation ?? value.startLocation
+                            let startedInsideChart = chartFrame.contains(start)
+                            // 若在图表外开始滑动，则无论是否选中数据点都允许切换
+                            if selectedDataPoint != nil && startedInsideChart {
+                                return
+                            }
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            // 加强水平滑动判定，避免与纵向滚动冲突
+                            guard abs(dx) > abs(dy) * 1.2, abs(dx) > 60 else { return }
+                            if dx < 0 {
+                                moveTimeRangeSelection(offset: 1)
+                            } else {
+                                moveTimeRangeSelection(offset: -1)
+                            }
+                            let impact = UIImpactFeedbackGenerator(style: .light)
+                            impact.impactOccurred()
+                        }
+                )
             }
             .navigationTitle(localizationManager.localized("citation_trend"))
             .navigationBarTitleDisplayMode(.inline)
@@ -1801,6 +1990,17 @@ struct ScholarChartDetailView: View {
                 dragLocation = nil
                 print("🔍 [Chart Debug] ScholarChartDetailView onDisappear for: \(scholar.displayName)")
             }
+        }
+    }
+
+    private func moveTimeRangeSelection(offset: Int) {
+        let all = Array(0..<timeRanges.count)
+        let currentIndex = selectedTimeRange
+        let newIndex = min(max(currentIndex + offset, all.first ?? 0), (all.last ?? 0))
+        if newIndex != currentIndex {
+            withAnimation { selectedTimeRange = newIndex }
+            // 选择变化后加载数据
+            loadRealHistoryData()
         }
     }
     
@@ -2047,6 +2247,12 @@ struct ScholarChartDetailView: View {
                     .background(Color(.systemBackground))
                     .cornerRadius(12)
                     .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+                    .onAppear {
+                        chartFrame = geometry.frame(in: .named("chartSpace"))
+                    }
+                    .onChange(of: geometry.size) {
+                        chartFrame = geometry.frame(in: .named("chartSpace"))
+                    }
                 }
                 .frame(height: 200) // 固定高度
             }
@@ -2321,100 +2527,7 @@ extension DateFormatter {
     }()
 }
 
-// MARK: - Simple History Manager
-
-// 简化的引用历史结构
-struct SimpleCitationHistory: Codable {
-    let scholarId: String
-    let citationCount: Int
-    let timestamp: Date
-}
-
-// 简化的历史数据管理器（使用UserDefaults）
-class SimpleHistoryManager {
-    static let shared = SimpleHistoryManager()
-    private let userDefaults = UserDefaults.standard
-    private let historyKey = "CitationHistoryData"
-    
-    private init() {}
-    
-    // 保存历史记录
-    func saveHistory(_ history: SimpleCitationHistory) {
-        var histories = getAllHistories()
-        histories.append(history)
-        saveAllHistories(histories)
-        print("✅ 保存历史记录: \(history.scholarId) - \(history.citationCount)")
-    }
-    
-    // 如果引用数有变化才保存
-    func saveHistoryIfChanged(scholarId: String, citationCount: Int) {
-        let recent = getRecentHistory(for: scholarId, days: 1)
-        
-        // 检查最近的记录是否有相同的引用数
-        if let latestHistory = recent.last,
-           latestHistory.citationCount == citationCount {
-            print("📝 引用数未变化，跳过保存: \(scholarId)")
-            return
-        }
-        
-        let newHistory = SimpleCitationHistory(
-            scholarId: scholarId,
-            citationCount: citationCount,
-            timestamp: Date()
-        )
-        saveHistory(newHistory)
-    }
-    
-    // 获取指定学者在时间范围内的历史记录
-    func getHistory(for scholarId: String, from startDate: Date, to endDate: Date, completion: @escaping ([SimpleCitationHistory]) -> Void) {
-        let allHistories = getAllHistories()
-        let filtered = allHistories.filter { history in
-            history.scholarId == scholarId &&
-            history.timestamp >= startDate &&
-            history.timestamp <= endDate
-        }.sorted { $0.timestamp < $1.timestamp }
-        
-        completion(filtered)
-    }
-    
-    // 获取最近几天的历史记录
-    func getRecentHistory(for scholarId: String, days: Int) -> [SimpleCitationHistory] {
-        let endDate = Date()
-        let startDate = Calendar.current.date(byAdding: .day, value: -days, to: endDate) ?? endDate
-        
-        let allHistories = getAllHistories()
-        return allHistories.filter { history in
-            history.scholarId == scholarId &&
-            history.timestamp >= startDate &&
-            history.timestamp <= endDate
-        }.sorted { $0.timestamp < $1.timestamp }
-    }
-    
-    // 获取所有历史记录
-    private func getAllHistories() -> [SimpleCitationHistory] {
-        guard let data = userDefaults.data(forKey: historyKey),
-              let histories = try? JSONDecoder().decode([SimpleCitationHistory].self, from: data) else {
-            return []
-        }
-        return histories
-    }
-    
-    // 保存所有历史记录
-    private func saveAllHistories(_ histories: [SimpleCitationHistory]) {
-        if let data = try? JSONEncoder().encode(histories) {
-            userDefaults.set(data, forKey: historyKey)
-        }
-    }
-    
-    // 清理旧数据（可选，保留最近90天的数据）
-    func cleanOldData() {
-        let cutoffDate = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
-        let allHistories = getAllHistories()
-        let filteredHistories = allHistories.filter { $0.timestamp >= cutoffDate }
-        saveAllHistories(filteredHistories)
-        print("🧹 清理旧历史数据，保留 \(filteredHistories.count) 条记录")
-    }
-}
+// (已移除) Simple 历史数据管理实现，统一由 DataManager 维护
 
 // MARK: - Deep Link Notifications
 extension Notification.Name {
