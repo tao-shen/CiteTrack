@@ -29,8 +29,12 @@ Temporary Items
 .apdisk
 
 # Xcode
-*.xcodeproj/
-*.xcworkspace/
+# 忽略用户特定的Xcode文件，但保留项目文件
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcshareddata/
+*.xcworkspace/xcuserdata/
+*.xcworkspace/xcshareddata/
 build/
 DerivedData/
 *.pbxuser

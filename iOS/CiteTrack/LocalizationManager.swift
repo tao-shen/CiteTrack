@@ -76,8 +76,23 @@ public class LocalizationManager: ObservableObject {
         if let saved = savedLanguage, let language = Language(rawValue: saved) {
             self.currentLanguage = language
         } else {
-            // 默认使用英文，而不是系统语言
-            self.currentLanguage = .english
+            // 默认跟随系统语言
+            let systemCode: String = {
+                if #available(iOS 16.0, *) {
+                    return Locale.current.language.languageCode?.identifier ?? "en"
+                } else {
+                    return Locale.current.languageCode ?? "en"
+                }
+            }()
+            switch systemCode {
+            case "zh": self.currentLanguage = .chinese
+            case "ja": self.currentLanguage = .japanese
+            case "ko": self.currentLanguage = .korean
+            case "es": self.currentLanguage = .spanish
+            case "fr": self.currentLanguage = .french
+            case "de": self.currentLanguage = .german
+            default: self.currentLanguage = .english
+            }
         }
         
         loadLocalizations()
@@ -193,7 +208,8 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Check Sync Status",
             "data_management": "Data Management",
             "import_from_icloud": "Import from iCloud",
-            "manual_import_file": "Import File Manually",
+            "manual_import_file": "Import File",
+            "export_to_device": "Export File",
             "export_to_icloud": "Export to iCloud",
             "app_description": "CiteTrack - Academic Citation Tracking Tool",
             "app_help": "Help scholars track and manage Google Scholar citation data",
@@ -213,6 +229,7 @@ public class LocalizationManager: ObservableObject {
             "operation_failed": "Operation Failed",
             "import_result": "Import Result",
             "export_success": "Export Successful! Data saved to iCloud Drive CiteTrack folder.",
+            "export_file_success": "File exported successfully! You can now share it with other apps.",
             "export_to_icloud_alert_title": "Export to iCloud",
             "export_to_icloud_alert_message": "This will export current data to CiteTrack folder in iCloud Drive.",
             "import_from_icloud_alert_title": "Import from iCloud",
@@ -477,7 +494,8 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "检查同步状态",
             "data_management": "数据管理",
             "import_from_icloud": "从iCloud导入",
-            "manual_import_file": "手动导入文件",
+            "manual_import_file": "导入文件",
+            "export_to_device": "导出文件",
             "export_to_icloud": "导出到iCloud",
             "app_description": "CiteTrack - 学术引用追踪工具",
             "app_help": "帮助学者追踪和管理Google Scholar引用数据",
@@ -496,6 +514,7 @@ public class LocalizationManager: ObservableObject {
             "operation_failed": "操作失败",
             "import_result": "导入结果",
             "export_success": "导出成功！数据已保存到iCloud Drive的CiteTrack文件夹。",
+            "export_file_success": "文件导出成功！现在可以与其他应用分享。",
             "export_to_icloud_alert_title": "导出到iCloud",
             "export_to_icloud_alert_message": "这将把当前数据导出到iCloud Drive的CiteTrack文件夹。",
             "import_from_icloud_alert_title": "从iCloud导入",
@@ -761,7 +780,8 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "同期ステータスを確認",
             "data_management": "データ管理",
             "import_from_icloud": "iCloudからインポート",
-            "manual_import_file": "ファイルを手動でインポート",
+            "manual_import_file": "ファイルをインポート",
+            "export_to_device": "ファイルをエクスポート",
             "export_to_icloud": "iCloudにエクスポート",
             "app_description": "CiteTrack - 学術引用追跡ツール",
             "app_help": "研究者がGoogle Scholarの引用データを追跡・管理するのを支援",
@@ -777,6 +797,7 @@ public class LocalizationManager: ObservableObject {
             "operation_failed": "操作に失敗しました",
             "import_result": "インポート結果",
             "export_success": "エクスポート成功！データがiCloud DriveのCiteTrackフォルダに保存されました。",
+            "export_file_success": "ファイルのエクスポートが成功しました！他のアプリと共有できます。",
             "export_to_icloud_alert_title": "iCloudにエクスポート",
             "export_to_icloud_alert_message": "現在のデータをiCloud DriveのCiteTrackフォルダにエクスポートします。",
             "import_from_icloud_alert_title": "iCloudからインポート",
@@ -1038,7 +1059,8 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "동기화 상태 확인",
             "data_management": "데이터 관리",
             "import_from_icloud": "iCloud에서 가져오기",
-            "manual_import_file": "파일 수동 가져오기",
+            "manual_import_file": "파일 가져오기",
+            "export_to_device": "파일 내보내기",
             "export_to_icloud": "iCloud로 내보내기",
             "app_description": "CiteTrack - 학술 인용 추적 도구",
             "app_help": "학자들이 Google Scholar 인용 데이터를 추적하고 관리하는 것을 돕습니다",
@@ -1054,6 +1076,7 @@ public class LocalizationManager: ObservableObject {
             "operation_failed": "작업 실패",
             "import_result": "가져오기 결과",
             "export_success": "내보내기 성공! 데이터가 iCloud Drive의 CiteTrack 폴더에 저장되었습니다.",
+            "export_file_success": "파일 내보내기 성공! 이제 다른 앱과 공유할 수 있습니다.",
             "export_to_icloud_alert_title": "iCloud로 내보내기",
             "export_to_icloud_alert_message": "현재 데이터를 iCloud Drive의 CiteTrack 폴더로 내보냅니다.",
             "import_from_icloud_alert_title": "iCloud에서 가져오기",
@@ -1315,7 +1338,8 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Verificar Estado de Sincronización",
             "data_management": "Gestión de Datos",
             "import_from_icloud": "Importar desde iCloud",
-            "manual_import_file": "Importar Archivo Manualmente",
+            "manual_import_file": "Importar archivo",
+            "export_to_device": "Exportar archivo",
             "export_to_icloud": "Exportar a iCloud",
             "app_description": "CiteTrack - Herramienta de Seguimiento de Citas Académicas",
             "app_help": "Ayuda a los académicos a rastrear y gestionar datos de citas de Google Scholar",
@@ -1331,6 +1355,7 @@ public class LocalizationManager: ObservableObject {
             "operation_failed": "Operación Fallida",
             "import_result": "Resultado de Importación",
             "export_success": "¡Exportación Exitosa! Los datos se guardaron en la carpeta CiteTrack de iCloud Drive.",
+            "export_file_success": "¡Archivo exportado exitosamente! Ahora puedes compartirlo con otras aplicaciones.",
             "export_to_icloud_alert_title": "Exportar a iCloud",
             "export_to_icloud_alert_message": "Esto exportará los datos actuales a la carpeta CiteTrack en iCloud Drive.",
             "import_from_icloud_alert_title": "Importar desde iCloud",
@@ -1592,7 +1617,8 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Vérifier le Statut de Synchronisation",
             "data_management": "Gestion des Données",
             "import_from_icloud": "Importer depuis iCloud",
-            "manual_import_file": "Importer un Fichier Manuellement",
+            "manual_import_file": "Importer un fichier",
+            "export_to_device": "Exporter un fichier",
             "export_to_icloud": "Exporter vers iCloud",
             "app_description": "CiteTrack - Outil de Suivi des Citations Académiques",
             "app_help": "Aide les chercheurs à suivre et gérer les données de citations Google Scholar",
@@ -1608,6 +1634,7 @@ public class LocalizationManager: ObservableObject {
             "operation_failed": "Opération Échouée",
             "import_result": "Résultat d'Importation",
             "export_success": "Exportation Réussie ! Les données ont été sauvegardées dans le dossier CiteTrack d'iCloud Drive.",
+            "export_file_success": "Fichier exporté avec succès ! Vous pouvez maintenant le partager avec d'autres applications.",
             "export_to_icloud_alert_title": "Exporter vers iCloud",
             "export_to_icloud_alert_message": "Cela exportera les données actuelles vers le dossier CiteTrack dans iCloud Drive.",
             "import_from_icloud_alert_title": "Importer depuis iCloud",
@@ -1869,7 +1896,8 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Synchronisationsstatus Prüfen",
             "data_management": "Datenverwaltung",
             "import_from_icloud": "Von iCloud Importieren",
-            "manual_import_file": "Datei Manuell Importieren",
+            "manual_import_file": "Datei importieren",
+            "export_to_device": "Datei exportieren",
             "export_to_icloud": "Nach iCloud Exportieren",
             "app_description": "CiteTrack - Akademisches Zitations-Tracking-Tool",
             "app_help": "Hilft Forschern beim Verfolgen und Verwalten von Google Scholar-Zitationsdaten",
@@ -1885,6 +1913,7 @@ public class LocalizationManager: ObservableObject {
             "operation_failed": "Operation Fehlgeschlagen",
             "import_result": "Import-Ergebnis",
             "export_success": "Export Erfolgreich! Daten wurden im CiteTrack-Ordner in iCloud Drive gespeichert.",
+            "export_file_success": "Datei erfolgreich exportiert! Sie können sie jetzt mit anderen Apps teilen.",
             "export_to_icloud_alert_title": "Nach iCloud Exportieren",
             "export_to_icloud_alert_message": "Dies exportiert die aktuellen Daten in den CiteTrack-Ordner in iCloud Drive.",
             "import_from_icloud_alert_title": "Von iCloud Importieren",

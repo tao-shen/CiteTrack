@@ -84,9 +84,9 @@ public class SettingsManager: ObservableObject {
         self.notificationsEnabled = userDefaults.object(forKey: Keys.notificationsEnabled) as? Bool ?? true
         self.language = userDefaults.string(forKey: Keys.language) ?? "auto"
         
-        // 主题设置
-        let themeRawValue = userDefaults.string(forKey: Keys.theme) ?? AppTheme.system.rawValue
-        self.theme = AppTheme(rawValue: themeRawValue) ?? .system
+        // 主题设置（默认浅色）
+        let themeRawValue = userDefaults.string(forKey: Keys.theme) ?? AppTheme.light.rawValue
+        self.theme = AppTheme(rawValue: themeRawValue) ?? .light
         
         // Widget 主题（优先从 App Group 读取，其次标准，默认 system）
         if let agValue = appGroupDefaults?.string(forKey: Keys.widgetTheme),
@@ -96,7 +96,8 @@ public class SettingsManager: ObservableObject {
                   let t = AppTheme(rawValue: stdValue) {
             self.widgetTheme = t
         } else {
-            self.widgetTheme = .system
+            // 默认小组件为深色
+            self.widgetTheme = .dark
         }
         
         // 图表配置
@@ -195,7 +196,10 @@ public class SettingsManager: ObservableObject {
         iCloudSyncEnabled = false
         notificationsEnabled = true
         language = "auto"
-        theme = .system
+        // 默认主应用浅色
+        theme = .light
+        // 默认小组件深色
+        widgetTheme = .dark
         chartConfiguration = .default
     }
     

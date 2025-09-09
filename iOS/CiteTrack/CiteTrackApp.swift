@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 import BackgroundTasks
 import WidgetKit
 import UniformTypeIdentifiers
 import AppIntents
+import CoreTelephony
 
 // MARK: - Haptics Prewarm Helper
 enum HapticsManager {
@@ -48,6 +50,8 @@ struct CiteTrackApp: App {
                 .onAppear {
                     // Prewarm haptics early to prevent first-gesture hitch
                     HapticsManager.prewarm()
+                    // 启动时检查蜂窝数据可用性
+                    CellularDataPermission.shared.triggerCheck()
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -195,6 +199,35 @@ struct CiteTrackApp: App {
             print("🎯 [Widget] 学者数量不足，无法切换")
             // 仍然更新小组件以提供反馈
             WidgetCenter.shared.reloadAllTimelines()
+        }
+    }
+}
+
+// MARK: - Cellular Data Permission Helper
+final class CellularDataPermission {
+    static let shared = CellularDataPermission()
+    private let cellularData = CTCellularData()
+    private init() {}
+    
+    func triggerCheck() {
+        cellularData.cellularDataRestrictionDidUpdateNotifier = { state in
+            switch state {
+            case .restricted:
+                print("📶 蜂窝数据受限（用户关闭或受限）")
+            case .notRestricted:
+                print("📶 蜂窝数据可用")
+            case .restrictedStateUnknown:
+                fallthrough
+            @unknown default:
+                print("📶 蜂窝数据状态未知")
+            }
+        }
+        let state = cellularData.restrictedState
+        switch state {
+        case .restricted: print("📶[Init] 蜂窝数据受限")
+        case .notRestricted: print("📶[Init] 蜂窝数据可用")
+        case .restrictedStateUnknown: print("📶[Init] 蜂窝数据状态未知")
+        @unknown default: print("📶[Init] 蜂窝数据未知状态")
         }
     }
 }
@@ -1204,8 +1237,19 @@ struct SettingsView: View {
     @State private var showingExportAlert = false
     @State private var showingImportResult = false
     @State private var importResult: ImportResult?
+    // 兼容 iCloudSyncManager 内部触发的结果弹窗
+    @State private var showingManagerImportResult = false
+    @State private var managerImportMessage = ""
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    @State private var showingShareSheet = false // 兼容旧路径（保留）
+    @State private var shareItems: [Any] = [] // 兼容旧路径（保留）
+    struct ShareItem: Identifiable { let id = UUID(); let url: URL }
+    @State private var shareURL: ShareItem? = nil
+    struct ShareDataItem: Identifiable { let id = UUID(); let data: Data; let fileName: String }
+    @State private var shareDataItem: ShareDataItem? = nil
+    @State private var showingExportLocalResult = false
+    @State private var exportLocalMessage = ""
     
     var body: some View {
         NavigationView {
@@ -1288,9 +1332,8 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-                }
-                
-                Section(localizationManager.localized("data_management")) {
+
+                    // 从 iCloud 导入
                     Button(action: {
                         showingImportAlert = true
                     }) {
@@ -1300,7 +1343,21 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-                    
+
+                    // 导出到 iCloud
+                    Button(action: {
+                        showingExportAlert = true
+                    }) {
+                        HStack {
+                            Image(systemName: "icloud.and.arrow.up")
+                            Text(localizationManager.localized("export_to_icloud"))
+                        }
+                    }
+                    .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+                }
+                
+                Section(localizationManager.localized("data_management")) {
+                    // 本地导入（文件）
                     Button(action: {
                         iCloudManager.showFilePicker()
                     }) {
@@ -1310,13 +1367,12 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-                    
-                    Button(action: {
-                        showingExportAlert = true
-                    }) {
+
+                    // 导出到本地（分享）
+                    Button(action: exportToLocalDevice) {
                         HStack {
-                            Image(systemName: "icloud.and.arrow.up")
-                            Text(localizationManager.localized("export_to_icloud"))
+                            Image(systemName: "square.and.arrow.down")
+                            Text(localizationManager.localized("export_to_device"))
                         }
                     }
                     .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
@@ -1366,6 +1422,93 @@ struct SettingsView: View {
                     iCloudManager.importFromFile(url: url)
                 }
             }
+            .overlay(
+                Group {
+                    if iCloudManager.isImporting || iCloudManager.isExporting {
+                        ZStack {
+                            Color.black.opacity(0.25).ignoresSafeArea()
+                            VStack(spacing: 12) {
+                                ProgressView()
+                                Text(iCloudManager.isImporting ? localizationManager.localized("importing_from_icloud") : localizationManager.localized("exporting_to_icloud"))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(16)
+                            .background(Color.black.opacity(0.6))
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+            )
+            // 优先使用基于 URL 的 sheet(item:)，避免首帧为空
+            .sheet(item: $shareURL, onDismiss: {
+                shareURL = nil
+            }) { item in
+                ActivityView(activityItems: [ExportURLItemSource(url: item.url, fileName: item.url.lastPathComponent)]) { activityType, completed, _, error in
+                    if let error = error {
+                        exportLocalMessage = localizationManager.localized("export_failed_with_message") + ": " + error.localizedDescription
+                        showingExportLocalResult = true
+                    } else if completed {
+                        exportLocalMessage = localizationManager.localized("export_file_success")
+                        showingExportLocalResult = true
+                    } else {
+                        // 用户取消：不提示
+                    }
+                }
+            }
+            // 兼容旧的布尔开关路径（防御性保留）
+            .sheet(isPresented: $showingShareSheet, onDismiss: {
+                shareItems = []
+            }) {
+                ActivityView(activityItems: shareItems) { activityType, completed, _, error in
+                    if let error = error {
+                        exportLocalMessage = localizationManager.localized("export_failed_with_message") + ": " + error.localizedDescription
+                        showingExportLocalResult = true
+                    } else if completed {
+                        exportLocalMessage = localizationManager.localized("export_file_success")
+                        showingExportLocalResult = true
+                    } else {
+                        // 用户取消：不提示
+                    }
+                }
+            }
+            // 基于 Data 的分享（保留备用；当前主路径为 URL 文件分享）
+            .sheet(item: $shareDataItem, onDismiss: { shareDataItem = nil }) { item in
+                let jsonUTI: String = {
+                    if #available(iOS 14.0, *) { return UTType.json.identifier } else { return "public.json" }
+                }()
+                let jsonItem = ExportDataItemSource(data: item.data, fileName: item.fileName, utiIdentifier: jsonUTI)
+                ActivityView(activityItems: [jsonItem]) { activityType, completed, _, error in
+                    if let error = error {
+                        exportLocalMessage = localizationManager.localized("export_failed_with_message") + ": " + error.localizedDescription
+                        showingExportLocalResult = true
+                    } else if completed {
+                        exportLocalMessage = localizationManager.localized("export_file_success")
+                        showingExportLocalResult = true
+                    } else {
+                        // 用户取消：不提示
+                    }
+                }
+            }
+            .alert(localizationManager.localized("notice"), isPresented: $showingExportLocalResult) {
+                Button(localizationManager.localized("confirm")) { }
+            } message: {
+                Text(exportLocalMessage)
+            }
+            // 兼容手动文件导入完成后的结果提示（由 iCloudSyncManager 产生）
+            .alert(localizationManager.localized("import_result"), isPresented: $showingManagerImportResult) {
+                Button(localizationManager.localized("confirm")) { }
+            } message: {
+                Text(managerImportMessage)
+            }
+            .onReceive(iCloudManager.$showingImportResult) { show in
+                guard show else { return }
+                let result = iCloudManager.importResult
+                let msg = result?.description ?? localizationManager.localized("import_completed")
+                managerImportMessage = msg
+                showingManagerImportResult = true
+                // 复位 manager 的提示开关，避免下次不触发
+                iCloudManager.showingImportResult = false
+            }
         }
     }
     
@@ -1386,13 +1529,114 @@ struct SettingsView: View {
         iCloudManager.exportToiCloud { result in
             switch result {
             case .success:
-                self.errorMessage = localizationManager.localized("export_success")
+                // 导出学者统计
+                let exportedScholars = DataManager.shared.scholars.count
+                self.errorMessage = String(format: localizationManager.localized("export_success")) + " (" + String(format: localizationManager.localized("imported_scholars_count")) + " \(exportedScholars) " + localizationManager.localized("scholars_unit") + ")"
                 self.showingErrorAlert = true
             case .failure(let error):
                 self.errorMessage = error.localizedDescription
                 self.showingErrorAlert = true
             }
         }
+    }
+
+    private func exportToLocalDevice() {
+        do {
+            // URL 文件分享：生成 citetrack_YYYYMMDD.json 并分享
+            let temp = try writeExportToTemporaryFile()
+            let fileURL = try persistExportFile(fromTempURL: temp)
+            prewarmExportsDirectory()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { self.shareURL = ShareItem(url: fileURL) }
+        } catch {
+            self.errorMessage = localizationManager.localized("export_failed_with_message") + ": " + error.localizedDescription
+            self.showingErrorAlert = true
+        }
+    }
+
+    // 生成导出数据并写入临时文件
+    private func writeExportToTemporaryFile(filename: String = "") throws -> URL {
+        let data = try makeExportJSONData()
+        // 命名：citetrack_YYYYMMDD.json（本地时区）
+        let date = Date()
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyyMMdd"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        let name = filename.isEmpty ? "citetrack_\(fmt.string(from: date)).json" : filename
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try data.write(to: tempURL, options: [.atomic])
+        return tempURL
+    }
+
+    // 从 DataManager 构建导出用 JSON（与导入格式兼容）
+    private func makeExportJSONData() throws -> Data {
+        let formatter = ISO8601DateFormatter()
+        let scholars = DataManager.shared.scholars
+        var exportEntries: [[String: Any]] = []
+
+        for scholar in scholars {
+            let histories = DataManager.shared.getHistory(for: scholar.id)
+            if histories.isEmpty {
+                if let citations = scholar.citations {
+                    let ts = scholar.lastUpdated ?? Date()
+                    exportEntries.append([
+                        "scholarId": scholar.id,
+                        "scholarName": scholar.displayName,
+                        "timestamp": formatter.string(from: ts),
+                        "citationCount": citations
+                    ])
+                }
+            } else {
+                for h in histories {
+                    exportEntries.append([
+                        "scholarId": scholar.id,
+                        "scholarName": scholar.displayName,
+                        "timestamp": formatter.string(from: h.timestamp),
+                        "citationCount": h.citationCount
+                    ])
+                }
+            }
+        }
+        return try JSONSerialization.data(withJSONObject: exportEntries, options: .prettyPrinted)
+    }
+
+    // 将临时文件持久化到 Documents/Exports 下，提升可分享性与稳定性
+    private func persistExportFile(fromTempURL tempURL: URL) throws -> URL {
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("Exports", isDirectory: true)
+        if !fm.fileExists(atPath: dir.path) {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        let filename = tempURL.lastPathComponent
+        let dest = dir.appendingPathComponent(filename)
+        if fm.fileExists(atPath: dest.path) {
+            try? fm.removeItem(at: dest)
+        }
+        // 使用移动代替拷贝，减少 IO 与状态不一致
+        try fm.moveItem(at: tempURL, to: dest)
+        // 取消文件保护，避免首次无法打开
+        try? fm.setAttributes([.protectionKey: FileProtectionType.none], ofItemAtPath: dest.path)
+        // 可选：排除备份
+        var rv = URLResourceValues()
+        rv.isExcludedFromBackup = true
+        var mut = dest
+        try? mut.setResourceValues(rv)
+        return dest
+    }
+
+    // 预热 Exports 目录与文件提供者，降低首次分享慢/失败
+    private func prewarmExportsDirectory() {
+        let fm = FileManager.default
+        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("Exports", isDirectory: true)
+        if !fm.fileExists(atPath: dir.path) {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        let prewarmURL = dir.appendingPathComponent("._prewarm.json")
+        let data = "{}".data(using: .utf8) ?? Data()
+        // 写入-删除一次，触发系统层的目录/域初始化
+        try? data.write(to: prewarmURL, options: [.atomic])
+        try? fm.removeItem(at: prewarmURL)
     }
 }
 
@@ -1811,6 +2055,70 @@ struct FilePickerView: UIViewControllerRepresentable {
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             parent.isPresented = false
         }
+    }
+}
+
+// 通用分享面板封装
+struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+    var onComplete: ((UIActivity.ActivityType?, Bool, [Any]?, Error?) -> Void)? = nil
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let vc = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        vc.completionWithItemsHandler = { activityType, completed, returnedItems, error in
+            onComplete?(activityType, completed, returnedItems, error)
+        }
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+// 以 Data 作为分享项，提供 UTI 与文件名，避免 URL 打开慢及 -10814
+final class ExportDataItemSource: NSObject, UIActivityItemSource {
+    private let data: Data
+    private let fileName: String
+    private let utiIdentifier: String
+    init(data: Data, fileName: String, utiIdentifier: String) { self.data = data; self.fileName = fileName; self.utiIdentifier = utiIdentifier }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        return data
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
+        return data
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, dataTypeIdentifierForActivityType activityType: UIActivity.ActivityType?) -> String {
+        return utiIdentifier
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
+        return fileName
+    }
+}
+
+// 使用 URL 作为分享项，提供显式 UTI 与标题，减少 LS 判定错误
+final class ExportURLItemSource: NSObject, UIActivityItemSource {
+    private let url: URL
+    private let fileName: String
+    init(url: URL, fileName: String) { self.url = url; self.fileName = fileName }
+
+    func activityViewControllerPlaceholderItem(_ activityViewController: UIActivityViewController) -> Any {
+        return url
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, itemForActivityType activityType: UIActivity.ActivityType?) -> Any? {
+        return url
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, dataTypeIdentifierForActivityType activityType: UIActivity.ActivityType?) -> String {
+        if #available(iOS 14.0, *) { return UTType.json.identifier } else { return "public.json" }
+    }
+
+    func activityViewController(_ activityViewController: UIActivityViewController, subjectForActivityType activityType: UIActivity.ActivityType?) -> String {
+        return fileName
     }
 }
 

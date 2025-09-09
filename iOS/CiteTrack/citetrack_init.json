@@ -1,0 +1,110 @@
+[
+  {
+    "scholarName" : "Yoshua Bengio",
+    "scholarId" : "kukA0LcAAAAJ",
+    "citationCount" : 976477,
+    "timestamp" : "2025-09-02T04:25:06Z"
+  },
+  {
+    "scholarName" : "Yoshua Bengio",
+    "timestamp" : "2025-09-04T12:01:20Z",
+    "scholarId" : "kukA0LcAAAAJ",
+    "citationCount" : 977717
+  },
+  {
+    "scholarId" : "kukA0LcAAAAJ",
+    "scholarName" : "Yoshua Bengio",
+    "citationCount" : 978817,
+    "timestamp" : "2025-09-07T13:47:02Z"
+  },
+  {
+    "citationCount" : 979654,
+    "timestamp" : "2025-09-08T07:19:47Z",
+    "scholarName" : "Yoshua Bengio",
+    "scholarId" : "kukA0LcAAAAJ"
+  },
+  {
+    "scholarId" : "kukA0LcAAAAJ",
+    "timestamp" : "2025-09-09T12:04:05Z",
+    "citationCount" : 980278,
+    "scholarName" : "Yoshua Bengio"
+  },
+  {
+    "citationCount" : 954749,
+    "scholarName" : "Geoffrey Hinton",
+    "scholarId" : "JicYPdAAAAAJ",
+    "timestamp" : "2025-09-01T02:08:37Z"
+  },
+  {
+    "citationCount" : 954749,
+    "timestamp" : "2025-09-02T02:22:54Z",
+    "scholarId" : "JicYPdAAAAAJ",
+    "scholarName" : "Geoffrey Hinton"
+  },
+  {
+    "scholarId" : "JicYPdAAAAAJ",
+    "scholarName" : "Geoffrey Hinton",
+    "citationCount" : 955673,
+    "timestamp" : "2025-09-03T02:22:12Z"
+  },
+  {
+    "timestamp" : "2025-09-04T12:01:19Z",
+    "scholarId" : "JicYPdAAAAAJ",
+    "scholarName" : "Geoffrey Hinton",
+    "citationCount" : 955806
+  },
+  {
+    "scholarName" : "Geoffrey Hinton",
+    "timestamp" : "2025-09-05T20:43:43Z",
+    "scholarId" : "JicYPdAAAAAJ",
+    "citationCount" : 955806
+  },
+  {
+    "timestamp" : "2025-09-06T20:35:06Z",
+    "citationCount" : 956583,
+    "scholarId" : "JicYPdAAAAAJ",
+    "scholarName" : "Geoffrey Hinton"
+  },
+  {
+    "scholarId" : "JicYPdAAAAAJ",
+    "citationCount" : 957270,
+    "timestamp" : "2025-09-08T07:19:47Z",
+    "scholarName" : "Geoffrey Hinton"
+  },
+  {
+    "timestamp" : "2025-09-09T12:04:04Z",
+    "citationCount" : 957907,
+    "scholarId" : "JicYPdAAAAAJ",
+    "scholarName" : "Geoffrey Hinton"
+  },
+  {
+    "citationCount" : 423218,
+    "scholarId" : "WLN3QrAAAAAJ",
+    "timestamp" : "2025-09-02T04:25:07Z",
+    "scholarName" : "Yann LeCun"
+  },
+  {
+    "scholarId" : "WLN3QrAAAAAJ",
+    "scholarName" : "Yann LeCun",
+    "citationCount" : 424352,
+    "timestamp" : "2025-09-04T12:01:21Z"
+  },
+  {
+    "citationCount" : 424749,
+    "scholarName" : "Yann LeCun",
+    "scholarId" : "WLN3QrAAAAAJ",
+    "timestamp" : "2025-09-07T13:47:03Z"
+  },
+  {
+    "scholarId" : "WLN3QrAAAAAJ",
+    "timestamp" : "2025-09-08T07:19:48Z",
+    "scholarName" : "Yann LeCun",
+    "citationCount" : 425088
+  },
+  {
+    "scholarName" : "Yann LeCun",
+    "citationCount" : 425312,
+    "timestamp" : "2025-09-09T12:04:06Z",
+    "scholarId" : "WLN3QrAAAAAJ"
+  }
+]
