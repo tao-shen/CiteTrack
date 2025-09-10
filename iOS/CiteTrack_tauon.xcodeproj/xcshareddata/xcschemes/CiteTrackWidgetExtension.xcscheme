@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
    LastUpgradeVersion = "1640"
+   wasCreatedForAppExtension = "YES"
    version = "2.0">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -56,8 +57,18 @@
       debugServiceExtension = "internal"
       allowLocationSimulation = "YES"
       launchAutomaticallySubstyle = "2">
-      <BuildableProductRunnable
-         runnableDebuggingMode = "0">
+      <RemoteRunnable
+         runnableDebuggingMode = "2"
+         BundleIdentifier = "com.apple.springboard">
+         <BuildableReference
+            BuildableIdentifier = "primary"
+            BlueprintIdentifier = "49C743B1DE4AFA45CD67A1F1"
+            BuildableName = "CiteTrackWidgetExtension.appex"
+            BlueprintName = "CiteTrackWidgetExtension"
+            ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
+         </BuildableReference>
+      </RemoteRunnable>
+      <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "68224F4F68224F4F68224F4F68224"
@@ -65,7 +76,7 @@
             BlueprintName = "CiteTrack"
             ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
          </BuildableReference>
-      </BuildableProductRunnable>
+      </MacroExpansion>
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "_XCWidgetKind"
@@ -79,7 +90,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "_XCWidgetFamily"
-            value = "systemMedium"
+            value = "systemSmall"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

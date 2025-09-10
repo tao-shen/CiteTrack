@@ -1,7 +1,7 @@
 import SwiftUI
 import CoreFoundation
 // 导入共享常量
-let appGroupIdentifier: String = "group.com.tao-shen.CiteTrack"
+let appGroupIdentifier: String = "group.com.citetrack.CiteTrack"
 
 // 发送跨进程 Darwin 通知，通知主App从 App Group 拉取最新时间
 private func postDarwinNotification(_ name: String) {

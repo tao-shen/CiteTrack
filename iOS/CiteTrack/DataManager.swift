@@ -142,7 +142,12 @@ public class DataManager: ObservableObject {
         var newOrder: [String] = []
         for id in displayOrder where currentIds.contains(id) { newOrder.append(id) }
         for id in scholars.map({ $0.id }) where !newOrder.contains(id) { newOrder.append(id) }
-        if newOrder != displayOrder { displayOrder = newOrder; saveOrder() }
+        if newOrder != displayOrder { 
+            DispatchQueue.main.async {
+                self.displayOrder = newOrder
+                self.saveOrder()
+            }
+        }
     }
 
     /// 保存置顶集合

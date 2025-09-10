@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 扩展基本信息 -->
+    <key>CFBundleDisplayName</key>
+    <string>CiteTrack File Provider</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    
+    <!-- 文件提供程序扩展配置 -->
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionFileProviderDocumentGroup</key>
+        <string>primary</string>
+        <key>NSExtensionFileProviderSupportsEnumeration</key>
+        <true/>
+        <key>NSExtensionFileProviderSupportsPaging</key>
+        <true/>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.fileprovider-ui</string>
+        <key>NSExtensionPrincipalClass</key>
+        <string>FileProviderExtension</string>
+        
+        <!-- 文件提供程序属性 -->
+        <key>NSExtensionAttributes</key>
+        <dict>
+            <!-- 域配置 -->
+            <key>NSFileProviderDomain</key>
+            <dict>
+                <key>NSFileProviderDomainName</key>
+                <string>CiteTrack</string>
+                <key>NSFileProviderDomainDisplayName</key>
+                <string>CiteTrack Documents</string>
+                <key>NSFileProviderDomainIdentifier</key>
+                <string>com.citetrack.fileprovider</string>
+            </dict>
+            
+            <!-- 支持的文档类型 -->
+            <key>NSFileProviderDocumentTypes</key>
+            <array>
+                <dict>
+                    <key>CFBundleTypeDescription</key>
+                    <string>CiteTrack Document</string>
+                    <key>CFBundleTypeIconFiles</key>
+                    <array>
+                        <string>FileProviderIcon</string>
+                    </array>
+                    <key>CFBundleTypeName</key>
+                    <string>CiteTrack Data</string>
+                    <key>CFBundleTypeRole</key>
+                    <string>Editor</string>
+                    <key>LSItemContentTypes</key>
+                    <array>
+                        <string>com.citetrack.data</string>
+                        <string>public.json</string>
+                        <string>public.data</string>
+                    </array>
+                    <key>LSHandlerRank</key>
+                    <string>Owner</string>
+                </dict>
+            </array>
+            
+            <!-- 自定义图标配置 -->
+            <key>NSFileProviderActionsIcon</key>
+            <string>FileProviderIcon</string>
+            
+            <!-- 支持的操作 -->
+            <key>NSFileProviderActions</key>
+            <array>
+                <dict>
+                    <key>NSFileProviderActionIdentifier</key>
+                    <string>com.citetrack.fileprovider.action.open</string>
+                    <key>NSFileProviderActionDisplayName</key>
+                    <string>在 CiteTrack 中打开</string>
+                </dict>
+            </array>
+        </dict>
+    </dict>
+    
+    <!-- 支持的文档类型声明 -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>CiteTrack Document</string>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.citetrack.data</string>
+                <string>public.json</string>
+            </array>
+            <key>LSHandlerRank</key>
+            <string>Owner</string>
+        </dict>
+    </array>
+    
+    <!-- 导出的文档类型 -->
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeDescription</key>
+            <string>CiteTrack Data File</string>
+            <key>UTTypeIdentifier</key>
+            <string>com.citetrack.data</string>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>citetrack</string>
+                </array>
+                <key>public.mime-type</key>
+                <array>
+                    <string>application/json</string>
+                </array>
+            </dict>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.json</string>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
+    
+    <!-- 应用传输安全设置 -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <true/>
+    </dict>
+</dict>
+</plist>

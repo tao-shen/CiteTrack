@@ -34,6 +34,10 @@ public class SettingsManager: ObservableObject {
         didSet { userDefaults.set(iCloudSyncEnabled, forKey: Keys.iCloudSyncEnabled) }
     }
     
+    @Published public var iCloudDriveFolderEnabled: Bool {
+        didSet { userDefaults.set(iCloudDriveFolderEnabled, forKey: Keys.iCloudDriveFolderEnabled) }
+    }
+    
     @Published public var notificationsEnabled: Bool {
         didSet { userDefaults.set(notificationsEnabled, forKey: Keys.notificationsEnabled) }
     }
@@ -81,6 +85,7 @@ public class SettingsManager: ObservableObject {
         self.showInMenuBar = userDefaults.object(forKey: Keys.showInMenuBar) as? Bool ?? true
         self.launchAtLogin = userDefaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         self.iCloudSyncEnabled = userDefaults.object(forKey: Keys.iCloudSyncEnabled) as? Bool ?? false
+        self.iCloudDriveFolderEnabled = userDefaults.object(forKey: Keys.iCloudDriveFolderEnabled) as? Bool ?? false
         self.notificationsEnabled = userDefaults.object(forKey: Keys.notificationsEnabled) as? Bool ?? true
         self.language = userDefaults.string(forKey: Keys.language) ?? "auto"
         
@@ -120,6 +125,7 @@ public class SettingsManager: ObservableObject {
         static let showInMenuBar = "ShowInMenuBar"
         static let launchAtLogin = "LaunchAtLogin"
         static let iCloudSyncEnabled = "iCloudSyncEnabled"
+        static let iCloudDriveFolderEnabled = "iCloudDriveFolderEnabled"
         static let notificationsEnabled = "NotificationsEnabled"
         static let language = "Language"
         static let theme = "Theme"
@@ -194,6 +200,7 @@ public class SettingsManager: ObservableObject {
         showInMenuBar = true
         launchAtLogin = false
         iCloudSyncEnabled = false
+        iCloudDriveFolderEnabled = false
         notificationsEnabled = true
         language = "auto"
         // 默认主应用浅色
@@ -210,6 +217,7 @@ public class SettingsManager: ObservableObject {
             "showInMenuBar": showInMenuBar,
             "launchAtLogin": launchAtLogin,
             "iCloudSyncEnabled": iCloudSyncEnabled,
+            "iCloudDriveFolderEnabled": iCloudDriveFolderEnabled,
             "notificationsEnabled": notificationsEnabled,
             "language": language,
             "theme": theme.rawValue,
@@ -233,6 +241,9 @@ public class SettingsManager: ObservableObject {
         }
         if let icloud = dict["iCloudSyncEnabled"] as? Bool {
             iCloudSyncEnabled = icloud
+        }
+        if let icloudFolder = dict["iCloudDriveFolderEnabled"] as? Bool {
+            iCloudDriveFolderEnabled = icloudFolder
         }
         if let notifications = dict["notificationsEnabled"] as? Bool {
             notificationsEnabled = notifications

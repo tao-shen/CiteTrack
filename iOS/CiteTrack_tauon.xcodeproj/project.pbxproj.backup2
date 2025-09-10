@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		5BC31095AD1664AA671A57F4 /* citetrack_init.json in Resources */ = {isa = PBXBuildFile; fileRef = 2B820DC36C0D60590FD97C20 /* citetrack_init.json */; };
 		05BBF315A283172F54364D0B /* CiteTrackWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 6BBF93D21F43686374D1DB06 /* CiteTrackWidgetExtension.appex */; };
 		0945335CA2B3DBD9506F00CA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22B2228C8CA89662F7A02611 /* Foundation.framework */; };
 		111111111111111111111111 /* WidgetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7F7F7F7F7F7F7F7F7F7F7F /* WidgetModels.swift */; };
@@ -16,14 +15,17 @@
 		222222222222222222222222 /* WidgetModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7F7F7F7F7F7F7F7F7F7F7F /* WidgetModels.swift */; };
 		223344556677889900AABBCCDDEEFF /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 223344556677889900AABBCCDDEE00 /* DataManager.swift */; };
 		55E9F01755E9F01755E9F01755E9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 66F1029866F1029866F1029866F1 /* Assets.xcassets */; };
+		5BC31095AD1664AA671A57F4 /* citetrack_init.json in Resources */ = {isa = PBXBuildFile; fileRef = 2B820DC36C0D60590FD97C20 /* citetrack_init.json */; };
 		77011A2877011A2877011A2877011 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 88123B3988123B3988123B3988123 /* Preview Assets.xcassets */; };
 		99234C4A99234C4A99234C4A99234 /* Scholar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA345D5BAA345D5BAA345D5BAA345 /* Scholar.swift */; };
+		AppInitServiceBuild123456789012345678901234 /* AppInitializationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AppInitService123456789012345678901234 /* AppInitializationService.swift */; };
 		B0539BDF221226AD10E241CD /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F877EF78B7A4F52106F2360 /* Constants.swift */; };
 		BB456E6CBB456E6CBB456E6CBB456 /* GoogleScholarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC567F7DCC567F7DCC567F7DCC567 /* GoogleScholarService.swift */; };
+		BackupServiceBuild123456789012345678901234 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BackupService123456789012345678901234 /* BackupService.swift */; };
 		DD67808EDD67808EDD67808EDD6780 /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE78919FEE78919FEE78919FEE789 /* SettingsManager.swift */; };
-		E4498D92076ADB191FB563B5 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = D797C5AD564ABC0987100A01 /* Constants.swift */; };
 		EE62AC8D536887913EF9C1E8 /* CiteTrackWidgetExtension/CiteTrackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6789012345678 /* CiteTrackWidgetExtension/CiteTrackWidget.swift */; };
 		FFA0B1C0FFA0B1C0FFA0B1C0FFA0B1 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B2C3D100B2C3D100B2C3D100B2C /* LocalizationManager.swift */; };
+		InitViewBuild123456789012345678901234 /* InitializationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = InitView123456789012345678901234 /* InitializationView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,15 +53,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		2B820DC36C0D60590FD97C20 /* citetrack_init.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = citetrack_init.json; sourceTree = "<group>"; };
 		00B2C3D100B2C3D100B2C3D100B2C /* LocalizationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationManager.swift; sourceTree = "<group>"; };
 		11223344556677889900AABBCCDDEE00 /* iCloudSyncManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iCloudSyncManager.swift; sourceTree = "<group>"; };
 		11C4D5E611C4D5E611C4D5E611C4D /* CiteTrack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CiteTrack.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		180AC71DA3C08AB42675040D /* Constants.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Constants.swift; path = ../Shared/Constants.swift; sourceTree = "<group>"; };
 		223344556677889900AABBCCDDEE00 /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
 		22B2228C8CA89662F7A02611 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		22B3C4D422B3C4D422B3C4D422B3 /* CiteTrackApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CiteTrackApp.swift; sourceTree = "<group>"; };
-			2B820DC36C0D60590FD97C20 /* citetrack_init.json */,
+		2B820DC36C0D60590FD97C20 /* citetrack_init.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = citetrack_init.json; sourceTree = "<group>"; };
 		2F877EF78B7A4F52106F2360 /* Constants.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Constants.swift; path = ../Shared/Constants.swift; sourceTree = "<group>"; };
 		3814C63BDA98C29A5E9CD100 /* CiteTrack.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = CiteTrack.entitlements; path = CiteTrack/CiteTrack.entitlements; sourceTree = SOURCE_ROOT; };
 		3A3CD9923CA4F4BAB897275C /* WidgetInfo.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = WidgetInfo.plist; path = CiteTrackWidgetExtension/WidgetInfo.plist; sourceTree = "<group>"; };
@@ -69,12 +69,14 @@
 		88123B3988123B3988123B3988123 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		A1B2C3D4E5F6789012345678 /* CiteTrackWidgetExtension/CiteTrackWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CiteTrackWidgetExtension/CiteTrackWidget.swift; sourceTree = SOURCE_ROOT; };
 		AA345D5BAA345D5BAA345D5BAA345 /* Scholar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scholar.swift; sourceTree = "<group>"; };
+		AppInitService123456789012345678901234 /* AppInitializationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInitializationService.swift; sourceTree = "<group>"; };
+		BackupService123456789012345678901234 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
 		CC567F7DCC567F7DCC567F7DCC567 /* GoogleScholarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleScholarService.swift; sourceTree = "<group>"; };
-		D797C5AD564ABC0987100A01 /* Constants.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Constants.swift; path = ../Shared/Constants.swift; sourceTree = "<group>"; };
 		E296B9B92E4904000022E058 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E2DC0E152E6F44C50022A244 /* CiteTrackDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CiteTrackDebug.entitlements; sourceTree = "<group>"; };
 		EE78919FEE78919FEE78919FEE789 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
 		FB3BED8CD3B848C9924BDEB4 /* CiteTrackWidgetExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = CiteTrackWidgetExtension.entitlements; path = CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements; sourceTree = "<group>"; };
+		InitView123456789012345678901234 /* InitializationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitializationView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,8 +108,6 @@
 				7F7F7F7F7F7F7F7F7F7F7F7F /* WidgetModels.swift */,
 				3814C63BDA98C29A5E9CD100 /* CiteTrack.entitlements */,
 				3DED95A3A19D80343953BE5C /* iOS */,
-				D797C5AD564ABC0987100A01 /* Constants.swift */,
-				180AC71DA3C08AB42675040D /* Constants.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -123,6 +123,10 @@
 				00B2C3D100B2C3D100B2C3D100B2C /* LocalizationManager.swift */,
 				11223344556677889900AABBCCDDEE00 /* iCloudSyncManager.swift */,
 				223344556677889900AABBCCDDEE00 /* DataManager.swift */,
+				BackupService123456789012345678901234 /* BackupService.swift */,
+				AppInitService123456789012345678901234 /* AppInitializationService.swift */,
+				InitView123456789012345678901234 /* InitializationView.swift */,
+				2B820DC36C0D60590FD97C20 /* citetrack_init.json */,
 				66F1029866F1029866F1029866F1 /* Assets.xcassets */,
 				57113E3E57113E3E57113E3E57113 /* Preview Content */,
 			);
@@ -275,6 +279,7 @@
 			files = (
 				77011A2877011A2877011A2877011 /* Preview Assets.xcassets in Resources */,
 				55E9F01755E9F01755E9F01755E9 /* Assets.xcassets in Resources */,
+				5BC31095AD1664AA671A57F4 /* citetrack_init.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -286,7 +291,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				EE62AC8D536887913EF9C1E8 /* CiteTrackWidgetExtension/CiteTrackWidget.swift in Sources */,
-				E4498D92076ADB191FB563B5 /* Constants.swift in Sources */,
 				111111111111111111111111 /* WidgetModels.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -304,6 +308,9 @@
 				223344556677889900AABBCCDDEEFF /* DataManager.swift in Sources */,
 				B0539BDF221226AD10E241CD /* Constants.swift in Sources */,
 				222222222222222222222222 /* WidgetModels.swift in Sources */,
+				BackupServiceBuild123456789012345678901234 /* BackupService.swift in Sources */,
+				AppInitServiceBuild123456789012345678901234 /* AppInitializationService.swift in Sources */,
+				InitViewBuild123456789012345678901234 /* InitializationView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -324,11 +331,14 @@
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.citetrack.CiteTrack.widget2";
+				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget1;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -341,11 +351,14 @@
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.citetrack.CiteTrack.widget2";
+				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget1;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -490,6 +503,7 @@
 				INFOPLIST_FILE = CiteTrack/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Citetrack;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CiteTrack需要网络权限来获取学者的最新引用数据，以便为您提供准确的学术追踪服务。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -502,7 +516,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.citetrack.CiteTrack";
+				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
@@ -533,6 +547,7 @@
 				INFOPLIST_FILE = CiteTrack/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Citetrack;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "CiteTrack需要网络权限来获取学者的最新引用数据，以便为您提供准确的学术追踪服务。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -545,7 +560,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "com.citetrack.CiteTrack";
+				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;

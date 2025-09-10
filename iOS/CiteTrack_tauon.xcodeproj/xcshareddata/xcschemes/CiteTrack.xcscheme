@@ -16,9 +16,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "49C743B1DE4AFA45CD67A1F1"
-               BuildableName = "CiteTrackWidgetExtension.appex"
-               BlueprintName = "CiteTrackWidgetExtension"
+               BlueprintIdentifier = "68224F4F68224F4F68224F4F68224"
+               BuildableName = "CiteTrack.app"
+               BlueprintName = "CiteTrack"
                ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -30,9 +30,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "68224F4F68224F4F68224F4F68224"
-               BuildableName = "CiteTrack.app"
-               BlueprintName = "CiteTrack"
+               BlueprintIdentifier = "49C743B1DE4AFA45CD67A1F1"
+               BuildableName = "CiteTrackWidgetExtension.appex"
+               BlueprintName = "CiteTrackWidgetExtension"
                ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>

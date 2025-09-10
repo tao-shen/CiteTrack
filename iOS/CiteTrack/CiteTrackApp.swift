@@ -23,10 +23,12 @@ enum HapticsManager {
 struct CiteTrackApp: App {
     @StateObject private var settingsManager = SettingsManager.shared
     @StateObject private var dataManager = DataManager.shared
+    @StateObject private var initializationService = AppInitializationService.shared
     @Environment(\.scenePhase) private var scenePhase
     private static let refreshTaskIdentifier = "com.citetrack.citationRefresh"
     
     init() {
+        NSLog("🧪 [CiteTrackApp] init called - app is starting up")
         // 注册后台刷新任务
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTaskIdentifier, using: nil) { task in
             guard let task = task as? BGAppRefreshTask else {
@@ -37,6 +39,9 @@ struct CiteTrackApp: App {
         }
         // 预先安排一次刷新
         CiteTrackApp.scheduleAppRefresh()
+        
+        // 方法2实现：使用公共普遍性容器，无需FileProvider扩展
+        NSLog("🔧 [CiteTrackApp] 使用公共普遍性容器方法，无需FileProvider扩展")
     }
     
     var body: some Scene {
@@ -44,14 +49,27 @@ struct CiteTrackApp: App {
             MainView()
                 .preferredColorScheme(colorScheme)
                 .environmentObject(dataManager)
+                .environmentObject(initializationService)
                 .onOpenURL { url in
                     handleDeepLink(url: url)
                 }
                 .onAppear {
+                    NSLog("🧪 [CiteTrackApp] WindowGroup.onAppear")
                     // Prewarm haptics early to prevent first-gesture hitch
                     HapticsManager.prewarm()
                     // 启动时检查蜂窝数据可用性
                     CellularDataPermission.shared.triggerCheck()
+                    // iCloud Drive文件夹现在由用户设置控制，不再自动创建
+                    // 执行初始化流程
+                    Task {
+                        await initializationService.performInitialization()
+                    }
+                    // 启动即触发一次 iCloud 可用性与容器检查，确保日志能在控制台出现
+                    let icloud = iCloudSyncManager.shared
+                    print("🧪 [CiteTrackApp] Trigger initial iCloud checks on launch")
+                    NSLog("🧪 [CiteTrackApp] Trigger initial iCloud checks on launch (NSLog)")
+                    icloud.checkSyncStatus()
+                    icloud.bootstrapContainerIfPossible()
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -284,11 +302,19 @@ extension CiteTrackApp {
                         var updated = Scholar(id: scholar.id, name: info.name)
                         updated.citations = info.citations
                         updated.lastUpdated = Date()
+                        
                         DataManager.shared.updateScholar(updated)
-                        DataManager.shared.saveHistoryIfChanged(scholarId: scholar.id, citationCount: info.citations)
+                        DataManager.shared.saveHistoryIfChanged(
+                            scholarId: scholar.id,
+                            citationCount: info.citations
+                        )
+                        
+                        print("✅ [批量更新] 成功更新学者信息: \(info.name) - \(info.citations) citations")
+                        
                     case .failure(let error):
-                        print("❌ 后台更新失败: \(scholar.id) - \(error.localizedDescription)")
+                        print("❌ [批量更新] 获取学者信息失败 \(scholar.id): \(error.localizedDescription)")
                     }
+                    
                     group.leave()
                 }
             }
@@ -306,9 +332,14 @@ struct MainView: View {
     @State private var selectedTab = 0
     @StateObject private var localizationManager = LocalizationManager.shared
     @StateObject private var settingsManager = SettingsManager.shared
+    @EnvironmentObject private var initializationService: AppInitializationService
     
     var body: some View {
-        TabView(selection: $selectedTab) {
+        Group {
+            if initializationService.isFirstLaunch && initializationService.isInitializing {
+                InitializationView()
+            } else {
+                TabView(selection: $selectedTab) {
             DashboardView()
                 .tabItem {
                     Image(systemName: "chart.bar.fill")
@@ -330,14 +361,16 @@ struct MainView: View {
                 }
                 .tag(2)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .deepLinkAddScholar)) { _ in
-            selectedTab = 1 // 切换到学者管理页面
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .deepLinkScholars)) { _ in
-            selectedTab = 1 // 切换到学者管理页面
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .deepLinkDashboard)) { _ in
-            selectedTab = 0 // 切换到仪表板页面
+                .onReceive(NotificationCenter.default.publisher(for: .deepLinkAddScholar)) { _ in
+                    selectedTab = 1 // 切换到学者管理页面
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .deepLinkScholars)) { _ in
+                    selectedTab = 1 // 切换到学者管理页面
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .deepLinkDashboard)) { _ in
+                    selectedTab = 0 // 切换到仪表板页面
+                }
+            }
         }
     }
 }
@@ -420,7 +453,8 @@ struct DashboardView: View {
     
     var body: some View {
         NavigationView {
-            ScrollView {
+            ZStack {
+                ScrollView {
                 VStack(spacing: 20) {
                     // 统计卡片
                     HStack(spacing: 12) {
@@ -482,6 +516,9 @@ struct DashboardView: View {
                         }
                         .padding(.vertical, 40)
                     }
+                    // 榜单下方空白区域：增加透明手势区域，扩展可滑动范围
+                    Color.clear
+                        .frame(height: 280)
                 }
                 .padding()
                 .contentShape(Rectangle())
@@ -501,6 +538,7 @@ struct DashboardView: View {
                             impact.impactOccurred()
                         }
                 )
+                }
             }
             .navigationTitle(localizationManager.localized("dashboard_title"))
         }
@@ -1090,10 +1128,8 @@ struct StatCard: View {
                 .foregroundColor(.secondary)
         }
         .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.gray.opacity(0.1))
-        )
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
     }
 }
 
@@ -1242,6 +1278,14 @@ struct SettingsView: View {
     @State private var managerImportMessage = ""
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
+    @State private var showingExportSuccessAlert = false
+    @State private var exportSuccessMessage = ""
+    @State private var showingExportPicker = false
+    @State private var exportTempURLs: [URL] = []
+    @State private var exportPickerInitialDirectory: URL? = nil
+    @State private var showingImportPicker = false
+    @State private var importPickerInitialDirectory: URL? = nil
+    @State private var showingDriveFolderPicker = false
     @State private var showingShareSheet = false // 兼容旧路径（保留）
     @State private var shareItems: [Any] = [] // 兼容旧路径（保留）
     struct ShareItem: Identifiable { let id = UUID(); let url: URL }
@@ -1250,6 +1294,9 @@ struct SettingsView: View {
     @State private var shareDataItem: ShareDataItem? = nil
     @State private var showingExportLocalResult = false
     @State private var exportLocalMessage = ""
+    @State private var showingCreateFolderAlert = false
+    @State private var showingCreateFolderSuccessAlert = false
+    @State private var createFolderMessage = ""
     
     var body: some View {
         NavigationView {
@@ -1307,6 +1354,66 @@ struct SettingsView: View {
                 }
                 
                 Section(localizationManager.localized("icloud_sync")) {
+                    // iCloud Drive 文件夹开关
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("在iCloud Drive中显示文件夹")
+                                .font(.headline)
+                            Text("在iCloud Drive根目录创建CiteTrack文件夹，显示应用图标")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Toggle("", isOn: $settingsManager.iCloudDriveFolderEnabled)
+                            .onChange(of: settingsManager.iCloudDriveFolderEnabled) { enabled in
+                                if enabled {
+                                    // 用户开启时创建文件夹
+                                    let success = iCloudManager.createiCloudDriveFolder()
+                                    if success {
+                                        print("✅ [Settings] iCloud Drive文件夹创建成功")
+                                    } else {
+                                        print("❌ [Settings] iCloud Drive文件夹创建失败")
+                                        // 如果创建失败，将开关重置为关闭状态
+                                        DispatchQueue.main.async {
+                                            settingsManager.iCloudDriveFolderEnabled = false
+                                        }
+                                    }
+                                }
+                            }
+                    }
+                    .padding(.vertical, 4)
+                    
+                    // 刷新文件夹图标按钮
+                    if settingsManager.iCloudDriveFolderEnabled {
+                        Button(action: {
+                            iCloudManager.refreshFolderIcon()
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.clockwise.circle")
+                                Text("刷新文件夹图标")
+                            }
+                        }
+                        .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+                    }
+                    
+                    // 选择并记住 iCloud Drive 目录
+                    Button(action: chooseAndBookmarkDriveFolder) {
+                        HStack {
+                            Image(systemName: iCloudManager.hasBookmarkedDriveDirectory ? "checkmark.folder" : "folder.badge.plus")
+                            Text(iCloudManager.hasBookmarkedDriveDirectory ? localizationManager.localized("icloud_drive_folder_saved") : localizationManager.localized("choose_icloud_drive_folder"))
+                        }
+                    }
+                    .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+
+                    if iCloudManager.hasBookmarkedDriveDirectory {
+                        Button(role: .destructive, action: clearBookmarkedDriveFolder) {
+                            HStack {
+                                Image(systemName: "trash")
+                                Text(localizationManager.localized("clear_saved_folder"))
+                            }
+                        }
+                        .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+                    }
                     HStack {
                         Text(localizationManager.localized("sync_status"))
                         Spacer()
@@ -1332,6 +1439,7 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+                    
 
                     // 从 iCloud 导入
                     Button(action: {
@@ -1390,6 +1498,8 @@ struct SettingsView: View {
             .navigationTitle(localizationManager.localized("settings"))
             .onAppear {
                 iCloudManager.checkSyncStatus()
+                iCloudManager.bootstrapContainerIfPossible()
+                iCloudManager.runDeepDiagnostics()
             }
             .alert(localizationManager.localized("import_from_icloud_alert_title"), isPresented: $showingImportAlert) {
                 Button(localizationManager.localized("cancel"), role: .cancel) { }
@@ -1416,6 +1526,44 @@ struct SettingsView: View {
                 Button(localizationManager.localized("confirm"), action: { })
             } message: {
                 Text(errorMessage)
+            }
+            .alert(localizationManager.localized("export_to_icloud_alert_title"), isPresented: $showingExportSuccessAlert) {
+                Button(localizationManager.localized("confirm"), action: { })
+            } message: {
+                Text(exportSuccessMessage)
+            }
+            .alert("在iCloud Drive中显示文件夹", isPresented: $showingCreateFolderAlert) {
+                Button(localizationManager.localized("cancel"), role: .cancel) { }
+                Button("创建", action: createiCloudDriveFolder)
+            } message: {
+                Text("这将在iCloud Drive中创建一个带应用图标的CiteTrack文件夹，方便您管理导入导出的数据文件。")
+            }
+            .alert("成功", isPresented: $showingCreateFolderSuccessAlert) {
+                Button(localizationManager.localized("confirm"), action: { })
+            } message: {
+                Text(createFolderMessage)
+            }
+            .sheet(isPresented: $showingExportPicker) {
+                ExportPickerView(isPresented: $showingExportPicker, urls: exportTempURLs, initialDirectory: exportPickerInitialDirectory) { success in
+                    print("✅ [iCloud Debug] Export picker finished, success=\(success)")
+                    if success {
+                        let exportedScholars = DataManager.shared.scholars.count
+                        exportSuccessMessage = String(format: localizationManager.localized("export_success")) + " (" + String(format: localizationManager.localized("imported_scholars_count")) + " \(exportedScholars) " + localizationManager.localized("scholars_unit") + ")"
+                        showingExportSuccessAlert = true
+                    }
+                }
+            }
+            .sheet(isPresented: $showingImportPicker) {
+                ImportPickerView(isPresented: $showingImportPicker, initialDirectory: importPickerInitialDirectory) { url in
+                    print("🚀 [iCloud Debug] Start import from user selected file: \(url.path)")
+                    iCloudManager.importFromFile(url: url)
+                }
+            }
+            .sheet(isPresented: $showingDriveFolderPicker) {
+                DriveFolderPickerView(isPresented: $showingDriveFolderPicker) { folderURL in
+                    print("🗂️ [CloudDocs] Picked folder: \(folderURL.path)")
+                    iCloudManager.savePreferredDriveDirectoryBookmark(from: folderURL)
+                }
             }
             .sheet(isPresented: $iCloudManager.showingFilePicker) {
                 FilePickerView(isPresented: $iCloudManager.showingFilePicker) { url in
@@ -1513,29 +1661,86 @@ struct SettingsView: View {
     }
     
     private func importFromiCloud() {
-        iCloudManager.importFromiCloud { result in
+        print("🚀 [iCloud Debug] Import with file picker; default folder = iCloud app folder")
+        importPickerInitialDirectory = iCloudManager.preferredExportDirectory()
+        showingImportPicker = true
+    }
+
+    private func exportToiCloud() {
+        print("🚀 [iCloud Debug] Export with folder picker; default = iCloud app folder, data only")
+        do {
+            // 1) 只构建数据文件
+            let data = try makeExportJSONData()
+            let date = Date()
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyyMMdd"
+            fmt.locale = Locale(identifier: "en_US_POSIX")
+            let filename = "citetrack_\(fmt.string(from: date)).json"
+            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+            try data.write(to: tempURL, options: [.atomic])
+            exportTempURLs = [tempURL]
+            // 2) 设定初始目录为应用 iCloud Documents（带图标的文件夹）
+            exportPickerInitialDirectory = iCloudManager.preferredExportDirectory()
+            showingExportPicker = true
+        } catch {
+            self.errorMessage = localizationManager.localized("export_failed_with_message") + ": " + error.localizedDescription
+            self.showingErrorAlert = true
+        }
+    }
+    
+    private func createiCloudDriveFolder() {
+        print("🚀 [iCloud Drive] 开始创建iCloud Drive文件夹...")
+        iCloudManager.createiCloudDriveFolder { result in
             switch result {
-            case .success(let importResult):
-                self.importResult = importResult
-                self.showingImportResult = true
+            case .success():
+                self.createFolderMessage = "成功在iCloud Drive中创建了CiteTrack文件夹！现在您可以在「文件」应用的iCloud Drive中看到带图标的CiteTrack文件夹，所有导入导出的数据都将保存在这里。"
+                self.showingCreateFolderSuccessAlert = true
             case .failure(let error):
-                self.errorMessage = error.localizedDescription
+                self.errorMessage = "创建iCloud Drive文件夹失败: \(error.localizedDescription)"
                 self.showingErrorAlert = true
             }
         }
     }
 
-    private func exportToiCloud() {
-        iCloudManager.exportToiCloud { result in
-            switch result {
-            case .success:
-                // 导出学者统计
-                let exportedScholars = DataManager.shared.scholars.count
-                self.errorMessage = String(format: localizationManager.localized("export_success")) + " (" + String(format: localizationManager.localized("imported_scholars_count")) + " \(exportedScholars) " + localizationManager.localized("scholars_unit") + ")"
-                self.showingErrorAlert = true
-            case .failure(let error):
-                self.errorMessage = error.localizedDescription
-                self.showingErrorAlert = true
+    struct ExportPickerView: UIViewControllerRepresentable {
+        @Binding var isPresented: Bool
+        let urls: [URL]
+        let initialDirectory: URL?
+        let onCompleted: (Bool) -> Void
+
+        func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+        func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+            print("🔍 [iCloud Debug] Presenting picker forExporting = true, count=\(urls.count)")
+            let picker = UIDocumentPickerViewController(forExporting: urls, asCopy: true)
+            // 优先引导到用户 iCloud Drive/CiteTrack；否则退回到传入初始目录
+            if let userDir = iCloudSyncManager.shared.preferredUserDriveDirectory() {
+                picker.directoryURL = userDir
+                print("🔍 [iCloud Debug] picker.directoryURL(userDrive)=\(userDir.path)")
+            } else if let dir = initialDirectory {
+                picker.directoryURL = dir
+                print("🔍 [iCloud Debug] picker.directoryURL(initial)=\(dir.path)")
+            }
+            picker.delegate = context.coordinator
+            return picker
+        }
+
+        func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) { }
+
+        class Coordinator: NSObject, UIDocumentPickerDelegate {
+            let parent: ExportPickerView
+            init(_ parent: ExportPickerView) { self.parent = parent }
+
+            func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+                print("📝 [iCloud Debug] Export picker cancelled")
+                parent.isPresented = false
+                parent.onCompleted(false)
+            }
+
+            func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+                print("✅ [iCloud Debug] Exported to: \(urls.map { $0.path })")
+                parent.isPresented = false
+                parent.onCompleted(true)
             }
         }
     }
@@ -1637,6 +1842,93 @@ struct SettingsView: View {
         // 写入-删除一次，触发系统层的目录/域初始化
         try? data.write(to: prewarmURL, options: [.atomic])
         try? fm.removeItem(at: prewarmURL)
+    }
+
+    struct ImportPickerView: UIViewControllerRepresentable {
+        @Binding var isPresented: Bool
+        let initialDirectory: URL?
+        let onPicked: (URL) -> Void
+
+        func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+        func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+            print("🔍 [iCloud Debug] Presenting picker forOpening (json), initialDir=\(initialDirectory?.path ?? "nil")")
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.json])
+            if let userDir = iCloudSyncManager.shared.preferredUserDriveDirectory() {
+                picker.directoryURL = userDir
+            } else if let dir = initialDirectory {
+                picker.directoryURL = dir
+            }
+            picker.allowsMultipleSelection = false
+            picker.delegate = context.coordinator
+            return picker
+        }
+
+        func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) { }
+
+        class Coordinator: NSObject, UIDocumentPickerDelegate {
+            let parent: ImportPickerView
+            init(_ parent: ImportPickerView) { self.parent = parent }
+
+            func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+                print("📝 [iCloud Debug] Import picker cancelled")
+                parent.isPresented = false
+            }
+
+            func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+                guard let url = urls.first else { return }
+                parent.isPresented = false
+                parent.onPicked(url)
+            }
+        }
+    }
+
+    private func chooseAndBookmarkDriveFolder() {
+        print("🗂️ [CloudDocs] User choosing folder to bookmark …")
+        showingDriveFolderPicker = true
+    }
+
+    private func clearBookmarkedDriveFolder() {
+        print("🧹 [CloudDocs] Clear bookmarked folder")
+        iCloudManager.clearPreferredDriveDirectoryBookmark()
+    }
+
+    struct DriveFolderPickerView: UIViewControllerRepresentable {
+        @Binding var isPresented: Bool
+        let onPickedFolder: (URL) -> Void
+
+        func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+        func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+            // 通过 forOpening + 目录选择，选择器顶部有"选择"按钮可选中当前目录
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
+            // 将初始目录指向 iCloud Drive 根（com~apple~CloudDocs）
+            if let root = iCloudSyncManager.shared.cloudDocsRootURL() {
+                picker.directoryURL = root
+            }
+            picker.allowsMultipleSelection = false
+            picker.delegate = context.coordinator
+            return picker
+        }
+
+        func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) { }
+
+        class Coordinator: NSObject, UIDocumentPickerDelegate {
+            let parent: DriveFolderPickerView
+            init(_ parent: DriveFolderPickerView) { self.parent = parent }
+
+            func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+                print("📝 [CloudDocs] Folder picker cancelled")
+                parent.isPresented = false
+            }
+
+            func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+                guard let url = urls.first else { return }
+                print("✅ [CloudDocs] Picked folder: \(url.path)")
+                parent.isPresented = false
+                parent.onPickedFolder(url)
+            }
+        }
     }
 }
 

@@ -15,7 +15,7 @@ public class GoogleScholarService: ObservableObject {
         return URLSession(configuration: config)
     }()
     
-    private init() {}
+    public init() {}
     
     // MARK: - Error Types
     public enum ScholarError: Error, LocalizedError {
