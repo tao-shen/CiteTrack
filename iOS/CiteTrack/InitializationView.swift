@@ -5,6 +5,7 @@ import SwiftUI
 struct InitializationView: View {
     @EnvironmentObject private var initializationService: AppInitializationService
     @EnvironmentObject private var dataManager: DataManager
+    @EnvironmentObject private var localizationManager: LocalizationManager
     
     var body: some View {
         ZStack {
@@ -19,13 +20,13 @@ struct InitializationView: View {
                     .foregroundColor(.blue)
                 
                 // 标题
-                Text("欢迎使用 CiteTrack")
+                Text(localizationManager.localized("welcome_to_citetrack"))
                     .font(.largeTitle)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
                 
                 // 副标题
-                Text("正在为您初始化学术追踪服务...")
+                Text(localizationManager.localized("initializing_service"))
                     .font(.title2)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -49,11 +50,11 @@ struct InitializationView: View {
                                     .font(.system(size: 50))
                                     .foregroundColor(.green)
                                 
-                                Text("初始化完成！")
+                                Text(localizationManager.localized("initialization_complete"))
                                     .font(.title2)
                                     .fontWeight(.semibold)
                                 
-                                Text("已导入 \(dataManager.scholars.count) 位学者的数据")
+                                Text(String(format: localizationManager.localized("imported_scholars_data"), dataManager.scholars.count))
                                     .font(.body)
                                     .foregroundColor(.secondary)
                             }
@@ -66,20 +67,20 @@ struct InitializationView: View {
                 VStack(spacing: 15) {
                     FeatureRow(
                         icon: "network",
-                        title: "实时数据更新",
-                        description: "自动获取学者的最新引用数据"
+                        title: localizationManager.localized("real_time_data_update"),
+                        description: localizationManager.localized("real_time_data_description")
                     )
                     
                     FeatureRow(
                         icon: "chart.line.uptrend.xyaxis",
-                        title: "趋势分析",
-                        description: "可视化展示学术影响力变化"
+                        title: localizationManager.localized("trend_analysis"),
+                        description: localizationManager.localized("trend_analysis_description")
                     )
                     
                     FeatureRow(
                         icon: "bell",
-                        title: "智能提醒",
-                        description: "重要变化及时通知"
+                        title: localizationManager.localized("smart_notifications"),
+                        description: localizationManager.localized("smart_notifications_description")
                     )
                 }
                 .padding(.horizontal)
@@ -126,5 +127,6 @@ struct InitializationView_Previews: PreviewProvider {
         InitializationView()
             .environmentObject(AppInitializationService.shared)
             .environmentObject(DataManager.shared)
+            .environmentObject(LocalizationManager.shared)
     }
 }

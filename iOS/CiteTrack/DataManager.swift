@@ -40,10 +40,10 @@ public class DataManager: ObservableObject {
     private let userDefaults: UserDefaults = {
         // 优先尝试使用 App Group，失败则回退到标准 UserDefaults
         if let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier) {
-            print("✅ [DataManager] 使用 App Group UserDefaults")
+            print("✅ [DataManager] \("debug_using_app_group".localized)")
             return appGroupDefaults
         } else {
-            print("⚠️ [DataManager] App Group 不可用，使用标准 UserDefaults")
+            print("⚠️ [DataManager] \("debug_app_group_unavailable".localized)")
             return .standard
         }
     }()
@@ -59,19 +59,19 @@ public class DataManager: ObservableObject {
     @Published public var displayOrder: [String] = []
     
     private init() {
-        print("🔍 [DataManager] 初始化，App Group ID: \(appGroupIdentifier)")
+        print("🔍 [DataManager] \(String(format: "debug_initializing_app_group".localized, appGroupIdentifier))")
         testAppGroupAccess()
         performAppGroupMigrationIfNeeded()
         loadScholars()
         // 加载置顶集合
         if let arr = userDefaults.array(forKey: pinnedKey) as? [String] {
             pinnedIds = Set(arr)
-            print("🧪 [DataManager] 加载置顶学者: \(pinnedIds.count) 个")
+            print("🧪 [DataManager] \(String(format: "debug_loading_pinned_scholars".localized, pinnedIds.count))")
         }
         // 加载显示顺序
         if let arr = userDefaults.array(forKey: orderKey) as? [String] {
             displayOrder = arr
-            print("🧪 [DataManager] 加载排序序列: \(displayOrder.count) 项")
+            print("🧪 [DataManager] \(String(format: "debug_loading_display_order".localized, displayOrder.count))")
         }
         // 若未初始化顺序，以当前学者顺序构建
         if displayOrder.isEmpty { displayOrder = scholars.map { $0.id }; saveOrder() }
@@ -79,15 +79,15 @@ public class DataManager: ObservableObject {
         if let ag = UserDefaults(suiteName: appGroupIdentifier),
            let t = ag.object(forKey: "LastRefreshTime") as? Date {
             lastRefreshTime = t
-            print("🧪 [DataManager] 初始化读取 LastRefreshTime(AppGroup)=\(t)")
+            print("🧪 [DataManager] \(String(format: "debug_init_read_last_refresh_appgroup".localized, "\(t)"))")
         } else if let t = UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date {
             lastRefreshTime = t
-            print("🧪 [DataManager] 初始化读取 LastRefreshTime(Standard)=\(t)")
+            print("🧪 [DataManager] \(String(format: "debug_init_read_last_refresh_standard".localized, "\(t)"))")
         }
         
         // 初始化时主动同步小组件数据
         saveWidgetData()
-        print("🔄 [DataManager] 初始化完成，已触发小组件数据同步")
+        print("🔄 [DataManager] \("debug_init_complete".localized)")
 
         // 启动监听与轮询，确保主App能感知小组件写入
         setupLastRefreshObservers()
@@ -95,7 +95,7 @@ public class DataManager: ObservableObject {
     
     /// 测试 App Group 访问权限
     private func testAppGroupAccess() {
-        print("🔍 [DataManager] 测试 App Group 访问权限...")
+        print("🔍 [DataManager] \("debug_test_app_group".localized)")
         
         if let groupDefaults = UserDefaults(suiteName: appGroupIdentifier) {
             // 测试写入和读取 - 使用同步方式避免CFPreferences警告
@@ -105,16 +105,16 @@ public class DataManager: ObservableObject {
             groupDefaults.synchronize() // 强制同步，避免异步访问问题
             
             if groupDefaults.string(forKey: testKey) != nil {
-                print("✅ [DataManager] App Group 读写测试成功")
+                print("✅ [DataManager] \("debug_app_group_test_success".localized)")
             } else {
-                print("❌ [DataManager] App Group 读取测试失败")
+                print("❌ [DataManager] \("debug_app_group_test_failed".localized)")
             }
             
             // 清理测试数据
             groupDefaults.removeObject(forKey: testKey)
             groupDefaults.synchronize()
         } else {
-            print("❌ [DataManager] 无法创建 App Group UserDefaults，请检查entitlements配置")
+            print("❌ [DataManager] \("debug_app_group_unavailable_direct".localized)")
         }
     }
     
@@ -180,12 +180,12 @@ public class DataManager: ObservableObject {
         displayOrder.removeAll { $0 == id }
         displayOrder.insert(id, at: 0)
         savePinned(); saveOrder()
-        print("📌 [DataManager] 已置顶学者并移动到顶部: \(id)")
+        print("📌 [DataManager] \(String(format: "debug_pinned_scholar".localized, id))")
     }
     public func unpinScholar(id: String) {
         if pinnedIds.remove(id) != nil {
             savePinned(); saveOrder()
-            print("📌 [DataManager] 已取消置顶学者: \(id)")
+            print("📌 [DataManager] \(String(format: "debug_unpinned_scholar".localized, id))")
         }
     }
     public func togglePin(id: String) { isPinned(id) ? unpinScholar(id: id) : pinScholar(id: id) }
@@ -215,7 +215,7 @@ public class DataManager: ObservableObject {
             // 为了向后兼容，同时保存到标准存储
             UserDefaults.standard.set(encoded, forKey: "WidgetScholars")
             
-            print("✅ [DataManager] 已为小组件保存 \(widgetScholars.count) 位学者数据（App Group + 标准存储）")
+            print("✅ [DataManager] \(String(format: "debug_saved_widget_scholars".localized, widgetScholars.count))")
         }
     }
 
@@ -253,7 +253,7 @@ public class DataManager: ObservableObject {
                     let t = (ag?.object(forKey: "LastRefreshTime") as? Date) ?? (UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date)
                     let old = manager.lastRefreshTime
                     manager.lastRefreshTime = t
-                    print("🧪 [DataManager] 收到Darwin通知，更新 lastRefreshTime: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
+                    print("🧪 [DataManager] \(String(format: "debug_darwin_notification_received".localized, old?.description ?? "nil", t?.description ?? "nil"))")
                     // 合并来自Widget的最新每学者数据，保持App与Widget一致
                     manager.mergeLatestScholarsFromWidget()
                 }
@@ -268,7 +268,7 @@ public class DataManager: ObservableObject {
             if self.lastRefreshTime == nil || self.lastRefreshTime != t {
                 let old = self.lastRefreshTime
                 self.lastRefreshTime = t
-                print("🧪 [DataManager] 轮询捕获 LastRefreshTime 变更: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
+                print("🧪 [DataManager] \(String(format: "debug_polling_capture_change".localized, old?.description ?? "nil", t?.description ?? "nil"))")
                 self.mergeLatestScholarsFromWidget()
             }
         }
@@ -281,10 +281,10 @@ public class DataManager: ObservableObject {
             if self.lastRefreshTime != t {
                 let old = self.lastRefreshTime
                 self.lastRefreshTime = t
-                print("🧪 [DataManager] 前台激活同步 LastRefreshTime: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
+                print("🧪 [DataManager] \(String(format: "debug_foreground_sync".localized, old?.description ?? "nil", t?.description ?? "nil"))")
                 self.mergeLatestScholarsFromWidget()
             } else {
-                print("🧪 [DataManager] 前台激活检查 LastRefreshTime 无变化: \(t?.description ?? "nil")")
+                print("🧪 [DataManager] \(String(format: "debug_foreground_no_change".localized, t?.description ?? "nil"))")
                 // 即使时间没变化，也尝试一次合并，防止上次错过
                 self.mergeLatestScholarsFromWidget()
             }
@@ -321,9 +321,9 @@ public class DataManager: ObservableObject {
         if changed {
             scholars = updated
             saveScholars()
-            print("🧪 [DataManager] 已合并 WidgetScholars 到主应用数据：学者数=\(updated.count)")
+            print("🧪 [DataManager] \(String(format: "debug_merged_widget_scholars".localized, updated.count))")
         } else {
-            print("🧪 [DataManager] 合并检查：无需要更新的学者数据")
+            print("🧪 [DataManager] \("debug_merge_no_update".localized)")
         }
     }
     
@@ -334,7 +334,7 @@ public class DataManager: ObservableObject {
         
         #if os(iOS)
         WidgetCenter.shared.reloadAllTimelines()
-        print("🔄 [DataManager] 已触发小组件刷新")
+        print("🔄 [DataManager] \("debug_triggered_widget_refresh".localized)")
         #endif
     }
 
@@ -373,7 +373,7 @@ public class DataManager: ObservableObject {
             #if os(iOS)
             WidgetCenter.shared.reloadAllTimelines()
             #endif
-            print("✅ [DataManager] 已从标准存储迁移数据到 App Group")
+            print("✅ [DataManager] \("debug_migrated_to_app_group".localized)")
         }
     }
     
@@ -385,9 +385,9 @@ public class DataManager: ObservableObject {
             #if os(iOS)
             WidgetCenter.shared.reloadAllTimelines()
             #endif
-            print("✅ [DataManager] 添加学者: \(scholar.displayName)")
+            print("✅ [DataManager] \(String(format: "debug_scholar_added".localized, scholar.displayName))")
         } else {
-            print("⚠️ [DataManager] 学者已存在: \(scholar.displayName)")
+            print("⚠️ [DataManager] \(String(format: "debug_scholar_exists".localized, scholar.displayName))")
         }
     }
     
@@ -401,7 +401,7 @@ public class DataManager: ObservableObject {
             #if os(iOS)
             WidgetCenter.shared.reloadAllTimelines()
             #endif
-            print("✅ [DataManager] 更新学者: \(scholar.displayName)")
+            print("✅ [DataManager] \(String(format: "debug_scholar_updated".localized, scholar.displayName))")
         } else {
             // 如果不存在则添加
             addScholar(scholar)
@@ -426,7 +426,7 @@ public class DataManager: ObservableObject {
         UserDefaults.standard.set(date, forKey: "LastRefreshTime")
         UserDefaults.standard.set(false, forKey: inKey)
         UserDefaults.standard.removeObject(forKey: startKey)
-        print("✅ [DataManager] 标记刷新完成: sid=\(scholarId) at=\(date)")
+        print("✅ [DataManager] \(String(format: "debug_refresh_marked".localized, scholarId, "\(date)"))")
     }
     
     /// 删除学者
@@ -444,7 +444,7 @@ public class DataManager: ObservableObject {
         #if os(iOS)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
-        print("✅ [DataManager] 删除学者: \(id)")
+        print("✅ [DataManager] \(String(format: "debug_scholar_deleted".localized, id))")
     }
 
     // MARK: - 排序拖拽
@@ -454,7 +454,7 @@ public class DataManager: ObservableObject {
         // 用新的显示顺序覆盖 displayOrder 的相对顺序
         displayOrder = ids
         saveOrder()
-        print("🧪 [DataManager] 已应用拖拽排序: count=\(ids.count)")
+        print("🧪 [DataManager] \(String(format: "debug_applied_drag_sort".localized, ids.count))")
     }
     
     /// 删除所有学者
@@ -467,7 +467,7 @@ public class DataManager: ObservableObject {
         #if os(iOS)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
-        print("✅ [DataManager] 删除所有学者")
+        print("✅ [DataManager] \("debug_deleted_all_scholars".localized)")
     }
     
     /// 获取学者信息
@@ -501,7 +501,7 @@ public class DataManager: ObservableObject {
         #if os(iOS)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
-        print("✅ [DataManager] 保存历史记录: \(history.scholarId) - \(history.citationCount)")
+        print("✅ [DataManager] \(String(format: "debug_saved_history".localized, history.scholarId, history.citationCount))")
     }
     
     /// 智能保存历史记录（只在数据变化时保存）
@@ -511,7 +511,7 @@ public class DataManager: ObservableObject {
         // 检查最近24小时内是否有相同的引用数
         if let latestHistory = recentHistory.last,
            latestHistory.citationCount == citationCount {
-            print("📝 [DataManager] 引用数未变化，跳过保存: \(scholarId)")
+            print("📝 [DataManager] \(String(format: "debug_citation_no_change".localized, scholarId))")
             return
         }
         
@@ -547,13 +547,13 @@ public class DataManager: ObservableObject {
         let allHistory = getAllHistory()
         let filtered = allHistory.filter { $0.scholarId != scholarId }
         saveAllHistory(filtered)
-        print("✅ [DataManager] 删除历史记录: \(scholarId)")
+        print("✅ [DataManager] \(String(format: "debug_deleted_history".localized, scholarId))")
     }
     
     /// 清理所有历史记录
     public func clearAllHistory() {
         saveAllHistory([])
-        print("✅ [DataManager] 清理所有历史记录")
+        print("✅ [DataManager] \("debug_cleared_all_history".localized)")
     }
     
     /// 清理旧数据（保留最近指定天数的数据）
@@ -563,7 +563,7 @@ public class DataManager: ObservableObject {
         let filtered = allHistory.filter { $0.timestamp >= cutoffDate }
         
         saveAllHistory(filtered)
-        print("✅ [DataManager] 清理旧历史记录，保留 \(filtered.count) 条记录")
+        print("✅ [DataManager] \(String(format: "debug_cleaned_old_history".localized, filtered.count))")
     }
     
     // MARK: - 批量导入
@@ -587,7 +587,7 @@ public class DataManager: ObservableObject {
         }
         
         saveAllHistory(allHistory)
-        print("✅ [DataManager] 导入历史数据: \(importedCount) 条新记录")
+        print("✅ [DataManager] \(String(format: "debug_imported_history".localized, importedCount))")
     }
     
     /// 批量导入学者和历史数据
@@ -717,9 +717,9 @@ public struct CitationGrowth: Codable {
     
     /// 增长趋势
     public var trend: String {
-        if growth > 0 { return "上升" }
-        else if growth < 0 { return "下降" }
-        else { return "持平" }
+        if growth > 0 { return "debug_growth_up".localized }
+        else if growth < 0 { return "debug_growth_down".localized }
+        else { return "debug_growth_flat".localized }
     }
 }
 
@@ -773,7 +773,7 @@ extension DataManager {
                 scholars.contains { $0.id == history.scholarId }
             }
             saveAllHistory(validHistory)
-            print("✅ [DataManager] 修复数据完整性: 删除 \(allHistory.count - validHistory.count) 条孤立记录")
+            print("✅ [DataManager] \(String(format: "debug_fixed_data_integrity".localized, allHistory.count - validHistory.count))")
         }
     }
 }

@@ -1,5 +1,20 @@
 import SwiftUI
 import Charts
+import ContributionChart
+
+// MARK: - Seeded Random Number Generator
+struct SeededRandomNumberGenerator: RandomNumberGenerator {
+    private var state: UInt64
+    
+    init(seed: UInt64) {
+        self.state = seed
+    }
+    
+    mutating func next() -> UInt64 {
+        state = state &* 1103515245 &+ 12345
+        return state
+    }
+}
 
 @available(iOS 16.0, *)
 struct ChartsView: View {
@@ -49,7 +64,12 @@ struct ChartsView: View {
                 if scholars.isEmpty {
                     emptyStateView
                 } else {
-                    scholarChartsList
+                    VStack {
+                        scholarChartsList
+                        
+                        // Contribution Chart Section
+                        contributionChartSection
+                    }
                 }
             }
             .navigationTitle("charts".localized)
@@ -101,6 +121,62 @@ struct ChartsView: View {
         .listStyle(PlainListStyle())
     }
     
+    // MARK: - Contribution Chart Section
+    
+    private var contributionChartSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("contribution_activity".localized)
+                .font(.headline)
+                .foregroundColor(.primary)
+                .padding(.horizontal)
+            
+            ContributionChartView(
+                data: generateContributionData(),
+                rows: 7,
+                columns: 20,
+                targetValue: 1.0,
+                blockColor: .blue
+            )
+            .frame(height: 120)
+            .padding(.horizontal)
+            
+            Text("contribution_chart_description".localized)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+        }
+        .padding(.vertical)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+    
+    // MARK: - Contribution Data Generation
+    
+    private func generateContributionData() -> [Double] {
+        // 生成140个数据点 (7行 x 20列)
+        var data: [Double] = []
+        var generator = SeededRandomNumberGenerator(seed: 12345)
+        
+        for _ in 0..<140 {
+            let randomValue = Double.random(in: 0...1, using: &generator)
+            // 让数据更符合contribution pattern，大部分是0，少数是0.2-1.0
+            let contributionValue: Double
+            if randomValue < 0.7 {
+                contributionValue = 0.0
+            } else if randomValue < 0.85 {
+                contributionValue = 0.2
+            } else if randomValue < 0.95 {
+                contributionValue = 0.5
+            } else {
+                contributionValue = 1.0
+            }
+            data.append(contributionValue)
+        }
+        
+        return data
+    }
+    
 }
 
 // MARK: - Scholar Chart Row View
@@ -135,7 +211,7 @@ struct ScholarChartRowView: View {
                             .foregroundColor(.blue)
                         
                         if let citations = scholar.citations {
-                            Text("\(citations) citations")
+                            Text(String(format: "citations_count".localized, citations))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                         } else {
@@ -188,9 +264,9 @@ struct ScholarChartDetailView: View {
         
         var displayName: String {
             switch self {
-            case .line: return "折线图"
-            case .bar: return "柱状图"
-            case .area: return "面积图"
+            case .line: return "line_chart".localized
+            case .bar: return "bar_chart".localized
+            case .area: return "area_chart".localized
             }
         }
         
@@ -220,6 +296,7 @@ struct ScholarChartDetailView: View {
                         chartEmptyView
                     } else {
                         chartDisplayView
+                            .id("chart-\(scholar.id)-\(selectedTimeRange.rawValue)-\(chartType.rawValue)") // 强制重新创建视图，避免动画冲突
                     }
                     
                     // 统计信息
@@ -261,7 +338,7 @@ struct ScholarChartDetailView: View {
                     .foregroundColor(.primary)
                 
                 if let citations = scholar.citations {
-                    Text("\(citations) citations")
+                    Text(String(format: "citations_count".localized, citations))
                         .font(.subheadline)
                         .foregroundColor(.blue)
                 } else {
@@ -287,7 +364,7 @@ struct ScholarChartDetailView: View {
                 }
             }
             .pickerStyle(MenuPickerStyle())
-            .onChange(of: selectedTimeRange) { _ in
+            .onChange(of: selectedTimeRange) {
                 loadHistoryData()
             }
             
@@ -349,29 +426,29 @@ struct ScholarChartDetailView: View {
                 switch chartType {
                 case .line:
                     LineMark(
-                        x: .value("Date", item.timestamp),
-                        y: .value("Citations", item.citationCount)
+                        x: .value("chart_x_axis_date".localized, item.timestamp),
+                        y: .value("chart_y_axis_citations".localized, item.citationCount)
                     )
                     .foregroundStyle(.blue)
                     .interpolationMethod(.catmullRom)
                     
                 case .bar:
                     BarMark(
-                        x: .value("Date", item.timestamp),
-                        y: .value("Citations", item.citationCount)
+                        x: .value("chart_x_axis_date".localized, item.timestamp),
+                        y: .value("chart_y_axis_citations".localized, item.citationCount)
                     )
                     .foregroundStyle(.blue)
                     
                 case .area:
                     AreaMark(
-                        x: .value("Date", item.timestamp),
-                        y: .value("Citations", item.citationCount)
+                        x: .value("chart_x_axis_date".localized, item.timestamp),
+                        y: .value("chart_y_axis_citations".localized, item.citationCount)
                     )
                     .foregroundStyle(.blue.opacity(0.3))
                     
                     LineMark(
-                        x: .value("Date", item.timestamp),
-                        y: .value("Citations", item.citationCount)
+                        x: .value("chart_x_axis_date".localized, item.timestamp),
+                        y: .value("chart_y_axis_citations".localized, item.citationCount)
                     )
                     .foregroundStyle(.blue)
                 }
@@ -388,9 +465,16 @@ struct ScholarChartDetailView: View {
                 AxisMarks { _ in
                     AxisGridLine()
                     AxisTick()
-                    AxisValueLabel()
+                    AxisValueLabel(format: .number.precision(.fractionLength(0)))
                 }
             }
+            .transaction { tx in
+                tx.animation = nil
+                tx.disablesAnimations = true
+            }
+            .animation(nil, value: historyData)
+            .animation(nil, value: chartType)
+            .animation(nil, value: selectedTimeRange)
         }
         .padding()
         .background(Color(.systemBackground))
@@ -469,9 +553,15 @@ struct ScholarChartDetailView: View {
         var data: [CitationHistory] = []
         let baseCitations = scholar.citations ?? 100
         
+        // 使用稳定的随机种子，避免数据变化导致动画错误
+        var generator = SeededRandomNumberGenerator(seed: UInt64(scholar.id.hashValue))
+        
         for i in 0..<min(totalDays, 30) {
             let date = dateRange.start.addingTimeInterval(TimeInterval(i) * dayInterval)
-            let variance = Int.random(in: -5...10)
+            // 确保时间戳有效
+            guard date.timeIntervalSince1970 > 0 else { continue }
+            
+            let variance = Int.random(in: -5...10, using: &generator)
             let citations = max(0, baseCitations + variance + i)
             
             let history = CitationHistory(
@@ -535,8 +625,8 @@ struct ChartsView: View {
 // MARK: - Preview
 struct ChartsView_Previews: PreviewProvider {
     static let mockScholars = [
-        Scholar.mock(id: "abc123", name: "张三教授", citations: 1500),
-        Scholar.mock(id: "def456", name: "李四博士", citations: 800)
+        Scholar.mock(id: "abc123", name: "scholar_default_name".localized, citations: 1500),
+        Scholar.mock(id: "def456", name: "scholar_default_name".localized, citations: 800)
     ]
     
     static var previews: some View {

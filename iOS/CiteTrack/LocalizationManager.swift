@@ -72,26 +72,38 @@ public class LocalizationManager: ObservableObject {
     
     private init() {
         let savedLanguage = UserDefaults.standard.string(forKey: "SelectedLanguage")
+        let userExplicit = UserDefaults.standard.bool(forKey: "UserExplicitLanguage")
         
-        if let saved = savedLanguage, let language = Language(rawValue: saved) {
+        if userExplicit, let saved = savedLanguage, let language = Language(rawValue: saved) {
+            // 用户在设置中明确选择过语言，则优先采用用户选择
             self.currentLanguage = language
         } else {
-            // 默认跟随系统语言
-            let systemCode: String = {
+            // 默认跟随系统语言（更健壮：识别 zh/zh-Hans/zh-Hant 以及 Bundle 首选本地化）
+            let preferred = Bundle.main.preferredLocalizations.first ?? "en"
+            let systemLanguageCode: String = {
                 if #available(iOS 16.0, *) {
-                    return Locale.current.language.languageCode?.identifier ?? "en"
+                    return Locale.current.language.languageCode?.identifier ?? preferred
                 } else {
-                    return Locale.current.languageCode ?? "en"
+                    return Locale.current.languageCode ?? preferred
                 }
             }()
-            switch systemCode {
-            case "zh": self.currentLanguage = .chinese
-            case "ja": self.currentLanguage = .japanese
-            case "ko": self.currentLanguage = .korean
-            case "es": self.currentLanguage = .spanish
-            case "fr": self.currentLanguage = .french
-            case "de": self.currentLanguage = .german
-            default: self.currentLanguage = .english
+            let code = systemLanguageCode.lowercased()
+            if code.hasPrefix("zh") { // zh, zh-Hans, zh-Hant, zh_CN, etc.
+                self.currentLanguage = .chinese
+            } else if code.hasPrefix("ja") {
+                self.currentLanguage = .japanese
+            } else if code.hasPrefix("ko") {
+                self.currentLanguage = .korean
+            } else if code.hasPrefix("es") {
+                self.currentLanguage = .spanish
+            } else if code.hasPrefix("fr") {
+                self.currentLanguage = .french
+            } else if code.hasPrefix("de") {
+                self.currentLanguage = .german
+            } else if preferred.lowercased().hasPrefix("zh") { // 兜底根据 Bundle 配置
+                self.currentLanguage = .chinese
+            } else {
+                self.currentLanguage = .english
             }
         }
         
@@ -119,6 +131,8 @@ public class LocalizationManager: ObservableObject {
         languageSwitchQueue.async { [weak self] in
             DispatchQueue.main.async {
                 self?.currentLanguage = language
+                // 标记为用户明确选择语言，避免下次因系统语言与已存语言不一致而出现混合语言
+                UserDefaults.standard.set(true, forKey: "UserExplicitLanguage")
                 self?.isLanguageSwitching = false
                 completion()
             }
@@ -185,6 +199,20 @@ public class LocalizationManager: ObservableObject {
             "show_data_points": "Show Data Points",
             "show_grid": "Show Grid",
             "export_chart": "Export Chart",
+            "citations_count": "%d citations",
+            "chart_x_axis_date": "Date",
+            "chart_y_axis_citations": "Citations",
+            "no_data_to_chart": "No data to chart",
+            "add_scholars_to_see_charts": "Add scholars to see charts",
+            "citation_chart": "Citation Chart",
+            "no_chart_data": "No chart data",
+            "chart_data_will_appear": "Chart data will appear after adding scholars",
+            "charts_require_ios16": "Charts require iOS 16 or later",
+            "update_ios_for_charts": "Please update your iOS version to use charts",
+            "no_citation_data": "No citation data",
+            "period_7_days": "Last 7 Days",
+            "period_30_days": "Last 30 Days",
+            "period_90_days": "Last 90 Days",
             
             // 设置相关
             "general_settings": "General Settings",
@@ -192,8 +220,15 @@ public class LocalizationManager: ObservableObject {
             "show_in_dock": "Show in Dock",
             "show_in_menu_bar": "Show in Menu Bar",
             "launch_at_login": "Launch at Login",
-            "icloud_sync": "iCloud Sync",
             "notifications": "Notifications",
+            "auto_update": "Auto Update",
+            "auto_update_enabled": "Enable Auto Update",
+            "auto_update_frequency": "Update Frequency",
+            "next_update_time": "Next Update Time",
+            "hourly": "Hourly",
+            "daily": "Daily",
+            "weekly": "Weekly",
+            "monthly": "Monthly",
             "language": "Language",
             "theme": "Theme",
             "widget_theme": "Widget Theme",
@@ -208,11 +243,49 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Check Sync Status",
             "data_management": "Data Management",
             "import_from_icloud": "Import from iCloud",
-            "manual_import_file": "Import File",
-            "export_to_device": "Export File",
+            "manual_import_file": "Import data to file",
+            "export_to_device": "Export data to file",
             "export_to_icloud": "Export to iCloud",
-            "app_description": "CiteTrack - Academic Citation Tracking Tool",
+            "app_description": "CiteTrack - Academic Citation Tracker",
             "app_help": "Help scholars track and manage Google Scholar citation data",
+            
+            // iCloud related
+            "show_in_icloud_drive": "Show in iCloud Drive",
+            "sync_now": "Sync Now",
+            "create_icloud_folder_alert_title": "Show Folder in iCloud Drive",
+            "create_icloud_folder_alert_message": "This will create a CiteTrack folder with app icon in iCloud Drive, making it easy for you to manage imported and exported data files.",
+            "create_folder_success_title": "Success",
+            "create_folder_success_message": "Successfully created CiteTrack folder in iCloud Drive! Now you can see the CiteTrack folder with icon in the Files app's iCloud Drive, and all imported/exported data will be saved there.",
+            "create_folder_failed_message": "Failed to create iCloud Drive folder: %@",
+            "create_folder_button": "Create",
+            
+            // Scholar add interface
+            "google_scholar_id_placeholder": "Google Scholar ID or URL",
+            "scan_scholar_id": "Scan Scholar ID",
+            
+            // Initialization interface
+            "welcome_to_citetrack": "Welcome to CiteTrack",
+            "initializing_service": "Initializing academic tracking service for you...",
+            "initialization_complete": "Initialization complete!",
+            "imported_scholars_data": "Imported data for %d scholars",
+            "real_time_data_update": "Real-time Data Updates",
+            "real_time_data_description": "Automatically fetch the latest citation data for scholars",
+            "trend_analysis": "Trend Analysis",
+            "trend_analysis_description": "Visualize changes in academic influence",
+            "smart_notifications": "Smart Notifications",
+            "smart_notifications_description": "Get timely notifications for important changes",
+            "icloud_sync": "iCloud Sync",
+            "icloud_sync_description": "Sync seamlessly across devices via iCloud",
+            // Welcome features (missing keys added)
+            "smart_tracking": "Smart Tracking",
+            "smart_tracking_description": "Track citations automatically with intelligent updates",
+            
+            // Chart related
+            "no_data_available": "No data available",
+            "add_scholars_first": "Please add scholars and complete a data refresh first",
+            
+            // Scan related
+            "scan_instructions": "Aim at a line containing citations?user=",
             
             // 通知相关
             "citation_change": "Citation Change",
@@ -239,6 +312,8 @@ public class LocalizationManager: ObservableObject {
             "dashboard_title": "Dashboard",
             "scholar_management": "Scholars",
             "total_citations": "Total Citations",
+            "my_citations": "My Citations",
+            "debug_show_refresh_frequency": "Show Refresh Frequency",
             "total_citations_with_count": "Total Citations",
             "scholar_count": "Scholar Count",
             "scholar_list": "Scholar List",
@@ -253,7 +328,6 @@ public class LocalizationManager: ObservableObject {
             "delete_all": "Delete All",
             "confirm": "Confirm",
             "scholar_name_placeholder": "Scholar Name (Optional)",
-            "google_scholar_id_placeholder": "Google Scholar ID",
             "add_scholar_button": "Add Scholar",
             "edit_scholar": "Edit Scholar",
             "current_citations": "Current Citations",
@@ -272,7 +346,6 @@ public class LocalizationManager: ObservableObject {
             "recent_week": "Recent Week",
             "recent_month": "Recent Month",
             "recent_three_months": "Recent 3 Months",
-            "loading_chart_data": "Loading chart data...",
             "loading_chart_data_message": "Loading chart data...",
             "no_historical_data": "No Historical Data",
             "no_historical_data_message": "No historical data available",
@@ -298,7 +371,7 @@ public class LocalizationManager: ObservableObject {
             // Delete confirmations (single/multiple)
             "delete_scholar_title": "Delete Scholar",
             "delete_scholar_message": "This will delete the scholar and all related data. Are you sure?",
-            "delete_scholar_message_with_name": "This will delete scholar ‘%@’ and all related data. Are you sure?",
+            "delete_scholar_message_with_name": "This will delete scholar '%@' and all related data. Are you sure?",
             "delete_scholars_message_with_count": "This will delete %d scholars and all related data. Are you sure?",
             "trend_suffix": "Trend",
             
@@ -348,7 +421,6 @@ public class LocalizationManager: ObservableObject {
             "weekly_growth": "Weekly Growth",
             "monthly_growth": "Monthly Growth",
             "quarterly_growth": "Quarterly Growth",
-            "trend_analysis": "Trend Analysis",
             "loading_growth_data": "Loading growth data...",
             "example_url": "Example: scholar.google.com/citations?user=XXXXXXXX",
             "invalid_scholar_id_format": "Invalid Scholar ID format",
@@ -359,6 +431,7 @@ public class LocalizationManager: ObservableObject {
             
             // Google Scholar Service 错误信息
             "invalid_url": "Invalid URL",
+            "invalid_scholar_id_or_url": "Invalid scholar ID or URL",
             "no_data_returned": "No data returned",
             
             // 缺失的翻译键
@@ -366,8 +439,6 @@ public class LocalizationManager: ObservableObject {
             "export": "Export",
             "import_from_icloud_message": "This will import data from the CiteTrack folder in iCloud Drive. Current data will be replaced.",
             "export_to_icloud_message": "This will export current data to the CiteTrack folder in iCloud Drive.",
-            "citations_count": "Citations Count",
-            "no_data_available": "No Data Available",
             "current_citations_label": "Current Citations",
             "last_updated_label": "Last Updated",
             "updated_at": "Updated at",
@@ -424,7 +495,70 @@ public class LocalizationManager: ObservableObject {
             "refresh_data_description": "Refresh scholar citation data",
             "switch_scholar": "Switch Scholar",
             "switch_scholar_description": "Switch to next scholar",
-            "citations_unit": "citations"
+            "citations_unit": "citations",
+            
+            // Contribution Chart
+            "contribution_activity": "Contribution Activity",
+            "contribution_chart_description": "Shows academic activity heatmap for the last 20 weeks",
+            "refresh_count_display_print": "%d refreshes",
+            
+            // Debug and Logging Messages
+            "debug_using_public_container": "Using public universal container method, no FileProvider extension needed",
+            "debug_sync_last_refresh_time": "Syncing LastRefreshTime: old=%@ -> new=%@",
+            "debug_deep_link_received": "Received deep link: %@",
+            "debug_invalid_url_scheme": "Invalid URL scheme: %@",
+            "debug_refresh_request_received": "Received refresh request",
+            "debug_switch_scholar_request_received": "Received switch scholar request",
+            "debug_unsupported_deep_link": "Unsupported deep link: %@",
+            "debug_widget_refresh_start": "Starting to handle refresh request",
+            "debug_widget_refresh_complete": "Refresh completed, updating widgets",
+            "debug_widget_switch_start": "Starting to handle scholar switch request",
+            "debug_widget_switch_success": "Switched to scholar %d: %@",
+            "debug_widget_insufficient_scholars": "Insufficient scholars, cannot switch",
+            "debug_cellular_restricted": "Cellular data restricted (user disabled or restricted)",
+            "debug_cellular_available": "Cellular data available",
+            "debug_cellular_unknown": "Cellular data status unknown",
+            "debug_background_refresh_scheduled": "Background refresh scheduled: %@",
+            "debug_background_refresh_failed": "Failed to schedule background refresh: %@",
+            "debug_batch_update_complete": "Completed updating %d/%d scholars",
+            "debug_batch_update_final": "Completed updating %d/%d scholars, totalDelta=%d",
+            "debug_confetti_batch_finished": "Batch finished trigger: %@",
+            "debug_single_update_success": "Successfully updated scholar info: %@ - %d citations",
+            "debug_single_update_failed": "Failed to get scholar info: %@",
+            "debug_chart_tap": "Tapped scholar chart: %@",
+            "debug_update_tap": "Preparing to update scholar: id=%@, name=%@",
+            "debug_accumulate_delta": "Accumulate delta id=%@ old=%d new=%d delta=%d",
+            "debug_show_icloud_drive": "Show in iCloud Drive",
+            "debug_create_icloud_folder": "Creating iCloud Drive folder",
+            "debug_icloud_folder_created": "iCloud Drive folder created successfully",
+            "debug_icloud_folder_failed": "Failed to create iCloud Drive folder: %@",
+            "debug_export_to_icloud": "Exporting to iCloud Drive",
+            "debug_export_success": "Export to iCloud Drive successful",
+            "debug_export_failed": "Export to iCloud Drive failed: %@",
+            "debug_import_from_icloud": "Importing from iCloud Drive",
+            "debug_import_success": "Import from iCloud Drive successful",
+            "debug_import_failed": "Import from iCloud Drive failed: %@",
+            "debug_file_url_error": "Cannot get file URL, using mock data",
+            "debug_read_user_data_failed": "Failed to read user_data.json: %@, using mock data",
+            "debug_chart_description": "Chart Description",
+            "debug_chart_explanation": "This chart shows the historical trend of scholar citation counts. You can select different time periods (7 days, 30 days, 90 days) to view data, and switch between different scholars through the scholar selector for comparative analysis.",
+            "debug_data_source": "Data source: Google Scholar, automatically updated daily",
+            "debug_congratulations": "🎉 Congrats!",
+            "debug_citation_growth": "Your citations increased by +%d!",
+            "debug_success": "🎉 Success!",
+            "debug_new_scholar_added": "You have added a new scholar, current citation count is %d.",
+            // Popup texts for refresh scenarios
+            "single_update_title_growth": "🎉 Congrats!",
+            "single_update_desc_growth": "This scholar's citations increased by +%d",
+            "single_update_title_today_growth": "🎉 Congrats!",
+            "single_update_desc_today_growth": "Citations have increased by +%d today",
+            "single_update_title_no_growth": "No New Citations",
+            "single_update_desc_no_growth": "No citation growth today",
+            "batch_update_title_growth": "🎉 Congrats!",
+            "batch_update_desc_growth": "Your followed scholars' citations increased by +%d",
+            "batch_update_title_no_growth": "No New Citations",
+            "batch_update_desc_no_growth": "No citation growth detected this time",
+            "debug_appgroup_write": "AppGroup 写入 LastRefreshTime=%@",
         ]
     }
     
@@ -471,6 +605,18 @@ public class LocalizationManager: ObservableObject {
             "show_data_points": "显示数据点",
             "show_grid": "显示网格",
             "export_chart": "导出图表",
+            "citations_count": "%d 引用",
+            "chart_x_axis_date": "日期",
+            "chart_y_axis_citations": "引用数",
+            "no_data_to_chart": "暂无数据可显示图表",
+            "add_scholars_to_see_charts": "添加学者以查看图表",
+            "citation_chart": "引用图表",
+            "no_chart_data": "暂无图表数据",
+            "chart_data_will_appear": "添加学者后，图表数据将在此显示",
+            "charts_require_ios16": "图表功能需要iOS 16或更高版本",
+            "update_ios_for_charts": "请更新您的iOS版本以使用图表功能",
+            "no_citation_data": "暂无引用数据",
+            "refresh_count_display_print": "%d 次刷新",
             
             // 设置相关
             "general_settings": "常规设置",
@@ -478,8 +624,15 @@ public class LocalizationManager: ObservableObject {
             "show_in_dock": "在Dock中显示",
             "show_in_menu_bar": "在菜单栏显示",
             "launch_at_login": "开机启动",
-            "icloud_sync": "iCloud同步",
             "notifications": "通知",
+            "auto_update": "自动更新",
+            "auto_update_enabled": "启用自动更新",
+            "auto_update_frequency": "更新频率",
+            "next_update_time": "下次更新时间",
+            "hourly": "每小时",
+            "daily": "每天",
+            "weekly": "每周",
+            "monthly": "每月",
             "language": "语言",
             "theme": "主题",
             "widget_theme": "小组件主题",
@@ -494,11 +647,49 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "检查同步状态",
             "data_management": "数据管理",
             "import_from_icloud": "从iCloud导入",
-            "manual_import_file": "导入文件",
-            "export_to_device": "导出文件",
+            "manual_import_file": "导入数据到文件",
+            "export_to_device": "导出数据到文件",
             "export_to_icloud": "导出到iCloud",
-            "app_description": "CiteTrack - 学术引用追踪工具",
+            "app_description": "CiteTrack - 学术引用追踪助手",
             "app_help": "帮助学者追踪和管理Google Scholar引用数据",
+            
+            // iCloud相关
+            "show_in_icloud_drive": "在iCloud Drive中显示",
+            "sync_now": "立即同步",
+            "create_icloud_folder_alert_title": "在iCloud Drive中显示文件夹",
+            "create_icloud_folder_alert_message": "这将在iCloud Drive中创建一个带应用图标的CiteTrack文件夹，方便您管理导入导出的数据文件。",
+            "create_folder_success_title": "成功",
+            "create_folder_success_message": "成功在iCloud Drive中创建了CiteTrack文件夹！现在您可以在「文件」应用的iCloud Drive中看到带图标的CiteTrack文件夹，所有导入导出的数据都将保存在这里。",
+            "create_folder_failed_message": "创建iCloud Drive文件夹失败: %@",
+            "create_folder_button": "创建",
+            
+            // 学者添加界面
+            "google_scholar_id_placeholder": "Google Scholar ID 或 URL",
+            "scan_scholar_id": "扫描学者ID",
+            
+            // 初始化界面
+            "welcome_to_citetrack": "欢迎使用 CiteTrack",
+            "initializing_service": "正在为您初始化学术追踪服务...",
+            "initialization_complete": "初始化完成！",
+            "imported_scholars_data": "已导入 %d 位学者的数据",
+            "real_time_data_update": "实时数据更新",
+            "real_time_data_description": "自动获取学者的最新引用数据",
+            "trend_analysis": "趋势分析",
+            "trend_analysis_description": "可视化展示学术影响力变化",
+            "smart_notifications": "智能提醒",
+            "smart_notifications_description": "重要变化及时通知",
+            "icloud_sync": "云端同步",
+            "icloud_sync_description": "支持 iCloud 同步，多设备间数据无缝共享",
+            // 欢迎页功能（补充缺失键）
+            "smart_tracking": "智能跟踪",
+            "smart_tracking_description": "自动跟踪学术引用并智能更新",
+            
+            // 图表相关
+            "no_data_available": "暂无可用的数据",
+            "add_scholars_first": "请先添加学者并完成一次数据刷新",
+            
+            // 扫描相关
+            "scan_instructions": "对准包含 citations?user= 的一行",
             
             // 通知相关
             "citation_change": "引用量变化",
@@ -523,8 +714,10 @@ public class LocalizationManager: ObservableObject {
             // UI文本
             "dashboard_title": "仪表板",
             "scholar_management": "学者",
-            "total_citations": "总引用数",
-            "total_citations_with_count": "总引用数",
+            "total_citations": "总引用",
+            "my_citations": "我的引用量",
+            "debug_show_refresh_frequency": "显示刷新频率",
+            "total_citations_with_count": "我的引用量",
             "scholar_count": "学者数量",
             "scholar_list": "学者列表",
             "no_scholar_data": "暂无学者数据",
@@ -538,7 +731,6 @@ public class LocalizationManager: ObservableObject {
             "delete_all": "删除全部",
             "confirm": "确定",
             "scholar_name_placeholder": "学者姓名（可选）",
-            "google_scholar_id_placeholder": "Google Scholar ID",
             "add_scholar_button": "添加学者",
             "edit_scholar": "编辑学者",
             "current_citations": "当前引用数",
@@ -557,7 +749,6 @@ public class LocalizationManager: ObservableObject {
             "recent_week": "近一周",
             "recent_month": "近一月",
             "recent_three_months": "近三月",
-            "loading_chart_data": "正在加载图表数据...",
             "loading_chart_data_message": "正在加载图表数据...",
             "no_historical_data": "暂无历史数据",
             "no_historical_data_message": "暂无历史数据",
@@ -583,7 +774,7 @@ public class LocalizationManager: ObservableObject {
             // 删除确认（单个/多个）
             "delete_scholar_title": "删除学者",
             "delete_scholar_message": "将删除该学者及其所有相关数据，是否确认？",
-            "delete_scholar_message_with_name": "将删除学者“%@”及其所有相关数据，是否确认？",
+            "delete_scholar_message_with_name": "将删除学者%@及其所有相关数据，是否确认？",
             "delete_scholars_message_with_count": "将删除 %d 位学者及其所有相关数据，是否确认？",
             "trend_suffix": "趋势",
             
@@ -595,6 +786,9 @@ public class LocalizationManager: ObservableObject {
             "1year": "1年",
             "all_time": "全部时间",
             "custom_range": "自定义范围",
+            "period_7_days": "近7天",
+            "period_30_days": "近30天",
+            "period_90_days": "近90天",
             
             // 额外的UI字符串
             "dashboard": "仪表板",
@@ -633,7 +827,6 @@ public class LocalizationManager: ObservableObject {
             "weekly_growth": "周增长",
             "monthly_growth": "月增长", 
             "quarterly_growth": "季度增长",
-            "trend_analysis": "趋势分析",
             "loading_growth_data": "正在加载增长数据...",
             
             "example_url": "示例: scholar.google.com/citations?user=XXXXXXXX",
@@ -645,14 +838,13 @@ public class LocalizationManager: ObservableObject {
             
             // Google Scholar Service 错误信息
             "invalid_url": "无效的URL",
+            "invalid_scholar_id_or_url": "无效的学者ID或URL",
             
             // 缺失的翻译键
             "import": "导入",
             "export": "导出",
             "import_from_icloud_message": "这将从iCloud Drive的CiteTrack文件夹导入数据。当前数据将被替换。",
             "export_to_icloud_message": "这将把当前数据导出到iCloud Drive的CiteTrack文件夹。",
-            "citations_count": "引用数量",
-            "no_data_available": "暂无可用数据",
             "current_citations_label": "当前引用",
             "last_updated_label": "最后更新",
             "updated_at": "更新于",
@@ -710,7 +902,65 @@ public class LocalizationManager: ObservableObject {
             "refresh_data_description": "刷新学者的引用数据",
             "switch_scholar": "切换学者",
             "switch_scholar_description": "切换到下一个学者",
-            "citations_unit": "引用"
+            "citations_unit": "引用",
+            
+            // Contribution Chart
+            "contribution_activity": "贡献活动",
+            "contribution_chart_description": "显示最近20周的学术活动热力图",
+            
+            // Debug and Logging Messages
+            "debug_using_public_container": "使用公共普遍性容器方法，无需FileProvider扩展",
+            "debug_sync_last_refresh_time": "同步 LastRefreshTime: old=%@ -> new=%@",
+            "debug_deep_link_received": "接收到深度链接: %@",
+            "debug_invalid_url_scheme": "无效的URL scheme: %@",
+            "debug_refresh_request_received": "收到刷新请求",
+            "debug_switch_scholar_request_received": "收到切换学者请求",
+            "debug_unsupported_deep_link": "不支持的深度链接: %@",
+            "debug_widget_refresh_start": "开始处理刷新请求",
+            "debug_widget_refresh_complete": "刷新完成，更新小组件",
+            "debug_widget_switch_start": "开始处理学者切换请求",
+            "debug_widget_switch_success": "切换到学者 %d: %@",
+            "debug_widget_insufficient_scholars": "学者数量不足，无法切换",
+            "debug_cellular_restricted": "蜂窝数据受限（用户关闭或受限）",
+            "debug_cellular_available": "蜂窝数据可用",
+            "debug_cellular_unknown": "蜂窝数据状态未知",
+            "debug_batch_update_complete": "完成更新 %d/%d 位学者",
+            "debug_batch_update_final": "完成更新 %d/%d 位学者，totalDelta=%d",
+            "debug_confetti_batch_finished": "批量完成触发: %@",
+            "debug_single_update_success": "成功更新学者信息: %@ - %d citations",
+            "debug_single_update_failed": "获取学者信息失败: %@",
+            "debug_chart_tap": "点击了学者图表: %@",
+            "debug_accumulate_delta": "累积增量 id=%@ old=%d new=%d delta=%d",
+            "debug_show_icloud_drive": "在iCloud Drive中显示",
+            "debug_create_icloud_folder": "创建iCloud Drive文件夹",
+            "debug_icloud_folder_created": "iCloud Drive文件夹创建成功",
+            "debug_icloud_folder_failed": "Failed to create iCloud Drive folder: %@",
+            "debug_export_to_icloud": "导出到iCloud Drive",
+            "debug_export_success": "导出到iCloud Drive成功",
+            "debug_export_failed": "导出到iCloud Drive失败: %@",
+            "debug_import_from_icloud": "从iCloud Drive导入",
+            "debug_import_success": "从iCloud Drive导入成功",
+            "debug_import_failed": "从iCloud Drive导入失败: %@",
+            "debug_file_url_error": "无法获取文件URL，使用模拟数据",
+            "debug_read_user_data_failed": "读取user_data.json失败: %@，使用模拟数据",
+            "debug_chart_description": "📊 图表说明",
+            "debug_chart_explanation": "此图表显示学者引用量的历史变化趋势。您可以选择不同的时间周期（7天、30天、90天）来查看数据，并通过学者选择器切换不同的学者进行对比分析。",
+            "debug_data_source": "数据来源于Google Scholar，每日自动更新",
+            "debug_congratulations": "🎉 恭喜！",
+            "debug_citation_growth": "你的引用量增长了 +%d！",
+            "debug_success": "🎉 成功！",
+            "debug_new_scholar_added": "您已添加新的学者，当前引用量为%d。",
+            // 刷新场景弹窗文案
+            "single_update_title_growth": "🎉 恭喜！",
+            "single_update_desc_growth": "该学者引用量增长了 +%d",
+            "single_update_title_today_growth": "🎉 恭喜！",
+            "single_update_desc_today_growth": "今天的引用量已经增长了 +%d",
+            "single_update_title_no_growth": "暂无新增引用",
+            "single_update_desc_no_growth": "今天的引用量没有增长",
+            "batch_update_title_growth": "🎉 恭喜！",
+            "batch_update_desc_growth": "您关注的学者引用量增长了 +%d",
+            "batch_update_title_no_growth": "暂无新增引用",
+            "batch_update_desc_no_growth": "本次未检测到引用量增长"
         ]
     }
     
@@ -757,6 +1007,19 @@ public class LocalizationManager: ObservableObject {
             "show_data_points": "データポイントを表示",
             "show_grid": "グリッドを表示",
             "export_chart": "チャートをエクスポート",
+            "citations_count": "%d 引用",
+            "chart_x_axis_date": "日付",
+            "chart_y_axis_citations": "引用数",
+            "no_data_to_chart": "チャートに表示するデータがありません",
+            "add_scholars_to_see_charts": "チャートを表示するには学者を追加してください",
+            "contribution_activity": "貢献アクティビティ",
+            "contribution_chart_description": "過去140日間のアクティビティパターンを表示",
+            "citation_chart": "引用チャート",
+            "no_chart_data": "チャートデータがありません",
+            "chart_data_will_appear": "学者を追加すると、チャートデータがここに表示されます",
+            "charts_require_ios16": "チャート機能にはiOS 16以上が必要です",
+            "update_ios_for_charts": "チャート機能を使用するにはiOSバージョンを更新してください",
+            "no_citation_data": "引用データがありません",
             
             // 设置相关
             "general_settings": "一般設定",
@@ -766,6 +1029,14 @@ public class LocalizationManager: ObservableObject {
             "launch_at_login": "ログイン時に起動",
             "icloud_sync": "iCloud同期",
             "notifications": "通知",
+            "auto_update": "自動更新",
+            "auto_update_enabled": "自動更新を有効にする",
+            "auto_update_frequency": "更新頻度",
+            "next_update_time": "次回更新時刻",
+            "hourly": "毎時",
+            "daily": "毎日",
+            "weekly": "毎週",
+            "monthly": "毎月",
             "language": "言語",
             "theme": "テーマ",
             "widget_theme": "ウィジェットのテーマ",
@@ -780,11 +1051,15 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "同期ステータスを確認",
             "data_management": "データ管理",
             "import_from_icloud": "iCloudからインポート",
-            "manual_import_file": "ファイルをインポート",
-            "export_to_device": "ファイルをエクスポート",
+            "manual_import_file": "データをファイルにインポート",
+            "export_to_device": "データをファイルにエクスポート",
             "export_to_icloud": "iCloudにエクスポート",
             "app_description": "CiteTrack - 学術引用追跡ツール",
             "app_help": "研究者がGoogle Scholarの引用データを追跡・管理するのを支援",
+            "icloud_sync_description": "iCloudでデバイス間をシームレスに同期",
+            // ようこそページ（不足キーの追加）
+            "smart_tracking": "スマートトラッキング",
+            "smart_tracking_description": "引用を自動で追跡し、賢く最新状態に保ちます",
             
             // 通知相关
             "citation_change": "引用数変更",
@@ -807,6 +1082,7 @@ public class LocalizationManager: ObservableObject {
             "dashboard_title": "ダッシュボード",
             "scholar_management": "研究者",
             "total_citations": "総引用数",
+            "debug_show_refresh_frequency": "更新頻度を表示",
             "total_citations_with_count": "総引用数",
             "scholar_count": "研究者数",
             "scholar_list": "研究者リスト",
@@ -840,7 +1116,6 @@ public class LocalizationManager: ObservableObject {
             "recent_week": "最近1週間",
             "recent_month": "最近1ヶ月",
             "recent_three_months": "最近3ヶ月",
-            "loading_chart_data": "チャートデータを読み込み中...",
             "loading_chart_data_message": "チャートデータを読み込み中...",
             "no_historical_data": "履歴データがありません",
             "no_historical_data_message": "履歴データがありません",
@@ -928,7 +1203,6 @@ public class LocalizationManager: ObservableObject {
             "export": "エクスポート",
             "import_from_icloud_message": "iCloud DriveのCiteTrackフォルダからデータをインポートします。現在のデータは置き換えられます。",
             "export_to_icloud_message": "現在のデータをiCloud DriveのCiteTrackフォルダにエクスポートします。",
-            "citations_count": "引用数",
             "no_data_available": "利用可能なデータなし",
             "current_citations_label": "現在の引用",
             "last_updated_label": "最終更新",
@@ -973,7 +1247,7 @@ public class LocalizationManager: ObservableObject {
             "academic_influence": "学術的影響力",
             "top_scholars": "研究者",
             "academic_ranking": "学術ランキング",
-            "add_scholars_to_track": "研究者を追加して追跡開始\n彼らの学術的影響力",
+            "add_scholars_to_track": "研究者を追加して追跡開始\n그들의 학술적 영향력",
             "tracking_scholars": "研究者を追跡中",
             "latest_data": "最新データ",
             "data_insights": "データインサイト",
@@ -1036,6 +1310,19 @@ public class LocalizationManager: ObservableObject {
             "show_data_points": "데이터 포인트 표시",
             "show_grid": "그리드 표시",
             "export_chart": "차트 내보내기",
+            "citations_count": "%d 인용",
+            "chart_x_axis_date": "날짜",
+            "chart_y_axis_citations": "인용수",
+            "no_data_to_chart": "차트에 표시할 데이터가 없습니다",
+            "add_scholars_to_see_charts": "차트를 보려면 학자를 추가하세요",
+            "contribution_activity": "기여 활동",
+            "contribution_chart_description": "지난 140일간의 활동 패턴을 보여줍니다",
+            "citation_chart": "인용 차트",
+            "no_chart_data": "차트 데이터가 없습니다",
+            "chart_data_will_appear": "학자를 추가하면 차트 데이터가 여기에 표시됩니다",
+            "charts_require_ios16": "차트 기능은 iOS 16 이상이 필요합니다",
+            "update_ios_for_charts": "차트 기능을 사용하려면 iOS 버전을 업데이트하세요",
+            "no_citation_data": "인용 데이터가 없습니다",
             
             // 设置相关
             "general_settings": "일반 설정",
@@ -1045,6 +1332,14 @@ public class LocalizationManager: ObservableObject {
             "launch_at_login": "로그인 시 시작",
             "icloud_sync": "iCloud 동기화",
             "notifications": "알림",
+            "auto_update": "자동 업데이트",
+            "auto_update_enabled": "자동 업데이트 활성화",
+            "auto_update_frequency": "업데이트 빈도",
+            "next_update_time": "다음 업데이트 시간",
+            "hourly": "매시간",
+            "daily": "매일",
+            "weekly": "매주",
+            "monthly": "매월",
             "language": "언어",
             "theme": "테마",
             "widget_theme": "위젯 테마",
@@ -1059,11 +1354,15 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "동기화 상태 확인",
             "data_management": "데이터 관리",
             "import_from_icloud": "iCloud에서 가져오기",
-            "manual_import_file": "파일 가져오기",
-            "export_to_device": "파일 내보내기",
+            "manual_import_file": "데이터를 파일로 가져오기",
+            "export_to_device": "데이터를 파일로 내보내기",
             "export_to_icloud": "iCloud로 내보내기",
             "app_description": "CiteTrack - 학술 인용 추적 도구",
             "app_help": "학자들이 Google Scholar 인용 데이터를 추적하고 관리하는 것을 돕습니다",
+            "icloud_sync_description": "iCloud로 기기 간 데이터를 매끄럽게 동기화",
+            // 환영 페이지(누락 키 추가)
+            "smart_tracking": "스마트 추적",
+            "smart_tracking_description": "인용을 자동으로 추적하고 지능적으로 최신 상태로 유지",
             
             // 通知相关
             "citation_change": "인용 변경",
@@ -1086,6 +1385,7 @@ public class LocalizationManager: ObservableObject {
             "dashboard_title": "대시보드",
             "scholar_management": "학자",
             "total_citations": "총 인용수",
+            "debug_show_refresh_frequency": "새로고침 빈도 표시",
             "total_citations_with_count": "총 인용수",
             "scholar_count": "학자 수",
             "scholar_list": "학자 목록",
@@ -1119,7 +1419,6 @@ public class LocalizationManager: ObservableObject {
             "recent_week": "최근 1주",
             "recent_month": "최근 1개월",
             "recent_three_months": "최근 3개월",
-            "loading_chart_data": "차트 데이터 로딩 중...",
             "loading_chart_data_message": "차트 데이터 로딩 중...",
             "no_historical_data": "과거 데이터 없음",
             "no_historical_data_message": "과거 데이터 없음",
@@ -1201,13 +1500,13 @@ public class LocalizationManager: ObservableObject {
             
             // Google Scholar Service 错误信息
             "invalid_url": "잘못된 URL",
+            "invalid_scholar_id_or_url": "잘못된 학자 ID 또는 URL",
             
             // 缺失的翻译键
             "import": "가져오기",
             "export": "내보내기",
             "import_from_icloud_message": "iCloud Drive의 CiteTrack 폴더에서 데이터를 가져옵니다. 현재 데이터는 교체됩니다.",
             "export_to_icloud_message": "현재 데이터를 iCloud Drive의 CiteTrack 폴더로 내보냅니다.",
-            "citations_count": "인용 수",
             "no_data_available": "사용 가능한 데이터 없음",
             "current_citations_label": "현재 인용",
             "last_updated_label": "마지막 업데이트",
@@ -1315,6 +1614,19 @@ public class LocalizationManager: ObservableObject {
             "show_data_points": "Mostrar Puntos de Datos",
             "show_grid": "Mostrar Cuadrícula",
             "export_chart": "Exportar Gráfico",
+            "citations_count": "%d citas",
+            "chart_x_axis_date": "Fecha",
+            "chart_y_axis_citations": "Citas",
+            "no_data_to_chart": "No hay datos para mostrar en el gráfico",
+            "add_scholars_to_see_charts": "Añade académicos para ver gráficos",
+            "contribution_activity": "Actividad de Contribución",
+            "contribution_chart_description": "Muestra el patrón de actividad de los últimos 140 días",
+            "citation_chart": "Gráfico de Citas",
+            "no_chart_data": "No hay datos del gráfico",
+            "chart_data_will_appear": "Los datos del gráfico aparecerán después de añadir académicos",
+            "charts_require_ios16": "Los gráficos requieren iOS 16 o posterior",
+            "update_ios_for_charts": "Por favor actualiza tu versión de iOS para usar gráficos",
+            "no_citation_data": "No hay datos de citas",
             
             // 设置相关
             "general_settings": "Configuración General",
@@ -1324,6 +1636,14 @@ public class LocalizationManager: ObservableObject {
             "launch_at_login": "Iniciar al Iniciar Sesión",
             "icloud_sync": "Sincronización iCloud",
             "notifications": "Notificaciones",
+            "auto_update": "Actualización Automática",
+            "auto_update_enabled": "Habilitar Actualización Automática",
+            "auto_update_frequency": "Frecuencia de Actualización",
+            "next_update_time": "Próxima Actualización",
+            "hourly": "Cada Hora",
+            "daily": "Diario",
+            "weekly": "Semanal",
+            "monthly": "Mensual",
             "language": "Idioma",
             "theme": "Tema",
             "widget_theme": "Tema del Widget",
@@ -1338,11 +1658,15 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Verificar Estado de Sincronización",
             "data_management": "Gestión de Datos",
             "import_from_icloud": "Importar desde iCloud",
-            "manual_import_file": "Importar archivo",
-            "export_to_device": "Exportar archivo",
+            "manual_import_file": "Importar datos a archivo",
+            "export_to_device": "Exportar datos a archivo",
             "export_to_icloud": "Exportar a iCloud",
             "app_description": "CiteTrack - Herramienta de Seguimiento de Citas Académicas",
             "app_help": "Ayuda a los académicos a rastrear y gestionar datos de citas de Google Scholar",
+            "icloud_sync_description": "Sincroniza sin problemas entre dispositivos vía iCloud",
+            // Página de bienvenida (agregar claves faltantes)
+            "smart_tracking": "Seguimiento Inteligente",
+            "smart_tracking_description": "Rastreo automático de citas con actualizaciones inteligentes",
             
             // 通知相关
             "citation_change": "Cambio de Citas",
@@ -1365,6 +1689,7 @@ public class LocalizationManager: ObservableObject {
             "dashboard_title": "Panel de Control",
             "scholar_management": "Académicos",
             "total_citations": "Total de Citas",
+            "debug_show_refresh_frequency": "Mostrar frecuencia de actualización",
             "total_citations_with_count": "Total de Citas",
             "scholar_count": "Número de Académicos",
             "scholar_list": "Lista de Académicos",
@@ -1398,7 +1723,6 @@ public class LocalizationManager: ObservableObject {
             "recent_week": "Semana Reciente",
             "recent_month": "Mes Reciente",
             "recent_three_months": "3 Meses Recientes",
-            "loading_chart_data": "Cargando datos del gráfico...",
             "loading_chart_data_message": "Cargando datos del gráfico...",
             "no_historical_data": "Sin Datos Históricos",
             "no_historical_data_message": "Sin datos históricos disponibles",
@@ -1480,13 +1804,13 @@ public class LocalizationManager: ObservableObject {
             
             // Google Scholar Service 错误信息
             "invalid_url": "URL Inválida",
+            "invalid_scholar_id_or_url": "ID de académico o URL inválida",
             
             // 缺失的翻译键
             "import": "Importar",
             "export": "Exportar",
             "import_from_icloud_message": "Esto importará datos desde la carpeta CiteTrack en iCloud Drive. Los datos actuales serán reemplazados.",
             "export_to_icloud_message": "Esto exportará los datos actuales a la carpeta CiteTrack en iCloud Drive.",
-            "citations_count": "Número de Citas",
             "no_data_available": "No Hay Datos Disponibles",
             "current_citations_label": "Citas Actuales",
             "last_updated_label": "Última Actualización",
@@ -1594,6 +1918,19 @@ public class LocalizationManager: ObservableObject {
             "show_data_points": "Afficher les Points de Données",
             "show_grid": "Afficher la Grille",
             "export_chart": "Exporter le Graphique",
+            "citations_count": "%d citations",
+            "chart_x_axis_date": "Date",
+            "chart_y_axis_citations": "Citations",
+            "no_data_to_chart": "Aucune donnée à afficher sur le graphique",
+            "add_scholars_to_see_charts": "Ajoutez des chercheurs pour voir les graphiques",
+            "contribution_activity": "Activité de Contribution",
+            "contribution_chart_description": "Affiche le modèle d'activité des 140 derniers jours",
+            "citation_chart": "Graphique des Citations",
+            "no_chart_data": "Aucune donnée de graphique",
+            "chart_data_will_appear": "Les données du graphique apparaîtront après l'ajout de chercheurs",
+            "charts_require_ios16": "Les graphiques nécessitent iOS 16 ou ultérieur",
+            "update_ios_for_charts": "Veuillez mettre à jour votre version iOS pour utiliser les graphiques",
+            "no_citation_data": "Aucune donnée de citation",
             
             // 设置相关
             "general_settings": "Paramètres Généraux",
@@ -1603,6 +1940,14 @@ public class LocalizationManager: ObservableObject {
             "launch_at_login": "Lancer au Démarrage",
             "icloud_sync": "Synchronisation iCloud",
             "notifications": "Notifications",
+            "auto_update": "Mise à Jour Automatique",
+            "auto_update_enabled": "Activer la Mise à Jour Automatique",
+            "auto_update_frequency": "Fréquence de Mise à Jour",
+            "next_update_time": "Prochaine Mise à Jour",
+            "hourly": "Horaire",
+            "daily": "Quotidien",
+            "weekly": "Hebdomadaire",
+            "monthly": "Mensuel",
             "language": "Langue",
             "theme": "Thème",
             "widget_theme": "Thème du widget",
@@ -1617,11 +1962,15 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Vérifier le Statut de Synchronisation",
             "data_management": "Gestion des Données",
             "import_from_icloud": "Importer depuis iCloud",
-            "manual_import_file": "Importer un fichier",
-            "export_to_device": "Exporter un fichier",
+            "manual_import_file": "Importer des données vers un fichier",
+            "export_to_device": "Exporter des données vers un fichier",
             "export_to_icloud": "Exporter vers iCloud",
             "app_description": "CiteTrack - Outil de Suivi des Citations Académiques",
             "app_help": "Aide les chercheurs à suivre et gérer les données de citations Google Scholar",
+            "icloud_sync_description": "Synchronisation transparente entre appareils via iCloud",
+            // Page d'accueil (ajout des clés manquantes)
+            "smart_tracking": "Suivi intelligent",
+            "smart_tracking_description": "Suivi automatique des citations avec mises à jour intelligentes",
             
             // 通知相关
             "citation_change": "Changement de Citations",
@@ -1644,6 +1993,7 @@ public class LocalizationManager: ObservableObject {
             "dashboard_title": "Tableau de Bord",
             "scholar_management": "Chercheurs",
             "total_citations": "Total des Citations",
+            "debug_show_refresh_frequency": "Afficher la fréquence d'actualisation",
             "total_citations_with_count": "Total des Citations",
             "scholar_count": "Nombre de Chercheurs",
             "scholar_list": "Liste des Chercheurs",
@@ -1677,7 +2027,6 @@ public class LocalizationManager: ObservableObject {
             "recent_week": "Semaine Récente",
             "recent_month": "Mois Récent",
             "recent_three_months": "3 Mois Récents",
-            "loading_chart_data": "Chargement des données du graphique...",
             "loading_chart_data_message": "Chargement des données du graphique...",
             "no_historical_data": "Aucune Donnée Historique",
             "no_historical_data_message": "Aucune donnée historique disponible",
@@ -1765,7 +2114,6 @@ public class LocalizationManager: ObservableObject {
             "export": "Exporter",
             "import_from_icloud_message": "Cela importera les données depuis le dossier CiteTrack dans iCloud Drive. Les données actuelles seront remplacées.",
             "export_to_icloud_message": "Cela exportera les données actuelles vers le dossier CiteTrack dans iCloud Drive.",
-            "citations_count": "Nombre de Citations",
             "no_data_available": "Aucune Donnée Disponible",
             "current_citations_label": "Citations Actuelles",
             "last_updated_label": "Dernière Mise à Jour",
@@ -1873,6 +2221,19 @@ public class LocalizationManager: ObservableObject {
             "show_data_points": "Datenpunkte Anzeigen",
             "show_grid": "Raster Anzeigen",
             "export_chart": "Diagramm Exportieren",
+            "citations_count": "%d Zitate",
+            "chart_x_axis_date": "Datum",
+            "chart_y_axis_citations": "Zitate",
+            "no_data_to_chart": "Keine Daten für das Diagramm verfügbar",
+            "add_scholars_to_see_charts": "Fügen Sie Forscher hinzu, um Diagramme zu sehen",
+            "contribution_activity": "Beitragsaktivität",
+            "contribution_chart_description": "Zeigt das Aktivitätsmuster der letzten 140 Tage",
+            "citation_chart": "Zitationsdiagramm",
+            "no_chart_data": "Keine Diagrammdaten",
+            "chart_data_will_appear": "Diagrammdaten erscheinen nach dem Hinzufügen von Forschern",
+            "charts_require_ios16": "Diagramme erfordern iOS 16 oder höher",
+            "update_ios_for_charts": "Bitte aktualisieren Sie Ihre iOS-Version, um Diagramme zu verwenden",
+            "no_citation_data": "Keine Zitationsdaten",
             
             // 设置相关
             "general_settings": "Allgemeine Einstellungen",
@@ -1882,6 +2243,14 @@ public class LocalizationManager: ObservableObject {
             "launch_at_login": "Beim Anmelden Starten",
             "icloud_sync": "iCloud-Synchronisation",
             "notifications": "Benachrichtigungen",
+            "auto_update": "Automatische Aktualisierung",
+            "auto_update_enabled": "Automatische Aktualisierung Aktivieren",
+            "auto_update_frequency": "Aktualisierungsfrequenz",
+            "next_update_time": "Nächste Aktualisierung",
+            "hourly": "Stündlich",
+            "daily": "Täglich",
+            "weekly": "Wöchentlich",
+            "monthly": "Monatlich",
             "language": "Sprache",
             "theme": "Design",
             "widget_theme": "Widget-Design",
@@ -1896,11 +2265,15 @@ public class LocalizationManager: ObservableObject {
             "check_sync_status": "Synchronisationsstatus Prüfen",
             "data_management": "Datenverwaltung",
             "import_from_icloud": "Von iCloud Importieren",
-            "manual_import_file": "Datei importieren",
-            "export_to_device": "Datei exportieren",
+            "manual_import_file": "Daten in Datei importieren",
+            "export_to_device": "Daten in Datei exportieren",
             "export_to_icloud": "Nach iCloud Exportieren",
             "app_description": "CiteTrack - Akademisches Zitations-Tracking-Tool",
             "app_help": "Hilft Forschern beim Verfolgen und Verwalten von Google Scholar-Zitationsdaten",
+            "icloud_sync_description": "Nahtlose Synchronisierung zwischen Geräten über iCloud",
+            // Willkommensseite (fehlende Schlüssel hinzufügen)
+            "smart_tracking": "Intelligentes Tracking",
+            "smart_tracking_description": "Automatisches Zitaten-Tracking mit intelligenten Aktualisierungen",
             
             // 通知相关
             "citation_change": "Zitationsänderung",
@@ -1923,6 +2296,7 @@ public class LocalizationManager: ObservableObject {
             "dashboard_title": "Dashboard",
             "scholar_management": "Forscher",
             "total_citations": "Gesamtzitationen",
+            "debug_show_refresh_frequency": "Aktualisierungshäufigkeit anzeigen",
             "total_citations_with_count": "Gesamtzitationen",
             "scholar_count": "Anzahl der Forscher",
             "scholar_list": "Forscher-Liste",
@@ -1956,7 +2330,6 @@ public class LocalizationManager: ObservableObject {
             "recent_week": "Letzte Woche",
             "recent_month": "Letzter Monat",
             "recent_three_months": "Letzte 3 Monate",
-            "loading_chart_data": "Diagrammdaten werden geladen...",
             "loading_chart_data_message": "Diagrammdaten werden geladen...",
             "no_historical_data": "Keine Historischen Daten",
             "no_historical_data_message": "Keine historischen Daten verfügbar",
@@ -2038,13 +2411,13 @@ public class LocalizationManager: ObservableObject {
             
             // Google Scholar Service 错误信息
             "invalid_url": "Ungültige URL",
+            "invalid_scholar_id_or_url": "Ungültige Forscher-ID oder URL",
             
             // 缺失的翻译键
             "import": "Importieren",
             "export": "Exportieren",
             "import_from_icloud_message": "Dies importiert Daten aus dem CiteTrack-Ordner in iCloud Drive. Aktuelle Daten werden ersetzt.",
             "export_to_icloud_message": "Dies exportiert aktuelle Daten in den CiteTrack-Ordner in iCloud Drive.",
-            "citations_count": "Zitationsanzahl",
             "no_data_available": "Keine Daten Verfügbar",
             "current_citations_label": "Aktuelle Zitationen",
             "last_updated_label": "Letzte Aktualisierung",

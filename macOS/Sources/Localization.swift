@@ -382,7 +382,11 @@ class LocalizationManager {
             "time_range_custom": "Custom Range",
             "citation_change_increase": "Increased by %d citations",
             "citation_change_decrease": "Decreased by %d citations",
-            "citation_change_no_change": "No change in citations"
+            "citation_change_no_change": "No change in citations",
+            
+            // Additional Error Messages
+            "data_load_failed": "Data Load Failed",
+            "export_failed": "Export Failed"
         ]
         
         // Chinese Simplified
@@ -604,7 +608,11 @@ class LocalizationManager {
             "time_range_custom": "自定义范围",
             "citation_change_increase": "增加了 %d 次引用",
             "citation_change_decrease": "减少了 %d 次引用",
-            "citation_change_no_change": "引用量无变化"
+            "citation_change_no_change": "引用量无变化",
+            
+            // Additional Error Messages
+            "data_load_failed": "数据加载失败",
+            "export_failed": "导出失败"
         ]
         
         // Japanese
@@ -751,7 +759,11 @@ class LocalizationManager {
             "time_range_custom": "カスタム範囲",
             "citation_change_increase": "%d件の引用が増加",
             "citation_change_decrease": "%d件の引用が減少",
-            "citation_change_no_change": "引用数に変化なし"
+            "citation_change_no_change": "引用数に変化なし",
+            
+            // Additional Error Messages
+            "data_load_failed": "データの読み込みに失敗しました",
+            "export_failed": "エクスポートに失敗しました"
         ]
         
         // Add more languages as needed...

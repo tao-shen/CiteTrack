@@ -16,13 +16,207 @@ class iCloudSyncManager: ObservableObject {
 	@Published var errorMessage: String = ""
 	@Published var showingErrorAlert = false
 	@Published var hasBookmarkedDriveDirectory: Bool = false
+	// 首次启动检测到备份时的提示
+	@Published var showImportPrompt: Bool = false
+	@Published var importPromptMessage: String = ""
 	
 	private let folderName = "CiteTrack"
 	private let dataFileName = "citation_data.json"
-	private let configFileName = "app_config.json"
+	private let configFileName = "ios_data.json"
+	private let longTermSyncFileName = "CiteTrack_sync.json"
 	private let driveBookmarkKey = "iCloudDrivePreferredDirectoryBookmark"
 	
 	private init() {}
+
+	// MARK: - First-launch helper
+	/// 首次安装/重装后的第一次启动：优先从 iCloud 容器 Documents 读取现有备份（两个文件）
+	/// 1) 引导容器与 Documents 出现；2) 尝试拉取 ios_data.json 与 citation_data.json；3) 调用导入
+	func importConfigOnFirstLaunch() {
+		#if targetEnvironment(simulator)
+		print("ℹ️ [FirstLaunch Import] Simulator detected - skip iCloud first-launch import")
+		return
+		#else
+		let flagKey = "FirstLaunchImportDone"
+		if UserDefaults.standard.bool(forKey: flagKey) {
+			return
+		}
+		guard isiCloudAvailable else {
+			print("ℹ️ [FirstLaunch Import] iCloud not available, skip")
+			return
+		}
+		// 引导容器
+		bootstrapContainerIfPossible()
+		// 如检测到现有备份，先弹窗询问
+		if let docs = documentsURL {
+			let fm = FileManager.default
+			let iosURL = docs.appendingPathComponent("ios_data.json")
+			let citURL = docs.appendingPathComponent("citation_data.json")
+			let hasIOS = fm.fileExists(atPath: iosURL.path)
+			let hasCIT = fm.fileExists(atPath: citURL.path)
+			if hasIOS || hasCIT {
+				DispatchQueue.main.async {
+					self.importPromptMessage = hasIOS && hasCIT ? "检测到 iCloud 备份（配置与数据），是否导入？" : "检测到 iCloud 备份，是否导入？"
+					self.showImportPrompt = true
+					NotificationCenter.default.post(name: Notification.Name("iCloudImportPromptAvailable"), object: nil)
+				}
+				return
+			}
+		}
+		DispatchQueue.global(qos: .userInitiated).async {
+			let fm = FileManager.default
+			if let docs = self.documentsURL {
+				let iosURL = docs.appendingPathComponent("ios_data.json")
+				let citURL = docs.appendingPathComponent("citation_data.json")
+				if fm.fileExists(atPath: iosURL.path) {
+					try? fm.startDownloadingUbiquitousItem(at: iosURL)
+					print("🔄 [FirstLaunch Import] startDownloading ios_data.json …")
+				}
+				if fm.fileExists(atPath: citURL.path) {
+					try? fm.startDownloadingUbiquitousItem(at: citURL)
+					print("🔄 [FirstLaunch Import] startDownloading citation_data.json …")
+				}
+				// 给系统一些时间同步元数据
+				Thread.sleep(forTimeInterval: 1.0)
+			}
+			self.importFromiCloud { result in
+				switch result {
+				case .success(let info):
+					print("✅ [FirstLaunch Import] Imported: scholars=\(info.importedScholars) history=\(info.importedHistory) config=\(info.configImported)")
+					UserDefaults.standard.set(true, forKey: flagKey)
+				case .failure(let err):
+					print("⚠️ [FirstLaunch Import] No data imported: \(err.localizedDescription)")
+				}
+			}
+		}
+		#endif
+	}
+
+	// 用户点击“导入”
+	func confirmImportFromPrompt() {
+		let flagKey = "FirstLaunchImportDone"
+		showingErrorAlert = false
+		showImportPrompt = false
+		DispatchQueue.global(qos: .userInitiated).async {
+			let fm = FileManager.default
+			if let docs = self.documentsURL {
+				let iosURL = docs.appendingPathComponent("ios_data.json")
+				let citURL = docs.appendingPathComponent("citation_data.json")
+				if fm.fileExists(atPath: iosURL.path) { try? fm.startDownloadingUbiquitousItem(at: iosURL) }
+				if fm.fileExists(atPath: citURL.path) { try? fm.startDownloadingUbiquitousItem(at: citURL) }
+				Thread.sleep(forTimeInterval: 1.0)
+			}
+			self.importFromiCloud { result in
+				if case .success = result { UserDefaults.standard.set(true, forKey: flagKey) }
+			}
+		}
+	}
+
+	// 用户点击“暂不导入”
+	func declineImportFromPrompt() {
+		let flagKey = "FirstLaunchImportDone"
+		showImportPrompt = false
+		UserDefaults.standard.set(true, forKey: flagKey)
+	}
+
+	// MARK: - CloudKit Long-term Sync
+
+	/// 使用 CloudKit 保存当前导出数据（长期同步）
+	func exportUsingCloudKit(completion: @escaping (Result<Void, Error>) -> Void) {
+		do {
+			let payload = try makeExportJSONData()
+			let unified = try makeAppDataJSON(exportPayload: payload)
+			CloudKitSyncService.shared.saveJSONData(unified) { result in
+				completion(result.map { _ in () })
+			}
+		} catch {
+			completion(.failure(error))
+		}
+	}
+
+	/// 使用 CloudKit 获取最新数据并导入（长期同步）
+	func importUsingCloudKit(completion: @escaping (Result<ImportResult, Error>) -> Void) {
+		CloudKitSyncService.shared.fetchJSONData { result in
+			switch result {
+			case .success(let data):
+				do {
+					let importResult = try self.importFromUnifiedData(data)
+					DispatchQueue.main.async {
+						// 导入后刷新 Widget
+						DataManager.shared.refreshWidgets()
+						completion(.success(importResult))
+					}
+				} catch {
+					completion(.failure(error))
+				}
+			case .failure(let error):
+				completion(.failure(error))
+			}
+		}
+	}
+
+	/// 立即同步：将本地数据保存到 CloudKit，并刷新状态
+	func performImmediateSync() {
+		DispatchQueue.main.async {
+			self.isExporting = true
+			self.syncStatus = LocalizationManager.shared.localized("exporting_to_icloud")
+			print("🚀 [CloudKit Sync] performImmediateSync started")
+		}
+		exportUsingCloudKit { result in
+			DispatchQueue.main.async {
+				switch result {
+				case .success:
+					self.lastSyncDate = Date()
+					let formatter = DateFormatter()
+					formatter.locale = Locale(identifier: "en_US_POSIX")
+					formatter.dateFormat = "yyyy-MM-dd HH:mm"
+					let ts = formatter.string(from: self.lastSyncDate ?? Date())
+					self.syncStatus = "\(LocalizationManager.shared.localized("last_sync")): \(ts)"
+					self.isExporting = false
+					print("✅ [CloudKit Sync] performImmediateSync success, lastSyncDate=\(self.lastSyncDate?.description ?? "nil")")
+					// 可见文件镜像：写入容器 Documents 下（Files 中显示为本应用的 iCloud 文件夹）
+					let group = DispatchGroup()
+					if let docs = self.documentsURL {
+						let mirrorURL = docs.appendingPathComponent(self.longTermSyncFileName)
+						group.enter()
+						DispatchQueue.global(qos: .utility).async {
+							do {
+								let exportPayload = try self.makeExportJSONData()
+								let jsonData = try self.makeAppDataJSON(exportPayload: exportPayload)
+								let fm = FileManager.default
+								try? fm.createDirectory(at: docs, withIntermediateDirectories: true)
+								try jsonData.write(to: mirrorURL, options: [.atomic])
+								print("✅ [iCloud Container Mirror] Wrote long-term file: \(mirrorURL.path)")
+							} catch {
+								print("⚠️ [iCloud Container Mirror] Failed to write mirror: \(error)")
+							}
+							group.leave()
+						}
+					}
+
+					// 同步更新 CloudDocs 下的 ios_data.json（确保 Files 应用可见文件被更新）
+					group.enter()
+					DispatchQueue.global(qos: .utility).async {
+						do {
+							try self.createiCloudFolder()
+							try self.exportAppConfig()
+							print("✅ [iCloud Drive] ios_data.json updated during immediate sync")
+						} catch {
+							print("⚠️ [iCloud Drive] Failed to update ios_data.json during immediate sync: \(error)")
+						}
+						group.leave()
+					}
+					// 在镜像文件写入完成后刷新状态，确保上次同步时间从最新文件时间读取
+					group.notify(queue: .main) {
+						self.checkSyncStatus()
+					}
+				case .failure(let error):
+					self.syncStatus = LocalizationManager.shared.localized("export_failed") + ": " + error.localizedDescription
+					self.isExporting = false
+					print("❌ [CloudKit Sync] performImmediateSync failed: \(error.localizedDescription)")
+				}
+			}
+		}
+	}
 
 	// MARK: - CloudDocs Folder Bookmarking
 
@@ -62,10 +256,10 @@ class iCloudSyncManager: ObservableObject {
 	
 	/// 在iCloud Drive中创建并显示应用文件夹
 	func createiCloudDriveFolder(completion: @escaping (Result<Void, iCloudError>) -> Void) {
-		print("🚀 [iCloud Drive] 开始在iCloud Drive中创建应用文件夹...")
+		print("🚀 [iCloud Drive] \("debug_create_icloud_folder".localized)")
 		
 		guard isiCloudAvailable else {
-			print("❌ [iCloud Drive] iCloud不可用")
+			print("❌ [iCloud Drive] \("icloud_not_available".localized)")
 			DispatchQueue.main.async {
 				completion(.failure(.iCloudNotAvailable))
 			}
@@ -74,7 +268,7 @@ class iCloudSyncManager: ObservableObject {
 		
 		let workItem = DispatchWorkItem {
 			do {
-				print("🔍 [iCloud Drive] 开始设置CiteTrack应用在iCloud Drive中的可见性...")
+				print("🔍 [iCloud Drive] \("debug_setup_icloud_visibility".localized)")
 				
 				// 确保Documents文件夹存在
 				guard let documentsURL = self.documentsURL else {
@@ -98,58 +292,14 @@ class iCloudSyncManager: ObservableObject {
 					print("ℹ️ [iCloud Drive] Documents文件夹已存在: \(documentsURL.path)")
 				}
 				
-				// 在Documents根目录直接创建多个文件，确保应用文件夹在iCloud Drive中可见
-				let sampleFiles = [
-					("README.txt", """
-					欢迎使用CiteTrack！
-					
-					这是您的CiteTrack数据文件夹，会在iCloud Drive中显示为带应用图标的"CiteTrack"文件夹。
-					
-					文件说明：
-					• citation_data.json - 学者引用数据
-					• app_config.json - 应用配置
-					• 导出的文件 - 通过应用导出的备份文件
-					
-					您可以：
-					✓ 在多个设备间自动同步数据
-					✓ 手动备份和恢复数据
-					✓ 与他人分享引用数据文件
-					
-					---
-					Welcome to CiteTrack!
-					
-					This is your CiteTrack data folder, which will appear as the "CiteTrack" folder with app icon in iCloud Drive.
-					"""),
-					("用户指南.txt", """
-					CiteTrack iCloud 文件夹使用指南
-					
-					1. 自动同步
-					   应用会自动将数据同步到这个文件夹
-					
-					2. 手动导入导出
-					   您可以在应用设置中手动导入或导出数据
-					
-					3. 备份恢复
-					   定期备份文件可帮助您在需要时恢复数据
-					
-					4. 多设备使用
-					   登录同一iCloud账户的设备会自动同步这个文件夹
-					
-					注意：请不要直接修改citation_data.json等核心文件，建议通过应用界面操作。
-					"""),
-					(".keep", "这个文件确保文件夹在iCloud Drive中保持可见")
-				]
-				
-				// 创建所有示例文件
-				for (fileName, content) in sampleFiles {
-					let fileURL = documentsURL.appendingPathComponent(fileName)
-					if !fileManager.fileExists(atPath: fileURL.path) {
-						print("🔧 [iCloud Drive] 正在创建文件: \(fileName)")
-						try content.write(to: fileURL, atomically: true, encoding: .utf8)
-						print("✅ [iCloud Drive] 创建了文件: \(fileName)")
-					} else {
-						print("ℹ️ [iCloud Drive] 文件已存在: \(fileName)")
-					}
+				// 创建占位 .keep 文件（隐藏），并确保仅生成 ios_config.json 作为配置文件
+				let keepURL = documentsURL.appendingPathComponent(".keep")
+				if !fileManager.fileExists(atPath: keepURL.path) {
+					print("🔧 [iCloud Drive] 正在创建文件: .keep")
+					try "keep".write(to: keepURL, atomically: true, encoding: .utf8)
+					print("✅ [iCloud Drive] 创建了文件: .keep")
+				} else {
+					print("ℹ️ [iCloud Drive] 文件已存在: .keep")
 				}
 				
 				// 确保核心数据文件存在
@@ -204,14 +354,17 @@ class iCloudSyncManager: ObservableObject {
 						print("⚠️ [iCloud Drive] Documents同步失败: \(error)")
 					}
 					
-					// 同步所有创建的文件
-					for (fileName, _) in sampleFiles {
+					// 同步 .keep 和 ios_data.json
+					let filesToSync = [".keep", "ios_data.json"]
+					for fileName in filesToSync {
 						let fileURL = documentsURL.appendingPathComponent(fileName)
-						do {
-							try fileManager.startDownloadingUbiquitousItem(at: fileURL)
-							print("✅ [iCloud Drive] 启动了文件同步: \(fileName)")
-						} catch {
-							print("⚠️ [iCloud Drive] 文件同步失败 \(fileName): \(error)")
+						if fileManager.fileExists(atPath: fileURL.path) {
+							do {
+								try fileManager.startDownloadingUbiquitousItem(at: fileURL)
+								print("✅ [iCloud Drive] 启动了文件同步: \(fileName)")
+							} catch {
+								print("⚠️ [iCloud Drive] 文件同步失败 \(fileName): \(error)")
+							}
 						}
 					}
 					
@@ -290,8 +443,7 @@ class iCloudSyncManager: ObservableObject {
 		#if targetEnvironment(simulator)
 		print("ℹ️ [iCloud Debug] Simulator environment - skip real iCloud bootstrap")
 		return
-		#endif
-		
+		#else
 		// 检查用户是否启用了iCloud Drive文件夹功能
 		let settingsManager = SettingsManager.shared
 		guard settingsManager.iCloudDriveFolderEnabled else {
@@ -328,17 +480,19 @@ class iCloudSyncManager: ObservableObject {
 				print("❌ [iCloud Debug] Failed writing placeholder: \(error)")
 			}
 		}
-		// 再写入一个可见文件，确保 Files 能立刻展示该文件夹
-		let readme = docs.appendingPathComponent("README.txt")
-		if !fm.fileExists(atPath: readme.path) {
-			let content = "This folder stores CiteTrack exports."
+		// 写入一个数据文件 ios_data.json，确保 Files 能展示该文件夹
+		let bootstrapConfig = docs.appendingPathComponent("ios_data.json")
+		if !fm.fileExists(atPath: bootstrapConfig.path) {
 			do {
-				try content.data(using: .utf8)?.write(to: readme)
-				print("✅ [iCloud Debug] Wrote visible README at: \(readme.path)")
+				let initialConfig: [String: Any] = makeCurrentAppData()
+				let data = try JSONSerialization.data(withJSONObject: initialConfig, options: .prettyPrinted)
+				try data.write(to: bootstrapConfig)
+				print("✅ [iCloud Debug] Wrote ios_data.json at: \(bootstrapConfig.path)")
 			} catch {
-				print("❌ [iCloud Debug] Failed writing README: \(error)")
+				print("❌ [iCloud Debug] Failed writing ios_data.json: \(error)")
 			}
 		}
+		#endif
 	}
 
 	// MARK: - Deep Diagnostics
@@ -476,17 +630,19 @@ class iCloudSyncManager: ObservableObject {
 			return
 		}
 
-		let fileURL = documentsURL.appendingPathComponent("Welcome.txt")
+		let fileURL = documentsURL.appendingPathComponent("ios_data.json")
 		if !FileManager.default.fileExists(atPath: fileURL.path) {
 			do {
-				try "Hello, iCloud! 欢迎使用CiteTrack！".write(to: fileURL, atomically: true, encoding: .utf8)
-				print("✅ [iCloud Activation] 初始文件创建成功：\(fileURL.path)")
+				let config = makeCurrentAppData()
+				let data = try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted)
+				try data.write(to: fileURL)
+				print("✅ [iCloud Activation] 初始 ios_data.json 创建成功：\(fileURL.path)")
 				print("📝 [iCloud Activation] 这确保了应用文件夹在iCloud Drive中可见")
 			} catch {
-				print("❌ [iCloud Activation] 创建初始文件失败: \(error)")
+				print("❌ [iCloud Activation] 创建 ios_data.json 失败: \(error)")
 			}
 		} else {
-			print("ℹ️ [iCloud Activation] 初始文件已存在：\(fileURL.path)")
+			print("ℹ️ [iCloud Activation] ios_data.json 已存在：\(fileURL.path)")
 		}
 	}
 	
@@ -515,28 +671,17 @@ class iCloudSyncManager: ObservableObject {
 			}
 		}
 		
-		// 创建欢迎文件
-		let welcomeFile = documentsURL.appendingPathComponent("Welcome.txt")
-		if !fm.fileExists(atPath: welcomeFile.path) {
+		// 创建 ios_data.json（包含配置与刷新数据）
+		let configJSON = documentsURL.appendingPathComponent("ios_data.json")
+		if !fm.fileExists(atPath: configJSON.path) {
 			do {
-				let content = "欢迎使用CiteTrack！\n\n这个文件夹用于存储您的学术数据。\n\nWelcome to CiteTrack!\n\nThis folder stores your academic data."
-				try content.write(to: welcomeFile, atomically: true, encoding: .utf8)
-				print("✅ [iCloud Drive] 创建欢迎文件：\(welcomeFile.path)")
+				let config = makeCurrentAppData()
+				let data = try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted)
+				try data.write(to: configJSON)
+				print("✅ [iCloud Drive] 创建 ios_data.json：\(configJSON.path)")
 			} catch {
-				print("❌ [iCloud Drive] 创建欢迎文件失败: \(error)")
+				print("❌ [iCloud Drive] 创建 ios_data.json 失败: \(error)")
 				return false
-			}
-		}
-		
-		// 创建README文件
-		let readmeFile = documentsURL.appendingPathComponent("README.txt")
-		if !fm.fileExists(atPath: readmeFile.path) {
-			do {
-				let content = "CiteTrack数据文件夹\n\n此文件夹包含您的学术引用数据，会自动同步到所有登录相同Apple ID的设备。\n\nCiteTrack Data Folder\n\nThis folder contains your academic citation data and syncs automatically across all devices signed in with the same Apple ID."
-				try content.write(to: readmeFile, atomically: true, encoding: .utf8)
-				print("✅ [iCloud Drive] 创建README文件：\(readmeFile.path)")
-			} catch {
-				print("❌ [iCloud Drive] 创建README文件失败: \(error)")
 			}
 		}
 		
@@ -611,14 +756,10 @@ class iCloudSyncManager: ObservableObject {
 		return documentsURL
 	}
 
-	/// 导入/导出的首选目录：优先用户书签的iCloud Drive文件夹，其次回退到应用容器Documents
-	func preferredExportDirectory() -> URL? {
-		if let bookmarked = resolvePreferredDriveDirectory() {
-			print("🔍 [CloudDocs] Using bookmarked drive directory: \(bookmarked.path)")
-			return bookmarked
-		}
-		return documentsURL
-	}
+    /// 导入/导出的首选目录（iOS 上使用容器 Documents，可在“文件”App 中显示为应用的 iCloud 文件夹）
+    func preferredExportDirectory() -> URL? {
+        return documentsURL
+    }
 
 	/// 用户可见的 iCloud Drive 根（com~apple~CloudDocs）下的推荐目录（CiteTrack）
 	/// 仅用于作为 UIDocumentPicker 的初始目录，避免直接跨容器写入
@@ -633,28 +774,18 @@ class iCloudSyncManager: ObservableObject {
 		#endif
 	}
 
-	/// 构造 CloudDocs 下推荐的数据文件 URL（基于书签或推荐目录）
+	/// 构造容器 Documents 下数据文件 URL
 	private func cloudDocsDataFileURL() -> URL? {
-		if let bookmarked = resolvePreferredDriveDirectory() {
-			return bookmarked.appendingPathComponent(dataFileName)
-		}
-		if let suggested = preferredUserDriveDirectory() {
-			return suggested.appendingPathComponent(dataFileName)
-		}
-		return nil
+		return documentsURL?.appendingPathComponent(dataFileName)
+	}
+
+	/// 构造容器 Documents 下长期同步文件 URL（用于可见文件镜像）
+	private func cloudDocsLongTermFileURL() -> URL? {
+		return documentsURL?.appendingPathComponent(longTermSyncFileName)
 	}
 	
-	/// 获取当前数据根目录：优先用户书签的iCloud Drive文件夹，否则使用应用容器Documents
+	/// 获取当前数据根目录：固定为容器 Documents
 	private var citeTrackFolderURL: URL? {
-		if let bookmarked = resolvePreferredDriveDirectory() {
-			print("🔍 [CloudDocs] Using bookmarked folder for data root: \(bookmarked.path)")
-			return bookmarked
-		}
-		guard let documentsURL = documentsURL else {
-			print("❌ [iCloud Debug] No Documents folder available")
-			return nil
-		}
-		print("🔍 [iCloud Debug] Using app iCloud Documents as export folder: \(documentsURL.path)")
 		return documentsURL
 	}
 	
@@ -729,62 +860,134 @@ class iCloudSyncManager: ObservableObject {
 	private func performImport() throws -> ImportResult {
 		print("🔍 [iCloud Import] Checking citation data URL...")
 		
-		guard let citationURL = citationDataURL else {
-			print("❌ [iCloud Import] Invalid citation data URL")
-			throw iCloudError.invalidURL
-		}
-		
 		let fileManager = FileManager.default
+		var importedHistory = 0
+		var importedScholars = 0
+		var result: ImportResult = ImportResult(importedScholars: 0, importedHistory: 0, configImported: false, importDate: Date())
 		
-		// Check if citation data file exists
-		guard fileManager.fileExists(atPath: citationURL.path) else {
-			print("❌ [iCloud Import] Citation data file not found at: \(citationURL.path)")
-			
-			throw iCloudError.noDataFound
-		}
-		
-		print("✅ [iCloud Import] Found citation data file")
-		
-		// Read citation data
-		let citationData = try Data(contentsOf: citationURL)
-		// 使用内联处理导入
-		let result = try importFromJSONData(citationData)
-		
-		// 尝试导入配置
-		var configImported = false
-		if let configURL = configFileURL, fileManager.fileExists(atPath: configURL.path) {
-			print("🔍 [iCloud Import] Found config file, importing settings...")
-			do {
-				let configData = try Data(contentsOf: configURL)
-				let config = try JSONSerialization.jsonObject(with: configData) as? [String: Any]
-				if let settings = config?["settings"] as? [String: Any] {
-					if let updateInterval = settings["updateInterval"] as? TimeInterval {
-						SettingsManager.shared.updateInterval = updateInterval
-					}
-					if let notificationsEnabled = settings["notificationsEnabled"] as? Bool {
-						SettingsManager.shared.notificationsEnabled = notificationsEnabled
-					}
-					if let language = settings["language"] as? String {
-						SettingsManager.shared.language = language
-					}
-					if let themeRawValue = settings["theme"] as? String, let theme = AppTheme(rawValue: themeRawValue) {
-						SettingsManager.shared.theme = theme
-					}
-					configImported = true
-					print("✅ [iCloud Import] Settings imported successfully")
-				}
-			} catch {
-				print("⚠️ [iCloud Import] Failed to import config: \(error)")
+		if let citationURL = citationDataURL {
+			print("🔍 [iCloud Import] citation_data.json URL: \(citationURL.path)")
+			if fileManager.fileExists(atPath: citationURL.path) {
+				print("✅ [iCloud Import] Found citation data file")
+				let citationData = try Data(contentsOf: citationURL)
+				result = try importFromJSONData(citationData)
+				importedHistory += result.importedHistory
+				importedScholars += result.importedScholars
+			} else {
+				print("ℹ️ [iCloud Import] Citation data not found at path")
 			}
 		} else {
-			print("ℹ️ [iCloud Import] No config file found")
+			print("⚠️ [iCloud Import] citationDataURL is nil")
 		}
 		
-		print("✅ [iCloud Import] Import completed")
+		// 尝试导入应用数据（设置 + 刷新数据）
+		var configImported = false
+		if let configURL = configFileURL {
+			print("🔍 [iCloud Import] ios_data.json URL: \(configURL.path)")
+			if fileManager.fileExists(atPath: configURL.path) {
+				print("🔍 [iCloud Import] Found app data file, importing...")
+				do {
+					let configData = try Data(contentsOf: configURL)
+					let config = try JSONSerialization.jsonObject(with: configData) as? [String: Any]
+					let keys = config?.keys.map { $0 } ?? []
+					print("📄 [iCloud Import] ios_data.json keys: \(keys)")
+                    if let settings = config?["settings"] as? [String: Any] {
+                        DispatchQueue.main.async {
+                            if let updateInterval = settings["updateInterval"] as? TimeInterval { SettingsManager.shared.updateInterval = updateInterval }
+                            if let notificationsEnabled = settings["notificationsEnabled"] as? Bool { SettingsManager.shared.notificationsEnabled = notificationsEnabled }
+                            if let language = settings["language"] as? String { SettingsManager.shared.language = language }
+                            if let themeRawValue = settings["theme"] as? String, let theme = AppTheme(rawValue: themeRawValue) { SettingsManager.shared.theme = theme }
+                        }
+                        configImported = true
+                        print("✅ [iCloud Import] Settings imported successfully")
+                    } else {
+						print("ℹ️ [iCloud Import] settings missing in ios_data.json")
+					}
+					// 合并首次安装日期：取更早的值作为 FirstInstallDate
+					if let firstInstallString = config?["firstInstallDate"] as? String,
+					   let incoming = ISO8601DateFormatter().date(from: firstInstallString) {
+                        let key = "FirstInstallDate"
+                        let cal = Calendar.current
+                        let local = (UserDefaults.standard.object(forKey: key) as? Date) ?? cal.startOfDay(for: Date())
+                        let earliest = min(cal.startOfDay(for: local), cal.startOfDay(for: incoming))
+                        // 同步写入两个键：FirstInstallDate 与 AppInstallDate
+                        UserDefaults.standard.set(earliest, forKey: key)
+                        UserDefaults.standard.set(earliest, forKey: "AppInstallDate")
+                        if let ag = UserDefaults(suiteName: appGroupIdentifier) {
+                            ag.set(earliest, forKey: key)
+                            ag.set(earliest, forKey: "AppInstallDate")
+                            ag.synchronize()
+                        }
+						print("✅ [iCloud Import] FirstInstallDate merged: \(earliest)")
+					} else {
+						print("ℹ️ [iCloud Import] firstInstallDate missing in ios_data.json")
+					}
+					if let refreshDict = config?["refreshData"] as? [String: Any] {
+						let map = refreshDict["data"] as? [String: Int] ?? [:]
+						UserBehaviorManager.shared.importRefreshData(map)
+						let formatter = DateFormatter()
+						formatter.dateFormat = "yyyy-MM-dd"
+						if let oldestKey = map.keys.sorted().first, let oldest = formatter.date(from: oldestKey) {
+							let cal = Calendar.current
+							let start = cal.startOfDay(for: oldest)
+                            // 同步写入两个键：FirstInstallDate 与 AppInstallDate
+                            UserDefaults.standard.set(start, forKey: "FirstInstallDate")
+                            UserDefaults.standard.set(start, forKey: "AppInstallDate")
+                            if let ag = UserDefaults(suiteName: appGroupIdentifier) {
+                                ag.set(start, forKey: "FirstInstallDate")
+                                ag.set(start, forKey: "AppInstallDate")
+                                ag.synchronize()
+                            }
+							print("📆 [iCloud Import] Set FirstInstallDate to earliest refresh date: \(start)")
+						}
+						print("✅ [iCloud Import] Refresh data imported and merged: days=\(map.count)")
+					} else {
+						print("⚠️ [iCloud Import] refreshData missing in ios_data.json")
+					}
+				} catch {
+					print("⚠️ [iCloud Import] Failed to import app data: \(error)")
+				}
+			} else {
+				print("ℹ️ [iCloud Import] No ios_data.json found at path")
+			}
+		} else {
+			print("⚠️ [iCloud Import] configFileURL is nil")
+		}
+		
+		// 额外兜底：如果存在统一备份文件（CiteTrack_sync.json / Citetrack_sync.json），也尝试导入
+		if let docs = documentsURL {
+			let candidates = ["CiteTrack_sync.json", "Citetrack_sync.json"]
+			for name in candidates {
+				let unifiedURL = docs.appendingPathComponent(name)
+				if fileManager.fileExists(atPath: unifiedURL.path) {
+					print("🔍 [iCloud Import] Found unified backup file: \(name)")
+					do {
+						let data = try Data(contentsOf: unifiedURL)
+						// 在主线程导入，避免发布警告
+						var res: ImportResult!
+						DispatchQueue.main.sync { res = try? self.importFromUnifiedData(data) }
+						if let res = res {
+							importedScholars += res.importedScholars
+							importedHistory += res.importedHistory
+							print("📥 [iCloud Import] Unified file imported: scholars=\(res.importedScholars), history=\(res.importedHistory)")
+						}
+						break
+					} catch {
+						print("⚠️ [iCloud Import] Failed to import unified file: \(error)")
+					}
+				}
+			}
+		}
+
+		print("✅ [iCloud Import] Import completed: scholars=\(importedScholars), history=\(importedHistory), configImported=\(configImported)")
+		// 通知界面刷新（热力图等）
+		DispatchQueue.main.async {
+			NotificationCenter.default.post(name: .userDataChanged, object: nil)
+		}
 		
 		return ImportResult(
-			importedScholars: result.importedScholars,
-			importedHistory: result.importedHistory,
+			importedScholars: importedScholars,
+			importedHistory: importedHistory,
 			configImported: configImported || result.configImported,
 			importDate: Date()
 		)
@@ -895,25 +1098,47 @@ class iCloudSyncManager: ObservableObject {
 		}
 	}
 	
-	/// Export app configuration to iCloud
+	/// Export app data (settings + refreshData) to iCloud
 	private func exportAppConfig() throws {
 		guard let configURL = configFileURL else {
 			print("❌ [iCloud Export] Invalid config file URL")
 			throw iCloudError.invalidURL
 		}
-		let config: [String: Any] = [
-			"version": "1.0",
+		let config = makeCurrentAppData()
+		let jsonData = try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted)
+		try jsonData.write(to: configURL)
+		print("✅ [iCloud Export] App data exported to iCloud: \(configURL.path)")
+	}
+
+	/// 构建当前应用数据（设置 + 刷新数据）
+	private func makeCurrentAppData() -> [String: Any] {
+		var dict: [String: Any] = [
+			"version": "1.1",
 			"exportDate": ISO8601DateFormatter().string(from: Date()),
 			"settings": [
 				"updateInterval": SettingsManager.shared.updateInterval,
 				"notificationsEnabled": SettingsManager.shared.notificationsEnabled,
 				"language": SettingsManager.shared.language,
-				"theme": SettingsManager.shared.theme.rawValue
+				"theme": SettingsManager.shared.theme.rawValue,
+				"iCloudDriveFolderEnabled": SettingsManager.shared.iCloudDriveFolderEnabled
 			]
 		]
-		let jsonData = try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted)
-		try jsonData.write(to: configURL)
-		print("✅ [iCloud Export] App config exported to iCloud: \(configURL.path)")
+		// 刷新数据
+		dict["refreshData"] = exportRefreshDataFromBehavior()
+		// 首次安装日期（跨重装使用）
+		dict["firstInstallDate"] = exportFirstInstallDate()
+		return dict
+	}
+
+	/// 包装导出负载（学术数据）为统一应用数据 JSON
+	private func makeAppDataJSON(exportPayload: Data) throws -> Data {
+		var unified = makeCurrentAppData()
+		if let arr = try? JSONSerialization.jsonObject(with: exportPayload) as? [[String: Any]] {
+			unified["citationHistory"] = arr
+		} else if let obj = try? JSONSerialization.jsonObject(with: exportPayload) as? [String: Any] {
+			unified.merge(obj) { _, new in new }
+		}
+		return try JSONSerialization.data(withJSONObject: unified, options: .prettyPrinted)
 	}
 	
 	// MARK: - Status Check
@@ -936,33 +1161,40 @@ class iCloudSyncManager: ObservableObject {
 		
 		print("🔍 [iCloud Status] Citation file exists: \(citationExists)")
 		print("🔍 [iCloud Status] Config file exists: \(configExists)")
-		
-		if citationExists || configExists {
-			// Get last sync date
-			var lastSync: Date?
-			if let citationURL = citationDataURL, citationExists {
+
+		// 统一以优先可得的最新时间为准：CloudDocs -> 容器镜像 -> 内存lastSyncDate
+		var lastSync: Date? = nil
+		if citationExists, let citationURL = citationDataURL {
+			do {
+				let attributes = try fileManager.attributesOfItem(atPath: citationURL.path)
+				lastSync = attributes[.modificationDate] as? Date
+				print("🔍 [iCloud Status] Last sync date (CloudDocs citation): \(lastSync?.description ?? "unknown")")
+			} catch {
+				print("❌ [iCloud Status] Failed to get citation file date: \(error)")
+			}
+		} else if let docs = documentsURL {
+			let mirrorURL = docs.appendingPathComponent(longTermSyncFileName)
+			if fileManager.fileExists(atPath: mirrorURL.path) {
 				do {
-					let attributes = try fileManager.attributesOfItem(atPath: citationURL.path)
-					lastSync = attributes[FileAttributeKey.modificationDate] as? Date
-					print("🔍 [iCloud Status] Last sync date: \(lastSync?.description ?? "unknown")")
+					let attributes = try fileManager.attributesOfItem(atPath: mirrorURL.path)
+					lastSync = attributes[.modificationDate] as? Date
+					print("🔍 [iCloud Status] Last sync date (Container mirror): \(lastSync?.description ?? "unknown")")
 				} catch {
-					print("❌ [iCloud Status] Failed to get citation file date: \(error)")
+					print("❌ [iCloud Status] Failed to get mirror file date: \(error)")
 				}
 			}
-			
-			DispatchQueue.main.async {
-				self.lastSyncDate = lastSync
-				if let lastSync = lastSync {
-					let formatter = DateFormatter()
-					formatter.dateStyle = .short
-					formatter.timeStyle = .short
-					self.syncStatus = "\(LocalizationManager.shared.localized("last_sync")): \(formatter.string(from: lastSync))"
-				} else {
-					self.syncStatus = LocalizationManager.shared.localized("icloud_data_found")
-				}
-			}
-		} else {
-			DispatchQueue.main.async {
+		}
+		if lastSync == nil { lastSync = self.lastSyncDate }
+
+		DispatchQueue.main.async {
+			self.lastSyncDate = lastSync
+			if let last = lastSync {
+				let f = DateFormatter()
+				f.locale = Locale(identifier: "en_US_POSIX")
+				f.dateFormat = "yyyy-MM-dd HH:mm"
+				let prefix = LocalizationManager.shared.localized("last_sync")
+				self.syncStatus = "\(prefix): \(f.string(from: last))"
+			} else {
 				self.syncStatus = LocalizationManager.shared.localized("icloud_available_no_sync")
 			}
 		}
@@ -1111,6 +1343,34 @@ extension iCloudSyncManager {
 		}
 	}
 
+	/// 统一导入：支持 settings/refreshData
+	private func importFromUnifiedData(_ data: Data) throws -> ImportResult {
+		let json = try JSONSerialization.jsonObject(with: data, options: [])
+		if let dict = json as? [String: Any] {
+			var importedHistory = 0
+			var importedScholars = 0
+			if let citationHistory = dict["citationHistory"] as? [[String: Any]] {
+				let res = importFromMacOSEntries(citationHistory)
+				importedHistory += res.importedHistory
+				importedScholars += res.importedScholars
+			}
+			if let settings = dict["settings"] as? [String: Any] {
+				if let updateInterval = settings["updateInterval"] as? TimeInterval { SettingsManager.shared.updateInterval = updateInterval }
+				if let notificationsEnabled = settings["notificationsEnabled"] as? Bool { SettingsManager.shared.notificationsEnabled = notificationsEnabled }
+				if let language = settings["language"] as? String { SettingsManager.shared.language = language }
+				if let themeRawValue = settings["theme"] as? String, let theme = AppTheme(rawValue: themeRawValue) { SettingsManager.shared.theme = theme }
+			}
+			if let refreshDict = dict["refreshData"] as? [String: Any] {
+				importRefreshDataToBehavior(refreshDict)
+			}
+			return ImportResult(importedScholars: importedScholars, importedHistory: importedHistory, configImported: (dict["settings"] != nil), importDate: Date())
+		} else if let _ = json as? [[String: Any]] {
+			return try importFromJSONData(data)
+		} else {
+			throw iCloudError.importFailed("validation_error".localized)
+		}
+	}
+
 	@discardableResult
 	private func importFromMacOSEntries(_ entries: [[String: Any]]) -> ImportResult {
 		var importedHistory = 0
@@ -1152,3 +1412,65 @@ extension iCloudSyncManager {
 		)
 	}
 } 
+
+// MARK: - Refresh data bridge (file-based, no direct dependency)
+extension iCloudSyncManager {
+	/// 从行为管理器导出每日刷新数据，格式兼容历史 ios_data.json
+	func exportRefreshDataFromBehavior() -> [String: Any] {
+		let formatter = DateFormatter()
+		formatter.dateFormat = "yyyy-MM-dd"
+		let behaviors = UserBehaviorManager.shared.getBehaviorsForLastDays(365)
+		var dataMap: [String: Int] = [:]
+		for b in behaviors {
+			let key = formatter.string(from: b.date)
+			dataMap[key] = b.refreshCount
+		}
+		return [
+			"user_id": "default_user",
+			"data": dataMap,
+			"last_updated": ISO8601DateFormatter().string(from: Date())
+		]
+	}
+
+	// 导出首次安装日期（若无则写入今天），用于跨设备/重装保持热力图起点
+	func exportFirstInstallDate() -> String {
+		let key = "FirstInstallDate"
+		let cal = Calendar.current
+		if let saved = UserDefaults.standard.object(forKey: key) as? Date {
+			return ISO8601DateFormatter().string(from: cal.startOfDay(for: saved))
+		} else {
+			let today = cal.startOfDay(for: Date())
+			UserDefaults.standard.set(today, forKey: key)
+			if let ag = UserDefaults(suiteName: appGroupIdentifier) { ag.set(today, forKey: key); ag.synchronize() }
+			return ISO8601DateFormatter().string(from: today)
+		}
+	}
+
+	/// 将刷新数据导入到行为管理器（同日求和）
+	func importRefreshDataToBehavior(_ dict: [String: Any]) {
+		// 新逻辑：按日期精确写入；首次启动导入时，过滤掉“今天”的条目，避免无操作计数
+		let incoming = dict["data"] as? [String: Int] ?? [:]
+		let isFirstLaunchImport = (UserDefaults.standard.bool(forKey: "FirstLaunchImportDone") == false)
+		let cal = Calendar.current
+		let todayKey: String = {
+			let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: cal.startOfDay(for: Date()))
+		}()
+		var filtered = incoming
+		if isFirstLaunchImport {
+			filtered.removeValue(forKey: todayKey)
+		}
+		// 同步设置首次安装日期为导入数据中最早一天
+		if let earliestKey = filtered.keys.min(), let date = ({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.date(from: earliestKey) })() {
+			let dayStart = cal.startOfDay(for: date)
+			DispatchQueue.main.async {
+				UserDefaults.standard.set(dayStart, forKey: "FirstInstallDate")
+				if let ag = UserDefaults(suiteName: appGroupIdentifier) { ag.set(dayStart, forKey: "FirstInstallDate"); ag.synchronize() }
+				UserDefaults.standard.set(dayStart, forKey: "AppInstallDate")
+				if let ag = UserDefaults(suiteName: appGroupIdentifier) { ag.set(dayStart, forKey: "AppInstallDate"); ag.synchronize() }
+			}
+		}
+		DispatchQueue.main.async {
+			UserBehaviorManager.shared.importRefreshData(filtered)
+		}
+	}
+}

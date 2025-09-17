@@ -57,11 +57,11 @@ public class SettingsManager: ObservableObject {
             userDefaults.set(widgetTheme.rawValue, forKey: Keys.widgetTheme)
             appGroupDefaults?.set(widgetTheme.rawValue, forKey: Keys.widgetTheme)
             appGroupDefaults?.synchronize()
-            print("🧪 [SettingsManager] 写入 WidgetTheme=\(widgetTheme.rawValue) -> standard+appGroup(\(appGroupIdentifier))")
+            print("🧪 [SettingsManager] \(String(format: "debug_write_widget_theme".localized, widgetTheme.rawValue, appGroupIdentifier))")
             // 通知小组件刷新以应用新主题
             #if os(iOS)
             WidgetCenter.shared.reloadAllTimelines()
-            print("🧪 [SettingsManager] 调用 WidgetCenter.reloadAllTimelines() 以应用新主题")
+            print("🧪 [SettingsManager] \("debug_reload_widget_timelines".localized)")
             #endif
         }
     }
@@ -70,6 +70,25 @@ public class SettingsManager: ObservableObject {
         didSet { 
             if let data = try? JSONEncoder().encode(chartConfiguration) {
                 userDefaults.set(data, forKey: Keys.chartConfiguration)
+            }
+        }
+    }
+    
+    // 自动更新设置
+    @Published public var autoUpdateEnabled: Bool {
+        didSet { userDefaults.set(autoUpdateEnabled, forKey: Keys.autoUpdateEnabled) }
+    }
+    
+    @Published public var autoUpdateFrequency: AutoUpdateFrequency {
+        didSet { userDefaults.set(autoUpdateFrequency.rawValue, forKey: Keys.autoUpdateFrequency) }
+    }
+    
+    @Published public var nextUpdateDate: Date? {
+        didSet { 
+            if let date = nextUpdateDate {
+                userDefaults.set(date, forKey: Keys.nextUpdateDate)
+            } else {
+                userDefaults.removeObject(forKey: Keys.nextUpdateDate)
             }
         }
     }
@@ -113,6 +132,12 @@ public class SettingsManager: ObservableObject {
             self.chartConfiguration = ChartConfiguration.default
         }
         
+        // 自动更新设置
+        self.autoUpdateEnabled = userDefaults.object(forKey: Keys.autoUpdateEnabled) as? Bool ?? false
+        let frequencyRawValue = userDefaults.string(forKey: Keys.autoUpdateFrequency) ?? AutoUpdateFrequency.daily.rawValue
+        self.autoUpdateFrequency = AutoUpdateFrequency(rawValue: frequencyRawValue) ?? .daily
+        self.nextUpdateDate = userDefaults.object(forKey: Keys.nextUpdateDate) as? Date
+        
         // 加载学者数据
         self.scholars = getScholars()
     }
@@ -133,6 +158,9 @@ public class SettingsManager: ObservableObject {
         static let lastUpdateDate = "LastUpdateDate"
         static let scholars = "Scholars"
         static let widgetTheme = "WidgetTheme"
+        static let autoUpdateEnabled = "AutoUpdateEnabled"
+        static let autoUpdateFrequency = "AutoUpdateFrequency"
+        static let nextUpdateDate = "NextUpdateDate"
     }
     
     // MARK: - Scholar Management
@@ -307,4 +335,39 @@ public struct ChartConfiguration: Codable, Equatable {
     }
     
     public static let `default` = ChartConfiguration()
+}
+
+// MARK: - Auto Update Frequency
+public enum AutoUpdateFrequency: String, CaseIterable {
+    case hourly = "hourly"
+    case daily = "daily"
+    case weekly = "weekly"
+    case monthly = "monthly"
+    
+    public var displayName: String {
+        let localizationManager = LocalizationManager.shared
+        switch self {
+        case .hourly:
+            return localizationManager.localized("hourly")
+        case .daily:
+            return localizationManager.localized("daily")
+        case .weekly:
+            return localizationManager.localized("weekly")
+        case .monthly:
+            return localizationManager.localized("monthly")
+        }
+    }
+    
+    public var timeInterval: TimeInterval {
+        switch self {
+        case .hourly:
+            return 3600 // 1小时
+        case .daily:
+            return 86400 // 24小时
+        case .weekly:
+            return 604800 // 7天
+        case .monthly:
+            return 2592000 // 30天
+        }
+    }
 }

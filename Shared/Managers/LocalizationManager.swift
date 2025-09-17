@@ -1,7 +1,9 @@
 import Foundation
 import Combine
 
-// MARK: - Localization Manager
+#if os(macOS)
+
+// MARK: - Localization Manager (macOS only)
 public class LocalizationManager: ObservableObject {
     public static let shared = LocalizationManager()
     
@@ -741,3 +743,5 @@ public extension String {
         return LocalizationManager.shared.localized(self)
     }
 }
+
+#endif

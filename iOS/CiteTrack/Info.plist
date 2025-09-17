@@ -66,6 +66,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>需要使用相机来扫描 Google Scholar 学者ID或链接。</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
@@ -92,7 +94,7 @@
 		</dict>
 	</dict>
 	<key>CFBundleVersion</key>
-	<string>1.0.1</string>
+	<string>2</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.1</string>
 	<!-- 应用图标配置，确保iCloud Drive文件夹显示正确图标 -->

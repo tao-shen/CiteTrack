@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 70;
+	objectVersion = 56;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -18,15 +18,26 @@
 		5BC31095AD1664AA671A57F4 /* citetrack_init.json in Resources */ = {isa = PBXBuildFile; fileRef = 2B820DC36C0D60590FD97C20 /* citetrack_init.json */; };
 		77011A2877011A2877011A2877011 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 88123B3988123B3988123B3988123 /* Preview Assets.xcassets */; };
 		99234C4A99234C4A99234C4A99234 /* Scholar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA345D5BAA345D5BAA345D5BAA345 /* Scholar.swift */; };
+		ABCD1234ABCD1234ABCD1234ABCD1234 /* ScholarsGrowthLineChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCD1234ABCD1234ABCD1234EFGH1234 /* ScholarsGrowthLineChartView.swift */; };
 		AppInitServiceBuild123456789012345678901234 /* AppInitializationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AppInitService123456789012345678901234 /* AppInitializationService.swift */; };
+		AutoUpdateMgrBuild123456789012345678901234 /* AutoUpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AutoUpdateMgr123456789012345678901234 /* AutoUpdateManager.swift */; };
+		AutoUpdateViewBuild123456789012345678901234 /* AutoUpdateSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AutoUpdateView123456789012345678901234 /* AutoUpdateSettingsView.swift */; };
 		B0539BDF221226AD10E241CD /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F877EF78B7A4F52106F2360 /* Constants.swift */; };
 		BB456E6CBB456E6CBB456E6CBB456 /* GoogleScholarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC567F7DCC567F7DCC567F7DCC567 /* GoogleScholarService.swift */; };
 		BackupServiceBuild123456789012345678901234 /* BackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BackupService123456789012345678901234 /* BackupService.swift */; };
+		C1C1C1C1C1C1C1C1C1C1C1C1 /* CloudKitSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2C2C2C2C2C2C2C2C2C2C2C2 /* CloudKitSyncService.swift */; };
 		DD67808EDD67808EDD67808EDD6780 /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE78919FEE78919FEE78919FEE789 /* SettingsManager.swift */; };
-		E2DC0E1C2E71D8310022A244 /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E2DC0E1B2E71D8300022A244 /* UniformTypeIdentifiers.framework */; };
+		E202DA3C2E732DE80088055D /* ConfettiSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = E202DA3B2E732DE80088055D /* ConfettiSwiftUI */; };
+		E202DA3F2E7335A60088055D /* SwiftEntryKit in Frameworks */ = {isa = PBXBuildFile; productRef = E202DA3E2E7335A60088055D /* SwiftEntryKit */; };
+		E20408872E73E735000620AA /* WSOnBoarding in Frameworks */ = {isa = PBXBuildFile; productRef = E20408862E73E735000620AA /* WSOnBoarding */; };
+		E28462172E744FA20040CDC6 /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; productRef = E28462162E744FA20040CDC6 /* SwiftUICharts */; };
+		E29641D92E74876E00F2192F /* ContributionChart in Frameworks */ = {isa = PBXBuildFile; productRef = E29641D82E74876E00F2192F /* ContributionChart */; };
 		EE62AC8D536887913EF9C1E8 /* CiteTrackWidgetExtension/CiteTrackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6789012345678 /* CiteTrackWidgetExtension/CiteTrackWidget.swift */; };
 		FFA0B1C0FFA0B1C0FFA0B1C0FFA0B1 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B2C3D100B2C3D100B2C3D100B2C /* LocalizationManager.swift */; };
 		InitViewBuild123456789012345678901234 /* InitializationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = InitView123456789012345678901234 /* InitializationView.swift */; };
+		VSCANBUILDREF1234567890ABCDEF /* VisionTextScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VSCANFILEREF1234567890ABCDEF /* VisionTextScannerView.swift */; };
+		WelcomeConfigBuild123456789012345678901234 /* WelcomeConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = WelcomeConfig123456789012345678901234 /* WelcomeConfig.swift */; };
+		UserBehaviorBuild123456789012345678901234 /* UserBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = UserBehaviorFileRef123456789012345678901234 /* UserBehavior.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,8 +81,12 @@
 		88123B3988123B3988123B3988123 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		A1B2C3D4E5F6789012345678 /* CiteTrackWidgetExtension/CiteTrackWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CiteTrackWidgetExtension/CiteTrackWidget.swift; sourceTree = SOURCE_ROOT; };
 		AA345D5BAA345D5BAA345D5BAA345 /* Scholar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Scholar.swift; sourceTree = "<group>"; };
+		ABCD1234ABCD1234ABCD1234EFGH1234 /* ScholarsGrowthLineChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScholarsGrowthLineChartView.swift; sourceTree = "<group>"; };
 		AppInitService123456789012345678901234 /* AppInitializationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppInitializationService.swift; sourceTree = "<group>"; };
+		AutoUpdateMgr123456789012345678901234 /* AutoUpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoUpdateManager.swift; sourceTree = "<group>"; };
+		AutoUpdateView123456789012345678901234 /* AutoUpdateSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoUpdateSettingsView.swift; sourceTree = "<group>"; };
 		BackupService123456789012345678901234 /* BackupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupService.swift; sourceTree = "<group>"; };
+		C2C2C2C2C2C2C2C2C2C2C2C2 /* CloudKitSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CloudKitSyncService.swift; path = ../../Shared/Services/CloudKitSyncService.swift; sourceTree = "<group>"; };
 		CC567F7DCC567F7DCC567F7DCC567 /* GoogleScholarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleScholarService.swift; sourceTree = "<group>"; };
 		E296B9B92E4904000022E058 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E2DC0E152E6F44C50022A244 /* CiteTrackDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CiteTrackDebug.entitlements; sourceTree = "<group>"; };
@@ -79,19 +94,21 @@
 		EE78919FEE78919FEE78919FEE789 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
 		FB3BED8CD3B848C9924BDEB4 /* CiteTrackWidgetExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = CiteTrackWidgetExtension.entitlements; path = CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements; sourceTree = "<group>"; };
 		InitView123456789012345678901234 /* InitializationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitializationView.swift; sourceTree = "<group>"; };
+		VSCANFILEREF1234567890ABCDEF /* VisionTextScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionTextScannerView.swift; sourceTree = "<group>"; };
+		WelcomeConfig123456789012345678901234 /* WelcomeConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeConfig.swift; sourceTree = "<group>"; };
+		UserBehaviorFileRef123456789012345678901234 /* UserBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserBehavior.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		13D6E9FA13D6E9FA13D6E9FA13D6E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E20408872E73E735000620AA /* WSOnBoarding in Frameworks */,
+				E28462172E744FA20040CDC6 /* SwiftUICharts in Frameworks */,
+				E29641D92E74876E00F2192F /* ContributionChart in Frameworks */,
+				E202DA3F2E7335A60088055D /* SwiftEntryKit in Frameworks */,
+				E202DA3C2E732DE80088055D /* ConfettiSwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,8 +127,6 @@
 			isa = PBXGroup;
 			children = (
 				35F91C1C35F91C1C35F91C1C35F91 /* CiteTrack */,
-				E2DC0E1D2E71D8310022A244 /* FileProvider */,
-				E2DC0E2B2E71D8310022A244 /* FileProviderUI */,
 				46002D2D46002D2D46002D2D46002 /* Products */,
 				36049895C4EBC0DB9B46AA50 /* Frameworks */,
 				2F877EF78B7A4F52106F2360 /* Constants.swift */,
@@ -128,17 +143,22 @@
 				E296B9B92E4904000022E058 /* Info.plist */,
 				22B3C4D422B3C4D422B3C4D422B3 /* CiteTrackApp.swift */,
 				AA345D5BAA345D5BAA345D5BAA345 /* Scholar.swift */,
+				ABCD1234ABCD1234ABCD1234EFGH1234 /* ScholarsGrowthLineChartView.swift */,
 				CC567F7DCC567F7DCC567F7DCC567 /* GoogleScholarService.swift */,
 				EE78919FEE78919FEE78919FEE789 /* SettingsManager.swift */,
 				00B2C3D100B2C3D100B2C3D100B2C /* LocalizationManager.swift */,
 				11223344556677889900AABBCCDDEE00 /* iCloudSyncManager.swift */,
 				223344556677889900AABBCCDDEE00 /* DataManager.swift */,
 				BackupService123456789012345678901234 /* BackupService.swift */,
+				C2C2C2C2C2C2C2C2C2C2C2C2 /* CloudKitSyncService.swift */,
 				AppInitService123456789012345678901234 /* AppInitializationService.swift */,
 				InitView123456789012345678901234 /* InitializationView.swift */,
 				2B820DC36C0D60590FD97C20 /* citetrack_init.json */,
-				FileProviderMgr123456789012345678901234 /* FileProviderManager.swift */,
-				FileProviderView123456789012345678901234 /* FileProviderSettingsView.swift */,
+				AutoUpdateMgr123456789012345678901234 /* AutoUpdateManager.swift */,
+				AutoUpdateView123456789012345678901234 /* AutoUpdateSettingsView.swift */,
+				WelcomeConfig123456789012345678901234 /* WelcomeConfig.swift */,
+				VSCANFILEREF1234567890ABCDEF /* VisionTextScannerView.swift */,
+				UserBehaviorFileRef123456789012345678901234 /* UserBehavior.swift */,
 				66F1029866F1029866F1029866F1 /* Assets.xcassets */,
 				57113E3E57113E3E57113E3E57113 /* Preview Content */,
 			);
@@ -150,7 +170,6 @@
 			children = (
 				37A3B9DE4F6B2514BFB26631 /* iOS */,
 				E2DC0E1B2E71D8300022A244 /* UniformTypeIdentifiers.framework */,
-				FileProviderFramework123456789012345678901234 /* FileProvider.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -258,12 +277,6 @@
 							};
 						};
 					};
-					E2DC0E192E71D8300022A244 = {
-						CreatedOnToolsVersion = 16.4;
-					};
-					E2DC0E292E71D8310022A244 = {
-						CreatedOnToolsVersion = 16.4;
-					};
 				};
 			};
 			buildConfigurationList = BD7794A40BD7794A40BD7794A40BD /* Build configuration list for PBXProject "CiteTrack_tauon" */;
@@ -275,6 +288,13 @@
 				Base,
 			);
 			mainGroup = 24E80B0B24E80B0B24E80B0B24E80;
+			packageReferences = (
+				E202DA3A2E732DE80088055D /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */,
+				E202DA3D2E7335A60088055D /* XCRemoteSwiftPackageReference "SwiftEntryKit" */,
+				E20408852E73E735000620AA /* XCRemoteSwiftPackageReference "WSOnBoarding" */,
+				E28462152E744FA20040CDC6 /* XCRemoteSwiftPackageReference "ChartView" */,
+				E29641D72E74876E00F2192F /* XCRemoteSwiftPackageReference "SwiftUI-ContributionChart" */,
+			);
 			productRefGroup = 46002D2D46002D2D46002D2D46002 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -321,6 +341,7 @@
 			files = (
 				11A1B2C311A1B2C311A1B2C311A1 /* CiteTrackApp.swift in Sources */,
 				99234C4A99234C4A99234C4A99234 /* Scholar.swift in Sources */,
+				ABCD1234ABCD1234ABCD1234ABCD1234 /* ScholarsGrowthLineChartView.swift in Sources */,
 				BB456E6CBB456E6CBB456E6CBB456 /* GoogleScholarService.swift in Sources */,
 				DD67808EDD67808EDD67808EDD6780 /* SettingsManager.swift in Sources */,
 				FFA0B1C0FFA0B1C0FFA0B1C0FFA0B1 /* LocalizationManager.swift in Sources */,
@@ -328,9 +349,15 @@
 				223344556677889900AABBCCDDEEFF /* DataManager.swift in Sources */,
 				B0539BDF221226AD10E241CD /* Constants.swift in Sources */,
 				222222222222222222222222 /* WidgetModels.swift in Sources */,
+				C1C1C1C1C1C1C1C1C1C1C1C1 /* CloudKitSyncService.swift in Sources */,
 				BackupServiceBuild123456789012345678901234 /* BackupService.swift in Sources */,
 				AppInitServiceBuild123456789012345678901234 /* AppInitializationService.swift in Sources */,
 				InitViewBuild123456789012345678901234 /* InitializationView.swift in Sources */,
+				AutoUpdateMgrBuild123456789012345678901234 /* AutoUpdateManager.swift in Sources */,
+				AutoUpdateViewBuild123456789012345678901234 /* AutoUpdateSettingsView.swift in Sources */,
+				WelcomeConfigBuild123456789012345678901234 /* WelcomeConfig.swift in Sources */,
+				VSCANBUILDREF1234567890ABCDEF /* VisionTextScannerView.swift in Sources */,
+				UserBehaviorBuild123456789012345678901234 /* UserBehavior.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -356,12 +383,15 @@
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -376,12 +406,15 @@
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -546,7 +579,7 @@
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -590,7 +623,7 @@
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -625,6 +658,77 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E202DA3A2E732DE80088055D /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/simibac/ConfettiSwiftUI";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.3;
+			};
+		};
+		E202DA3D2E7335A60088055D /* XCRemoteSwiftPackageReference "SwiftEntryKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huri000/SwiftEntryKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+		E20408852E73E735000620AA /* XCRemoteSwiftPackageReference "WSOnBoarding" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/Jewel591/WSOnBoarding";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+		E28462152E744FA20040CDC6 /* XCRemoteSwiftPackageReference "ChartView" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/AppPear/ChartView";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.5;
+			};
+		};
+		E29641D72E74876E00F2192F /* XCRemoteSwiftPackageReference "SwiftUI-ContributionChart" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/VIkill33/SwiftUI-ContributionChart";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E202DA3B2E732DE80088055D /* ConfettiSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E202DA3A2E732DE80088055D /* XCRemoteSwiftPackageReference "ConfettiSwiftUI" */;
+			productName = ConfettiSwiftUI;
+		};
+		E202DA3E2E7335A60088055D /* SwiftEntryKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E202DA3D2E7335A60088055D /* XCRemoteSwiftPackageReference "SwiftEntryKit" */;
+			productName = SwiftEntryKit;
+		};
+		E20408862E73E735000620AA /* WSOnBoarding */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E20408852E73E735000620AA /* XCRemoteSwiftPackageReference "WSOnBoarding" */;
+			productName = WSOnBoarding;
+		};
+		E28462162E744FA20040CDC6 /* SwiftUICharts */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E28462152E744FA20040CDC6 /* XCRemoteSwiftPackageReference "ChartView" */;
+			productName = SwiftUICharts;
+		};
+		E29641D82E74876E00F2192F /* ContributionChart */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E29641D72E74876E00F2192F /* XCRemoteSwiftPackageReference "SwiftUI-ContributionChart" */;
+			productName = ContributionChart;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AC6683930AC6683930AC6683930AC /* Project object */;
 }

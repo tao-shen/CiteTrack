@@ -213,7 +213,7 @@ class ModernChartsViewController: NSViewController {
                     self.processChartData(history, for: scholar)
                 case .failure(let error):
                     print("Failed to load chart data: \\(error)")
-                    self.showError("数据加载失败", error.localizedDescription)
+                    self.showError("data_load_failed".localized, error.localizedDescription)
                 }
             }
         }
@@ -324,7 +324,7 @@ class ModernChartsViewController: NSViewController {
                 self.exportHistory(history, to: url, scholar: scholar)
             case .failure(let error):
                 DispatchQueue.main.async {
-                    self.showError("导出失败", error.localizedDescription)
+                    self.showError("export_failed".localized, error.localizedDescription)
                 }
             }
         }

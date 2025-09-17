@@ -1,10 +1,88 @@
 import SwiftUI
+#if canImport(SwiftEntryKit)
+import SwiftEntryKit
+#endif
+
+struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// MARK: - 用户数据结构
+struct UserData: Codable {
+    let userId: String
+    let data: [String: Int]  // 日期字符串 -> 刷新次数
+    let lastUpdated: String
+    
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case data
+        case lastUpdated = "last_updated"
+    }
+}
+import ConfettiSwiftUI
+import WSOnBoarding
 import UIKit
 import BackgroundTasks
 import WidgetKit
 import UniformTypeIdentifiers
 import AppIntents
 import CoreTelephony
+
+#if canImport(ContributionChart)
+import ContributionChart
+#endif
+
+// MARK: - Global Helpers (visible across this file)
+@inline(__always)
+func CT_FirstInstallDate() -> Date {
+    let key = "FirstInstallDate"
+    let calendar = Calendar.current
+    if let saved = UserDefaults.standard.object(forKey: key) as? Date {
+        return calendar.startOfDay(for: saved)
+    } else {
+        let today = calendar.startOfDay(for: Date())
+        UserDefaults.standard.set(today, forKey: key)
+        if let ag = UserDefaults(suiteName: appGroupIdentifier) {
+            ag.set(today, forKey: key)
+            ag.synchronize()
+        }
+        return today
+    }
+}
+
+// 简化：使用单一全局方法进行手动计数，避免跨文件依赖
+func CT_RecordManualRefresh() {
+    // 轻量防抖：同一时间窗口内的重复触发只计一次
+    let defaults = UserDefaults.standard
+    let now = Date()
+    if let last = defaults.object(forKey: "LastManualRefreshAt") as? Date {
+        // 阈值：2秒内重复触发视为同一次手动动作
+        if now.timeIntervalSince(last) < 2.0 {
+            return
+        }
+    }
+    defaults.set(now, forKey: "LastManualRefreshAt")
+
+    // 统一通过用户行为管理器记录刷新次数
+    UserBehaviorManager.shared.recordRefresh()
+}
+
+// MARK: - Seeded Random Number Generator
+struct SeededRandomNumberGenerator: RandomNumberGenerator {
+    private var state: UInt64
+    
+    init(seed: UInt64) {
+        self.state = seed
+    }
+    
+    mutating func next() -> UInt64 {
+        state = state &* 1103515245 &+ 12345
+        return state
+    }
+}
 
 // MARK: - Haptics Prewarm Helper
 enum HapticsManager {
@@ -24,6 +102,9 @@ struct CiteTrackApp: App {
     @StateObject private var settingsManager = SettingsManager.shared
     @StateObject private var dataManager = DataManager.shared
     @StateObject private var initializationService = AppInitializationService.shared
+    @StateObject private var autoUpdateManager = AutoUpdateManager.shared
+    @StateObject private var localizationManager = LocalizationManager.shared
+    @StateObject private var cloudSyncManager = iCloudSyncManager.shared
     @Environment(\.scenePhase) private var scenePhase
     private static let refreshTaskIdentifier = "com.citetrack.citationRefresh"
     
@@ -41,7 +122,15 @@ struct CiteTrackApp: App {
         CiteTrackApp.scheduleAppRefresh()
         
         // 方法2实现：使用公共普遍性容器，无需FileProvider扩展
-        NSLog("🔧 [CiteTrackApp] 使用公共普遍性容器方法，无需FileProvider扩展")
+        NSLog("🔧 [CiteTrackApp] \("debug_using_public_container".localized)")
+
+        // 首次启动尝试从 iCloud 导入（若存在 Citetrack 目录与数据）
+        DispatchQueue.main.async {
+            if iCloudSyncManager.shared.isiCloudAvailable {
+                // 优先读取容器 Documents 下两个文件（ios_data.json 与 citation_data.json）
+                iCloudSyncManager.shared.importConfigOnFirstLaunch()
+            }
+        }
     }
     
     var body: some Scene {
@@ -49,7 +138,15 @@ struct CiteTrackApp: App {
             MainView()
                 .preferredColorScheme(colorScheme)
                 .environmentObject(dataManager)
+                .environmentObject(iCloudSyncManager.shared)
                 .environmentObject(initializationService)
+                .environmentObject(autoUpdateManager)
+                .environmentObject(localizationManager)
+                .wsWelcomeView(
+                    config: WSWelcomeConfig.citeTrackWelcome,
+                    style: .standard
+                )
+                .id(localizationManager.currentLanguage.rawValue)
                 .onOpenURL { url in
                     handleDeepLink(url: url)
                 }
@@ -59,6 +156,8 @@ struct CiteTrackApp: App {
                     HapticsManager.prewarm()
                     // 启动时检查蜂窝数据可用性
                     CellularDataPermission.shared.triggerCheck()
+                    // 启动即触发一次轻量的网络访问以申请网络权限（非阻塞、短超时，不访问 Google）
+                    NetworkPermissionTrigger.trigger()
                     // iCloud Drive文件夹现在由用户设置控制，不再自动创建
                     // 执行初始化流程
                     Task {
@@ -81,7 +180,7 @@ struct CiteTrackApp: App {
                 let t = (ag?.object(forKey: "LastRefreshTime") as? Date) ?? (UserDefaults.standard.object(forKey: "LastRefreshTime") as? Date)
                 let old = DataManager.shared.lastRefreshTime
                 DataManager.shared.lastRefreshTime = t
-                print("🧪 [CiteTrackApp] scenePhase.active 同步 LastRefreshTime: old=\(old?.description ?? "nil") -> new=\(t?.description ?? "nil")")
+                print("🧪 [CiteTrackApp] \(String(format: "debug_sync_last_refresh_time".localized, old?.description ?? "nil", t?.description ?? "nil"))")
             }
         }
     }
@@ -98,10 +197,10 @@ struct CiteTrackApp: App {
     }
     
     private func handleDeepLink(url: URL) {
-        print("🔗 [DeepLink] 接收到深度链接: \(url)")
+        print("🔗 [DeepLink] \(String(format: "debug_deep_link_received".localized, url.description))")
         
         guard url.scheme == "citetrack" else {
-            print("❌ [DeepLink] 无效的URL scheme: \(url.scheme ?? "nil")")
+            print("❌ [DeepLink] \(String(format: "debug_invalid_url_scheme".localized, url.scheme ?? "nil"))")
             return
         }
         
@@ -127,20 +226,20 @@ struct CiteTrackApp: App {
             }
         case "refresh":
             // Widget刷新按钮点击
-            print("🔄 [DeepLink] 收到刷新请求")
+            print("🔄 [DeepLink] \("debug_refresh_request_received".localized)")
             handleWidgetRefresh()
         case "switch":
             // Widget切换按钮点击
-            print("🎯 [DeepLink] 收到切换学者请求")
+            print("🎯 [DeepLink] \("debug_switch_scholar_request_received".localized)")
             handleWidgetScholarSwitch()
         default:
-            print("❌ [DeepLink] 不支持的深度链接: \(url)")
+            print("❌ [DeepLink] \(String(format: "debug_unsupported_deep_link".localized, url.description))")
         }
     }
     
     // MARK: - Widget Action Handlers
     private func handleWidgetRefresh() {
-        print("🔄 [Widget] 开始处理刷新请求")
+        print("🔄 [Widget] \("debug_widget_refresh_start".localized)")
         
         // 设置刷新时间戳，Widget会检测到这个时间戳并播放动画
         let now = Date()
@@ -148,19 +247,19 @@ struct CiteTrackApp: App {
         if let appGroup = UserDefaults(suiteName: appGroupIdentifier) {
             appGroup.set(now, forKey: "LastRefreshTime")
             appGroup.synchronize()
-            print("🧪 [CiteTrackApp] AppGroup 写入 LastRefreshTime=\(now)")
+            print("🧪 [CiteTrackApp] \(String(format: "debug_appgroup_write_direct".localized, "\(now)"))")
         }
-        print("🧪 [CiteTrackApp] Standard 写入 LastRefreshTime=\(now)")
+        print("🧪 [CiteTrackApp] \(String(format: "debug_standard_write_direct".localized, "\(now)"))")
         // 发送Darwin通知，提示主应用各管理器同步
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         CFNotificationCenterPostNotification(center, CFNotificationName("com.citetrack.lastRefreshTimeUpdated" as CFString), nil, nil, true)
-        print("🧪 [CiteTrackApp] 已发送 Darwin 通知: com.citetrack.lastRefreshTimeUpdated")
+        print("🧪 [CiteTrackApp] \(String(format: "debug_darwin_notification_sent".localized, "com.citetrack.lastRefreshTimeUpdated"))")
         
         // 如果有学者数据，触发实际的数据刷新
         let scholars = dataManager.scholars
         
         if !scholars.isEmpty {
-            print("🔄 [Widget] 刷新 \(scholars.count) 位学者数据")
+            print("🔄 [Widget] \(String(format: "debug_refresh_scholars_count".localized, scholars.count))")
             
             let group = DispatchGroup()
             for scholar in scholars {
@@ -175,7 +274,7 @@ struct CiteTrackApp: App {
                             self.dataManager.updateScholar(updated)
                             self.dataManager.saveHistoryIfChanged(scholarId: scholar.id, citationCount: info.citations)
                         case .failure(let error):
-                            print("❌ Widget刷新失败: \(scholar.id) - \(error.localizedDescription)")
+                            print("❌ \(String(format: "debug_widget_refresh_failed".localized, scholar.id, error.localizedDescription))")
                         }
                         group.leave()
                     }
@@ -185,7 +284,7 @@ struct CiteTrackApp: App {
             group.notify(queue: .main) {
                 // 🎯 使用DataManager的refreshWidgets来计算并保存变化数据
                 self.dataManager.refreshWidgets()
-                print("✅ [Widget] 刷新完成，更新小组件")
+                print("✅ [Widget] \("debug_widget_refresh_complete".localized)")
             }
         } else {
             // 没有学者数据，直接更新小组件
@@ -194,7 +293,10 @@ struct CiteTrackApp: App {
     }
     
     private func handleWidgetScholarSwitch() {
-        print("🎯 [Widget] 开始处理学者切换请求")
+        print("🎯 [Widget] \("debug_widget_switch_start".localized)")
+        
+        // 记录用户学者切换行为
+        // UserBehaviorManager.shared.recordScholarSwitch()
         
         // 设置切换时间戳，Widget会检测到这个时间戳并播放动画
         UserDefaults.standard.set(Date(), forKey: "LastScholarSwitchTime")
@@ -209,15 +311,27 @@ struct CiteTrackApp: App {
             // 保存新的索引
             UserDefaults.standard.set(nextIndex, forKey: "CurrentScholarIndex")
             
-            print("🎯 [Widget] 切换到学者 \(nextIndex): \(scholars[nextIndex].displayName)")
+            print("🎯 [Widget] \(String(format: "debug_widget_switch_success".localized, nextIndex, scholars[nextIndex].displayName))")
             
             // 更新小组件
             WidgetCenter.shared.reloadAllTimelines()
         } else {
-            print("🎯 [Widget] 学者数量不足，无法切换")
+            print("🎯 [Widget] \("debug_widget_insufficient_scholars".localized)")
             // 仍然更新小组件以提供反馈
             WidgetCenter.shared.reloadAllTimelines()
         }
+    }
+}
+
+// MARK: - Network Permission Trigger
+enum NetworkPermissionTrigger {
+    static func trigger() {
+        guard let url = URL(string: "https://example.com/robots.txt") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 3.0
+        let task = URLSession.shared.dataTask(with: request) { _, _, _ in }
+        task.resume()
     }
 }
 
@@ -231,21 +345,21 @@ final class CellularDataPermission {
         cellularData.cellularDataRestrictionDidUpdateNotifier = { state in
             switch state {
             case .restricted:
-                print("📶 蜂窝数据受限（用户关闭或受限）")
+                print("📶 \("debug_cellular_restricted".localized)")
             case .notRestricted:
-                print("📶 蜂窝数据可用")
+                print("📶 \("debug_cellular_available".localized)")
             case .restrictedStateUnknown:
                 fallthrough
             @unknown default:
-                print("📶 蜂窝数据状态未知")
+                print("📶 \("debug_cellular_unknown".localized)")
             }
         }
         let state = cellularData.restrictedState
         switch state {
-        case .restricted: print("📶[Init] 蜂窝数据受限")
-        case .notRestricted: print("📶[Init] 蜂窝数据可用")
-        case .restrictedStateUnknown: print("📶[Init] 蜂窝数据状态未知")
-        @unknown default: print("📶[Init] 蜂窝数据未知状态")
+        case .restricted: print("📶[Init] \("debug_cellular_restricted".localized)")
+        case .notRestricted: print("📶[Init] \("debug_cellular_available".localized)")
+        case .restrictedStateUnknown: print("📶[Init] \("debug_cellular_unknown".localized)")
+        @unknown default: print("📶[Init] \("debug_cellular_unknown".localized)")
         }
     }
 }
@@ -266,9 +380,9 @@ extension CiteTrackApp {
         request.earliestBeginDate = nextRefreshDate()
         do {
             try BGTaskScheduler.shared.submit(request)
-            print("📅 已安排后台刷新: \(request.earliestBeginDate?.description ?? "unknown")")
+            print("📅 \(String(format: "debug_background_refresh_scheduled".localized, request.earliestBeginDate?.description ?? "unknown"))")
         } catch {
-            print("❌ 安排后台刷新失败: \(error)")
+            print("❌ \(String(format: "debug_background_refresh_failed".localized, error.localizedDescription))")
         }
     }
 
@@ -309,10 +423,10 @@ extension CiteTrackApp {
                             citationCount: info.citations
                         )
                         
-                        print("✅ [批量更新] 成功更新学者信息: \(info.name) - \(info.citations) citations")
+                        print("✅ [批量更新] \(String(format: "debug_batch_update_success".localized, info.name, info.citations))")
                         
                     case .failure(let error):
-                        print("❌ [批量更新] 获取学者信息失败 \(scholar.id): \(error.localizedDescription)")
+                        print("❌ [批量更新] \(String(format: "debug_batch_update_failed".localized, scholar.id, error.localizedDescription))")
                     }
                     
                     group.leave()
@@ -321,9 +435,12 @@ extension CiteTrackApp {
         }
 
         group.notify(queue: .main) {
-            // 🎯 使用DataManager的refreshWidgets来刷新已计算好的数据
-            DataManager.shared.refreshWidgets()
-            task.setTaskCompleted(success: true)
+            // 完成本地抓取后，保存一次 CloudKit 长期同步
+            iCloudSyncManager.shared.exportUsingCloudKit { _ in
+                // 🎯 使用DataManager的refreshWidgets来刷新已计算好的数据
+                DataManager.shared.refreshWidgets()
+                task.setTaskCompleted(success: true)
+            }
         }
     }
 }
@@ -333,6 +450,147 @@ struct MainView: View {
     @StateObject private var localizationManager = LocalizationManager.shared
     @StateObject private var settingsManager = SettingsManager.shared
     @EnvironmentObject private var initializationService: AppInitializationService
+    @State private var contributionData: [Double] = []
+    
+    init() {
+        // 记录应用打开行为
+        // UserBehaviorManager.shared.recordAppOpen()
+    }
+    
+    // 🟣 紫色区域：底部文字说明区域 - 图表说明文字
+    private var bottomTextSection: some View {
+        VStack(spacing: 8) {
+            Divider()
+                .padding(.top, 4) // 减少上方间距
+            
+            // Contribution Chart Section
+            contributionChartSection
+        }
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+    }
+    
+    // MARK: - Contribution Chart Section
+    private var contributionChartSection: some View {
+        #if canImport(ContributionChart)
+        ZStack {
+            // 背景点击区域 - 覆盖整个图表区域
+            Rectangle()
+                .fill(Color.clear)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    // 点击任何空白区域时淡出弹窗
+                    NotificationCenter.default.post(name: .dismissTooltip, object: nil)
+                }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                
+                Text("App Usage")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onTapGesture {
+                        // 点击标题区域时淡出弹窗
+                        NotificationCenter.default.post(name: .dismissTooltip, object: nil)
+                    }
+                
+                CustomContributionChart(
+                    data: contributionData,
+                    rows: 7,
+                    columns: 52
+                )
+                .frame(height: 250) // 增加高度以适应30像素的方块
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onReceive(NotificationCenter.default.publisher(for: .userDataChanged)) { _ in
+                    // 用户数据变更后刷新热力图
+                    contributionData = generateContributionData()
+                }
+                .onAppear {
+                    contributionData = generateContributionData()
+                }
+                
+                Text("debug_show_refresh_frequency".localized)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .onTapGesture {
+                        // 点击描述文字区域时淡出弹窗
+                        NotificationCenter.default.post(name: .dismissTooltip, object: nil)
+                    }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        #else
+        VStack(alignment: .leading, spacing: 8) {
+            Text("debug_chart_description".localized)
+                .font(.headline)
+                .foregroundColor(.primary)
+            
+            Text("debug_chart_explanation".localized)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        #endif
+    }
+    
+    // MARK: - Contribution Data Generation
+    private func generateContributionData() -> [Double] {
+        // 统一从用户行为层获取热力图数据
+        return UserBehaviorManager.shared.getHeatmapData()
+    }
+
+    // 获取或初始化应用安装日期（与 UserBehavior.installDateKey 保持一致）
+    private func getInstallDate() -> Date {
+        let key = "AppInstallDate"
+        let defaults = UserDefaults.standard
+        if let saved = defaults.object(forKey: key) as? Date {
+            return saved
+        } else {
+            let today = Calendar.current.startOfDay(for: Date())
+            defaults.set(today, forKey: key)
+            if let ag = UserDefaults(suiteName: appGroupIdentifier) {
+                ag.set(today, forKey: key)
+                ag.synchronize()
+            }
+            return today
+        }
+    }
+
+    // 获取或初始化"首次安装日期"，用于跨重装的起点（会通过 iCloud 同步）
+    private func CT_FirstInstallDate() -> Date {
+        let key = "FirstInstallDate"
+        let defaults = UserDefaults.standard
+        if let saved = defaults.object(forKey: key) as? Date {
+            return Calendar.current.startOfDay(for: saved)
+        } else {
+            let today = Calendar.current.startOfDay(for: Date())
+            defaults.set(today, forKey: key)
+            if let ag = UserDefaults(suiteName: appGroupIdentifier) {
+                ag.set(today, forKey: key)
+                ag.synchronize()
+            }
+            return today
+        }
+    }
+    
+    private func calculateIntensity(for refreshCount: Int) -> Double {
+        switch refreshCount {
+        case 0:
+            return 0.0
+        case 1:
+            return 0.25
+        case 2...3:
+            return 0.5
+        case 4...6:
+            return 0.75
+        default:
+            return 1.0
+        }
+    }
+    
+    // 不再使用热力图测试的初始化模拟数据
     
     var body: some View {
         Group {
@@ -346,6 +604,12 @@ struct MainView: View {
                     Text(localizationManager.localized("dashboard"))
                 }
                 .tag(0)
+                .onReceive(NotificationCenter.default.publisher(for: Notification.Name("iCloudImportPromptAvailable"))) { _ in
+                    if iCloudSyncManager.shared.showImportPrompt == true {
+                        // 强制切到 Dashboard 时也能弹出（showImportPrompt 已经绑定 alert）
+                        iCloudSyncManager.shared.showImportPrompt = true
+                    }
+                }
             
             NewScholarView()
                 .tabItem {
@@ -354,12 +618,42 @@ struct MainView: View {
                 }
                 .tag(1)
             
+            // 新增：学者增长折线图（使用 SwiftUICharts 多学者对比）
+            NavigationView {
+                ScrollView {
+                    VStack(spacing: 12) {
+                        // 🟠 橙色区域：外层ScholarsGrowthLineChartView - 图表组件容器
+                        ScholarsGrowthLineChartView()
+                            .environmentObject(DataManager.shared)
+                            .environmentObject(localizationManager)
+                            // .background(Color.orange.opacity(0.3)) // 调试：外层ScholarsGrowthLineChartView背景
+                            .frame(maxHeight: 450) // 设置最大高度，让图表有足够空间但不会过高
+                            .frame(minHeight: 440) // 设置最小高度，确保图表有基本显示空间
+                        
+                        // 🟢 绿色区域：贡献活动热力图区域
+                        contributionChartSection
+                            // .background(Color.purple.opacity(0.3)) // 调试：bottomTextSection背景
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom)
+                }
+                .navigationTitle(localizationManager.localized("charts"))
+                .navigationBarTitleDisplayMode(.large)
+            }
+            .navigationViewStyle(StackNavigationViewStyle())
+            .tabItem {
+                Image(systemName: "chart.xyaxis.line")
+                Text(localizationManager.localized("charts"))
+            }
+            .tag(2)
+            
             SettingsView()
                 .tabItem {
                     Image(systemName: "gear")
                     Text(localizationManager.localized("settings"))
                 }
-                .tag(2)
+                .tag(3)
         }
                 .onReceive(NotificationCenter.default.publisher(for: .deepLinkAddScholar)) { _ in
                     selectedTab = 1 // 切换到学者管理页面
@@ -380,6 +674,7 @@ struct DashboardView: View {
     @StateObject private var dataManager = DataManager.shared
     @StateObject private var localizationManager = LocalizationManager.shared
     @State private var sortOption: SortOption = .total
+    @AppStorage("ConfirmedMyScholarId") private var confirmedMyScholarId: String?
     
     enum SortOption: String, CaseIterable {
         case total
@@ -459,8 +754,14 @@ struct DashboardView: View {
                     // 统计卡片
                     HStack(spacing: 12) {
                         StatisticsCard(
-                            title: localizationManager.localized("total_citations"),
-                            value: "\(dataManager.scholars.reduce(0) { $0 + ($1.citations ?? 0) })",
+                            title: localizationManager.localized("my_citations"),
+                            value: {
+                                if let sid = confirmedMyScholarId, let me = dataManager.getScholar(id: sid) {
+                                    return "\(me.citations ?? 0)"
+                                } else {
+                                    return "0"
+                                }
+                            }(),
                             icon: "quote.bubble.fill",
                             color: .blue
                         )
@@ -562,6 +863,153 @@ struct NewScholarView: View {
     @State private var showingDeleteScholarAlert = false
     @State private var pendingDeleteScholars: [Scholar] = []
     @State private var showingDeleteAllAlert = false
+    @AppStorage("ConfirmedMyScholarId") private var confirmedMyScholarId: String?
+    // Confetti & message state
+    @State private var confettiTrigger: Int = 0
+    @State private var lastConfettiReason: String = ""
+    @State private var batchDelta: Int = 0
+
+    private func showEntryKitPopup(titleKey: String, descKey: String, value: Int, context: String) {
+        #if canImport(SwiftEntryKit)
+        var attributes = EKAttributes.centerFloat
+        attributes.displayDuration = 2.0
+        attributes.entryBackground = .visualEffect(style: .dark)
+        attributes.shadow = .active(with: .init(color: .black, opacity: 0.2, radius: 10))
+        attributes.roundCorners = .all(radius: 16)
+        attributes.entranceAnimation = .init( 
+            translate: .init(duration: 0.45, spring: .init(damping: 0.8, initialVelocity: 0.6)),
+            scale: .init(from: 0.85, to: 1.0, duration: 0.45),
+            fade: .init(from: 0.0, to: 1.0, duration: 0.2)
+        )
+        attributes.exitAnimation = .init(
+            translate: .init(duration: 0.3),
+            scale: .init(from: 1.0, to: 0.96, duration: 0.25),
+            fade: .init(from: 1.0, to: 0.0, duration: 0.25)
+        )
+        attributes.positionConstraints.size = .init(width: .intrinsic, height: .intrinsic)
+        attributes.positionConstraints.maxSize = .init(width: .constant(value: min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 40), height: .intrinsic)
+        attributes.hapticFeedbackType = .success
+
+        let title = EKProperty.LabelContent(text: titleKey.localized, style: .init(font: .boldSystemFont(ofSize: 22), color: .white))
+        let descText = String(format: descKey.localized, max(value, 0))
+        let desc = EKProperty.LabelContent(text: descText, style: .init(font: .systemFont(ofSize: 18, weight: .semibold), color: .white))
+        let image = EKProperty.ImageContent(image: UIImage(systemName: "sparkles") ?? UIImage(), size: CGSize(width: 30, height: 30))
+        let simple = EKSimpleMessage(image: image, title: title, description: desc)
+        let note = EKNotificationMessage(simpleMessage: simple)
+        let view = EKNotificationMessageView(with: note)
+        SwiftEntryKit.display(entry: view, using: attributes)
+        print("🎯 [EntryKit] popup shown: context=\(context), value=\(value)")
+        #else
+        print("⚠️ [EntryKit] SwiftEntryKit not integrated, skip popup. context=\(context), value=\(value)")
+        #endif
+    }
+
+    private func showSingleRefreshPopupAndConfetti(scholarId: String, delta: Int, currentCitations: Int) {
+        // 计算今日累计增长
+        let todayStart = Calendar.current.startOfDay(for: Date())
+        let todayHistory = dataManager.getHistory(for: scholarId, days: 1).filter { $0.timestamp >= todayStart }
+        let earliestTodayCount = todayHistory.min(by: { $0.timestamp < $1.timestamp })?.citationCount
+        let todayGrowth = earliestTodayCount != nil ? (currentCitations - earliestTodayCount!) : 0
+
+        if delta > 0 {
+            // 有本次增长：标题🎉 恭喜！ 描述：该学者引用量增长了 +%d，礼花：显示
+            lastConfettiReason = "single_update delta=\(delta)"
+            confettiTrigger += 1
+            print("🎆 [Confetti] Single update trigger: \(lastConfettiReason)")
+            showEntryKitPopup(titleKey: "single_update_title_growth", descKey: "single_update_desc_growth", value: delta, context: "single_update_delta_positive")
+        } else if todayGrowth > 0 {
+            // 本次0，但今日累计>0：也需放礼花
+            lastConfettiReason = "single_update todayGrowth=\(todayGrowth)"
+            confettiTrigger += 1
+            print("🎆 [Confetti] Single update trigger: \(lastConfettiReason)")
+            showEntryKitPopup(titleKey: "single_update_title_today_growth", descKey: "single_update_desc_today_growth", value: todayGrowth, context: "single_update_today_growth_positive")
+        } else {
+            // 今日累计=0：标题暂无新增引用 描述今天的引用量没有增长，礼花：不显示
+            #if canImport(SwiftEntryKit)
+            var attributes = EKAttributes.centerFloat
+            attributes.displayDuration = 2.0
+            attributes.entryBackground = .visualEffect(style: .dark)
+            attributes.shadow = .active(with: .init(color: .black, opacity: 0.2, radius: 10))
+            attributes.roundCorners = .all(radius: 16)
+            attributes.entranceAnimation = .init(
+                translate: .init(duration: 0.45, spring: .init(damping: 0.8, initialVelocity: 0.6)),
+                scale: .init(from: 0.85, to: 1.0, duration: 0.45),
+                fade: .init(from: 0.0, to: 1.0, duration: 0.2)
+            )
+            attributes.exitAnimation = .init(
+                translate: .init(duration: 0.3),
+                scale: .init(from: 1.0, to: 0.96, duration: 0.25),
+                fade: .init(from: 1.0, to: 0.0, duration: 0.25)
+            )
+            attributes.positionConstraints.size = .init(width: .intrinsic, height: .intrinsic)
+            attributes.positionConstraints.maxSize = .init(width: .constant(value: min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 40), height: .intrinsic)
+            attributes.hapticFeedbackType = .success
+
+            let title = EKProperty.LabelContent(text: "single_update_title_no_growth".localized, style: .init(font: .boldSystemFont(ofSize: 22), color: .white))
+            let desc = EKProperty.LabelContent(text: "single_update_desc_no_growth".localized, style: .init(font: .systemFont(ofSize: 18, weight: .semibold), color: .white))
+            let image = EKProperty.ImageContent(image: UIImage(systemName: "info.circle") ?? UIImage(), size: CGSize(width: 30, height: 30))
+            let simple = EKSimpleMessage(image: image, title: title, description: desc)
+            let note = EKNotificationMessage(simpleMessage: simple)
+            let view = EKNotificationMessageView(with: note)
+            SwiftEntryKit.display(entry: view, using: attributes)
+            print("🎯 [EntryKit] popup shown: context=single_update_no_growth, value=0")
+            #else
+            print("⚠️ [EntryKit] SwiftEntryKit not integrated, skip popup. context=single_update_no_growth, value=0")
+            #endif
+        }
+    }
+
+    private func showBatchRefreshPopupAndConfetti(totalDelta: Int) {
+        if totalDelta > 0 {
+            lastConfettiReason = "batch_done totalDelta=\(totalDelta)"
+            confettiTrigger += 1
+            print("🎉 [Confetti] Batch finished trigger: \(lastConfettiReason)")
+            // 延迟以避免与礼花重叠
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                showEntryKitPopup(titleKey: "batch_update_title_growth", descKey: "batch_update_desc_growth", value: totalDelta, context: "batch_finished_growth")
+            }
+        } else {
+            // 无增长，不放礼花
+            showEntryKitPopup(titleKey: "batch_update_title_no_growth", descKey: "batch_update_desc_no_growth", value: 0, context: "batch_finished_no_growth")
+        }
+    }
+    
+    /// 新增学者后的提示弹窗（与刷新弹窗风格一致，定制文案）
+    private func showAddedScholarPopup(currentCitations: Int?) {
+        #if canImport(SwiftEntryKit)
+        var attributes = EKAttributes.centerFloat
+        attributes.displayDuration = 2.0
+        attributes.entryBackground = .visualEffect(style: .dark)
+        attributes.shadow = .active(with: .init(color: .black, opacity: 0.2, radius: 10))
+        attributes.roundCorners = .all(radius: 16)
+        attributes.entranceAnimation = .init(
+            translate: .init(duration: 0.45, spring: .init(damping: 0.8, initialVelocity: 0.6)),
+            scale: .init(from: 0.85, to: 1.0, duration: 0.45),
+            fade: .init(from: 0.0, to: 1.0, duration: 0.2)
+        )
+        attributes.exitAnimation = .init(
+            translate: .init(duration: 0.3),
+            scale: .init(from: 1.0, to: 0.96, duration: 0.25),
+            fade: .init(from: 1.0, to: 0.0, duration: 0.25)
+        )
+        attributes.positionConstraints.size = .init(width: .intrinsic, height: .intrinsic)
+        attributes.positionConstraints.maxSize = .init(width: .constant(value: min(UIScreen.main.bounds.width, UIScreen.main.bounds.height) - 40), height: .intrinsic)
+        attributes.hapticFeedbackType = .success
+
+        let title = EKProperty.LabelContent(text: "single_update_title_growth".localized, style: .init(font: .boldSystemFont(ofSize: 22), color: .white))
+        let count = currentCitations ?? 0
+        let descText = String(format: "debug_new_scholar_added".localized, count)
+        let desc = EKProperty.LabelContent(text: descText, style: .init(font: .systemFont(ofSize: 18, weight: .semibold), color: .white))
+        let image = EKProperty.ImageContent(image: UIImage(systemName: "sparkles") ?? UIImage(), size: CGSize(width: 30, height: 30))
+        let simple = EKSimpleMessage(image: image, title: title, description: desc)
+        let note = EKNotificationMessage(simpleMessage: simple)
+        let view = EKNotificationMessageView(with: note)
+        SwiftEntryKit.display(entry: view, using: attributes)
+        print("🎯 [EntryKit] popup shown: context=added_scholar, citations=\(count)")
+        #else
+        print("⚠️ [EntryKit] SwiftEntryKit not integrated, skip added scholar popup.")
+        #endif
+    }
     
     // 统一的sheet类型管理
     enum SheetType: Identifiable {
@@ -589,15 +1037,33 @@ struct NewScholarView: View {
                     scholarListView
                 }
             }
+            .alert(iCloudSyncManager.shared.importPromptMessage.isEmpty ? localizationManager.localized("icloud_backup_found") : iCloudSyncManager.shared.importPromptMessage, isPresented: Binding(get: { iCloudSyncManager.shared.showImportPrompt }, set: { iCloudSyncManager.shared.showImportPrompt = $0 })) {
+                Button(localizationManager.localized("cancel")) {
+                    iCloudSyncManager.shared.declineImportFromPrompt()
+                }
+                Button(localizationManager.localized("import")) {
+                    iCloudSyncManager.shared.confirmImportFromPrompt()
+                }
+            }
             .navigationTitle(localizationManager.localized("scholar_management"))
             .toolbar { toolbarContent }
-            .refreshable { await refreshAllScholarsAsync() }
+            .refreshable { CT_RecordManualRefresh(); await refreshAllScholarsAsync() }
             .sheet(item: $activeSheet) { sheetType in
                 switch sheetType {
                 case .addScholar:
                     AddScholarView { newScholar in
+                        // 若尚未确认本人学者，则自动将首次手动添加的学者标记为 It's me（不依赖当前列表为空）
+                        if confirmedMyScholarId == nil || confirmedMyScholarId?.isEmpty == true {
+                            confirmedMyScholarId = newScholar.id
+                        }
                         dataManager.addScholar(newScholar)
-                        fetchScholarInfo(for: newScholar)
+                        // 新增学者：触发礼花并弹窗（统一风格）
+                        lastConfettiReason = "added_scholar id=\(newScholar.id)"
+                        confettiTrigger += 1
+                        print("🎉 [Confetti] Added scholar trigger: \(lastConfettiReason)")
+                        showAddedScholarPopup(currentCitations: newScholar.citations)
+                        // 取消紧接着的二次更新抓取，避免出现"+0" 动效
+                        // 如需强制刷新，可由用户手动触发更新
                     }
                 case .chart(let scholar):
                     ScholarChartDetailView(scholar: scholar)
@@ -639,6 +1105,23 @@ struct NewScholarView: View {
                 }
             }
             .overlay(loadingOverlay)
+            .overlay(
+                ZStack {
+                    // Confetti layer
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .ignoresSafeArea()
+                        .confettiCannon(
+                            trigger: $confettiTrigger,
+                            num: 50,
+                            openingAngle: Angle(degrees: 0),
+                            closingAngle: Angle(degrees: 360),
+                            radius: 200
+                        )
+                        .allowsHitTesting(false)
+
+                }
+            )
         }
     }
 
@@ -665,10 +1148,13 @@ struct NewScholarView: View {
                 ScholarRowWithChartAndManagement(
                     scholar: scholar,
                     onChartTap: {
-                        print("🔍 [NewScholar Debug] 点击了学者图表: \(scholar.displayName)")
+                        print("🔍 [NewScholar Debug] \(String(format: "debug_scholar_chart_tap_print".localized, scholar.displayName))")
                         activeSheet = .chart(scholar)
                     },
                     onUpdateTap: {
+                        print("🟡 [Update Tap] \(String(format: "debug_update_tap_print".localized, scholar.id, scholar.displayName))")
+                        // 单个学者的手动刷新也应计数
+                        CT_RecordManualRefresh()
                         fetchScholarInfo(for: scholar)
                     },
                     isLoading: loadingScholarId == scholar.id
@@ -699,6 +1185,19 @@ struct NewScholarView: View {
                         Label(dataManager.isPinned(scholar.id) ? localizationManager.localized("unpin") : localizationManager.localized("pin_to_top"), systemImage: dataManager.isPinned(scholar.id) ? "pin.slash" : "pin")
                     }
                     .tint(.blue)
+
+                    // It's me / Not me
+                    if confirmedMyScholarId == nil {
+                        Button("It's me") {
+                            confirmedMyScholarId = scholar.id
+                        }
+                        .tint(.green)
+                    } else if confirmedMyScholarId == scholar.id {
+                        Button("Not me") {
+                            confirmedMyScholarId = nil
+                        }
+                        .tint(.gray)
+                    }
                 }
             }
             .onDelete { offsets in
@@ -715,7 +1214,6 @@ struct NewScholarView: View {
             }
         }
         .coordinateSpace(name: "pullSpace")
-        .toolbar { EditButton() }
     }
 
     @ToolbarContentBuilder
@@ -732,6 +1230,7 @@ struct NewScholarView: View {
                 
                 Button {
                     Task {
+                        CT_RecordManualRefresh()
                         await refreshAllScholarsAsync()
                     }
                 } label: {
@@ -802,6 +1301,8 @@ struct NewScholarView: View {
         isLoading = true
         loadingScholarId = scholar.id
         
+        // 仅在显式的用户动作入口加1，此处不再重复计数
+        
         googleScholarService.fetchScholarInfo(for: scholar.id) { result in
             DispatchQueue.main.async {
                 isLoading = false
@@ -809,6 +1310,8 @@ struct NewScholarView: View {
                 
                 switch result {
                 case .success(let info):
+                    // 计算增量（用于文案显示），但无条件触发庆祝
+                    let oldCitations = dataManager.getScholar(id: scholar.id)?.citations ?? info.citations
                     var updatedScholar = Scholar(id: scholar.id, name: info.name)
                     updatedScholar.citations = info.citations
                     updatedScholar.lastUpdated = Date()
@@ -818,13 +1321,16 @@ struct NewScholarView: View {
                         scholarId: scholar.id,
                         citationCount: info.citations
                     )
+                    // Popup & confetti for single update (per rules)
+                    let delta = info.citations - oldCitations
+                    showSingleRefreshPopupAndConfetti(scholarId: scholar.id, delta: delta, currentCitations: info.citations)
                     
-                    print("✅ 成功更新学者信息: \(info.name) - \(info.citations) citations")
+                    print("✅ \(String(format: "debug_batch_update_success_direct_print".localized, info.name, info.citations))")
                     
                 case .failure(let error):
                     errorMessage = error.localizedDescription
                     showingErrorAlert = true
-                    print("❌ 获取学者信息失败: \(error.localizedDescription)")
+                    print("❌ \(String(format: "debug_batch_update_failed_direct_print".localized, error.localizedDescription))")
                 }
             }
         }
@@ -833,6 +1339,8 @@ struct NewScholarView: View {
     private func refreshAllScholars() {
         let scholars = dataManager.scholars
         guard !scholars.isEmpty else { return }
+        
+        // 仅在显式的用户动作入口加1，此处不再重复计数
         
         isRefreshing = true
         totalScholars = scholars.count
@@ -861,10 +1369,10 @@ struct NewScholarView: View {
                                 citationCount: info.citations
                             )
                             
-                            print("✅ [批量更新] 成功更新学者信息: \(info.name) - \(info.citations) citations")
+                            print("✅ [批量更新] \(String(format: "debug_batch_update_success_direct_print".localized, info.name, info.citations))")
                             
                         case .failure(let error):
-                            print("❌ [批量更新] 获取学者信息失败 \(scholar.id): \(error.localizedDescription)")
+                            print("❌ [批量更新] \(String(format: "debug_batch_update_failed".localized, scholar.id, error.localizedDescription))")
                         }
                         
                         group.leave()
@@ -877,7 +1385,7 @@ struct NewScholarView: View {
         
         group.notify(queue: .main) {
             isRefreshing = false
-            print("✅ [批量更新] 完成更新 \(refreshProgress)/\(totalScholars) 位学者")
+            print("✅ [批量更新] \(String(format: "debug_batch_update_complete_direct_print".localized, refreshProgress, totalScholars))")
         }
     }
 
@@ -891,8 +1399,10 @@ struct NewScholarView: View {
             isRefreshing = true
             totalScholars = scholars.count
             refreshProgress = 0
+            
         }
         
+        var totalDeltaLocal: Int = 0
         await withTaskGroup(of: Void.self) { group in
             for (index, scholar) in scholars.enumerated() {
                 group.addTask {
@@ -905,6 +1415,7 @@ struct NewScholarView: View {
                                 
                                 switch result {
                                 case .success(let info):
+                                    let oldCitations = dataManager.getScholar(id: scholar.id)?.citations ?? info.citations
                                     var updatedScholar = Scholar(id: scholar.id, name: info.name)
                                     updatedScholar.citations = info.citations
                                     updatedScholar.lastUpdated = Date()
@@ -914,11 +1425,15 @@ struct NewScholarView: View {
                                         scholarId: updatedScholar.id,
                                         citationCount: info.citations
                                     )
+                                    // Accumulate delta only (MainActor safe)
+                                    let delta = info.citations - oldCitations
+                                    totalDeltaLocal += delta
+                                    print("📈 [Batch] Accumulate delta id=\(scholar.id) old=\(oldCitations) new=\(info.citations) delta=\(delta)")
                                     
-                                    print("✅ [批量更新] 成功更新学者信息: \(info.name) - \(info.citations) citations")
+                                    print("✅ [批量更新] \(String(format: "debug_batch_update_success_direct_print".localized, info.name, info.citations))")
                                     
                                 case .failure(let error):
-                                    print("❌ [批量更新] 获取学者信息失败 \(scholar.id): \(error.localizedDescription)")
+                                    print("❌ [批量更新] \(String(format: "debug_batch_update_failed".localized, scholar.id, error.localizedDescription))")
                                 }
                                 
                                 continuation.resume()
@@ -931,9 +1446,12 @@ struct NewScholarView: View {
         
         await MainActor.run {
             isRefreshing = false
-            print("✅ [批量更新] 完成更新 \(refreshProgress)/\(totalScholars) 位学者")
+            print("✅ [批量更新] \(String(format: "debug_batch_update_final_direct_print".localized, refreshProgress, totalScholars, totalDeltaLocal))")
+            showBatchRefreshPopupAndConfetti(totalDelta: totalDeltaLocal)
         }
     }
+
+    
 
     private func deleteScholars(offsets: IndexSet) {
         for index in offsets {
@@ -1337,131 +1855,65 @@ struct SettingsView: View {
                     }
                 }
                 
-                Section(localizationManager.localized("app_information")) {
-                    HStack {
-                        Text(localizationManager.localized("version"))
-                        Spacer()
-                        Text("1.0.0")
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    HStack {
-                        Text(localizationManager.localized("build"))
-                        Spacer()
-                        Text("1")
-                            .foregroundColor(.secondary)
-                    }
+                // 自动更新设置
+                Section(localizationManager.localized("auto_update")) {
+                    AutoUpdateSettingsView()
                 }
                 
                 Section(localizationManager.localized("icloud_sync")) {
-                    // iCloud Drive 文件夹开关
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("在iCloud Drive中显示文件夹")
-                                .font(.headline)
-                            Text("在iCloud Drive根目录创建CiteTrack文件夹，显示应用图标")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                    // iCloud Drive 显示开关（使用标准行样式，保持与其他项一致）
+                    Toggle(isOn: $settingsManager.iCloudDriveFolderEnabled) {
+                        HStack {
+                            Image(systemName: "icloud")
+                                .foregroundColor(.blue)
+                            Text(localizationManager.localized("show_in_icloud_drive"))
                         }
-                        Spacer()
-                        Toggle("", isOn: $settingsManager.iCloudDriveFolderEnabled)
-                            .onChange(of: settingsManager.iCloudDriveFolderEnabled) { enabled in
-                                if enabled {
-                                    // 用户开启时创建文件夹
-                                    let success = iCloudManager.createiCloudDriveFolder()
-                                    if success {
-                                        print("✅ [Settings] iCloud Drive文件夹创建成功")
-                                    } else {
-                                        print("❌ [Settings] iCloud Drive文件夹创建失败")
-                                        // 如果创建失败，将开关重置为关闭状态
-                                        DispatchQueue.main.async {
-                                            settingsManager.iCloudDriveFolderEnabled = false
-                                        }
-                                    }
+                    }
+                    .onChange(of: settingsManager.iCloudDriveFolderEnabled) { _, enabled in
+                        if enabled {
+                            // 用户开启时创建文件夹
+                            let success = iCloudManager.createiCloudDriveFolder()
+                            if success {
+                                print("✅ [Settings] \("debug_icloud_folder_success_print".localized)")
+                            } else {
+                                print("❌ [Settings] \("debug_icloud_folder_failed_print".localized)")
+                                // 如果创建失败，将开关重置为关闭状态
+                                DispatchQueue.main.async {
+                                    settingsManager.iCloudDriveFolderEnabled = false
                                 }
                             }
+                        }
                     }
-                    .padding(.vertical, 4)
                     
-                    // 刷新文件夹图标按钮
-                    if settingsManager.iCloudDriveFolderEnabled {
+                    // 立即同步按钮（左侧）和状态（右侧）
+                    HStack {
                         Button(action: {
-                            iCloudManager.refreshFolderIcon()
+                            // 若用户未开启在 iCloud Drive 中显示，则点击"立即同步"时自动开启
+                            if !settingsManager.iCloudDriveFolderEnabled {
+                                settingsManager.iCloudDriveFolderEnabled = true
+                                // 尝试创建文件夹，确保 Files 可见
+                                _ = iCloudManager.createiCloudDriveFolder()
+                            }
+                            iCloudManager.performImmediateSync()
                         }) {
                             HStack {
-                                Image(systemName: "arrow.clockwise.circle")
-                                Text("刷新文件夹图标")
+                                Image(systemName: "arrow.clockwise")
+                                    .foregroundColor(.blue)
+                                Text(localizationManager.localized("sync_now"))
+                                    .foregroundColor(.blue)
                             }
                         }
-                        .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-                    }
-                    
-                    // 选择并记住 iCloud Drive 目录
-                    Button(action: chooseAndBookmarkDriveFolder) {
-                        HStack {
-                            Image(systemName: iCloudManager.hasBookmarkedDriveDirectory ? "checkmark.folder" : "folder.badge.plus")
-                            Text(iCloudManager.hasBookmarkedDriveDirectory ? localizationManager.localized("icloud_drive_folder_saved") : localizationManager.localized("choose_icloud_drive_folder"))
-                        }
-                    }
-                    .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-
-                    if iCloudManager.hasBookmarkedDriveDirectory {
-                        Button(role: .destructive, action: clearBookmarkedDriveFolder) {
-                            HStack {
-                                Image(systemName: "trash")
-                                Text(localizationManager.localized("clear_saved_folder"))
-                            }
-                        }
-                        .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-                    }
-                    HStack {
-                        Text(localizationManager.localized("sync_status"))
+                        .buttonStyle(PlainButtonStyle())
+                        
                         Spacer()
+                        
                         Text(iCloudManager.syncStatus)
                             .foregroundColor(.secondary)
                     }
                     
-                    if iCloudManager.lastSyncDate != nil {
-                        HStack {
-                            Text(localizationManager.localized("last_sync"))
-                            Spacer()
-                            Text(iCloudManager.lastSyncDate!.timeAgoString)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    Button(action: {
-                        iCloudManager.checkSyncStatus()
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.clockwise")
-                            Text(localizationManager.localized("check_sync_status"))
-                        }
-                    }
-                    .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-                    
 
-                    // 从 iCloud 导入
-                    Button(action: {
-                        showingImportAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "icloud.and.arrow.down")
-                            Text(localizationManager.localized("import_from_icloud"))
-                        }
-                    }
-                    .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
-
-                    // 导出到 iCloud
-                    Button(action: {
-                        showingExportAlert = true
-                    }) {
-                        HStack {
-                            Image(systemName: "icloud.and.arrow.up")
-                            Text(localizationManager.localized("export_to_icloud"))
-                        }
-                    }
-                    .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+                    // 从 iCloud 导入（暂时隐藏）
+                    // 导出到 iCloud（暂时隐藏）
                 }
                 
                 Section(localizationManager.localized("data_management")) {
@@ -1471,6 +1923,7 @@ struct SettingsView: View {
                     }) {
                         HStack {
                             Image(systemName: "doc.badge.plus")
+                                .foregroundColor(.green)
                             Text(localizationManager.localized("manual_import_file"))
                         }
                     }
@@ -1479,7 +1932,8 @@ struct SettingsView: View {
                     // 导出到本地（分享）
                     Button(action: exportToLocalDevice) {
                         HStack {
-                            Image(systemName: "square.and.arrow.down")
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(.orange)
                             Text(localizationManager.localized("export_to_device"))
                         }
                     }
@@ -1489,10 +1943,15 @@ struct SettingsView: View {
                 Section(localizationManager.localized("about")) {
                     Text(localizationManager.localized("app_description"))
                         .font(.headline)
-                    
-                    Text(localizationManager.localized("app_help"))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    // 仅保留版本号
+                    HStack {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.gray)
+                        Text(localizationManager.localized("version"))
+                        Spacer()
+                        Text("1.0.0")
+                            .foregroundColor(.secondary)
+                    }
                 }
             }
             .navigationTitle(localizationManager.localized("settings"))
@@ -1532,13 +1991,13 @@ struct SettingsView: View {
             } message: {
                 Text(exportSuccessMessage)
             }
-            .alert("在iCloud Drive中显示文件夹", isPresented: $showingCreateFolderAlert) {
+            .alert(localizationManager.localized("create_icloud_folder_alert_title"), isPresented: $showingCreateFolderAlert) {
                 Button(localizationManager.localized("cancel"), role: .cancel) { }
-                Button("创建", action: createiCloudDriveFolder)
+                Button(localizationManager.localized("create_folder_button"), action: createiCloudDriveFolder)
             } message: {
-                Text("这将在iCloud Drive中创建一个带应用图标的CiteTrack文件夹，方便您管理导入导出的数据文件。")
+                Text(localizationManager.localized("create_icloud_folder_alert_message"))
             }
-            .alert("成功", isPresented: $showingCreateFolderSuccessAlert) {
+            .alert(localizationManager.localized("create_folder_success_title"), isPresented: $showingCreateFolderSuccessAlert) {
                 Button(localizationManager.localized("confirm"), action: { })
             } message: {
                 Text(createFolderMessage)
@@ -1570,23 +2029,7 @@ struct SettingsView: View {
                     iCloudManager.importFromFile(url: url)
                 }
             }
-            .overlay(
-                Group {
-                    if iCloudManager.isImporting || iCloudManager.isExporting {
-                        ZStack {
-                            Color.black.opacity(0.25).ignoresSafeArea()
-                            VStack(spacing: 12) {
-                                ProgressView()
-                                Text(iCloudManager.isImporting ? localizationManager.localized("importing_from_icloud") : localizationManager.localized("exporting_to_icloud"))
-                                    .foregroundColor(.white)
-                            }
-                            .padding(16)
-                            .background(Color.black.opacity(0.6))
-                            .cornerRadius(12)
-                        }
-                    }
-                }
-            )
+            // 移除阻断式覆盖层，仅用 status 文案提示同步进度
             // 优先使用基于 URL 的 sheet(item:)，避免首帧为空
             .sheet(item: $shareURL, onDismiss: {
                 shareURL = nil
@@ -1669,15 +2112,8 @@ struct SettingsView: View {
     private func exportToiCloud() {
         print("🚀 [iCloud Debug] Export with folder picker; default = iCloud app folder, data only")
         do {
-            // 1) 只构建数据文件
-            let data = try makeExportJSONData()
-            let date = Date()
-            let fmt = DateFormatter()
-            fmt.dateFormat = "yyyyMMdd"
-            fmt.locale = Locale(identifier: "en_US_POSIX")
-            let filename = "citetrack_\(fmt.string(from: date)).json"
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
-            try data.write(to: tempURL, options: [.atomic])
+            // 1) 只构建数据文件（使用统一命名规则）
+            let tempURL = try writeExportToTemporaryFile()
             exportTempURLs = [tempURL]
             // 2) 设定初始目录为应用 iCloud Documents（带图标的文件夹）
             exportPickerInitialDirectory = iCloudManager.preferredExportDirectory()
@@ -1689,14 +2125,14 @@ struct SettingsView: View {
     }
     
     private func createiCloudDriveFolder() {
-        print("🚀 [iCloud Drive] 开始创建iCloud Drive文件夹...")
+        print("🚀 [iCloud Drive] \("debug_icloud_folder_creating_print".localized)")
         iCloudManager.createiCloudDriveFolder { result in
             switch result {
             case .success():
-                self.createFolderMessage = "成功在iCloud Drive中创建了CiteTrack文件夹！现在您可以在「文件」应用的iCloud Drive中看到带图标的CiteTrack文件夹，所有导入导出的数据都将保存在这里。"
+                self.createFolderMessage = localizationManager.localized("create_folder_success_message")
                 self.showingCreateFolderSuccessAlert = true
             case .failure(let error):
-                self.errorMessage = "创建iCloud Drive文件夹失败: \(error.localizedDescription)"
+                self.errorMessage = String(format: localizationManager.localized("create_folder_failed_message"), error.localizedDescription)
                 self.showingErrorAlert = true
             }
         }
@@ -1747,11 +2183,9 @@ struct SettingsView: View {
 
     private func exportToLocalDevice() {
         do {
-            // URL 文件分享：生成 citetrack_YYYYMMDD.json 并分享
+            // 仅生成临时文件并分享；不持久化到应用 Documents
             let temp = try writeExportToTemporaryFile()
-            let fileURL = try persistExportFile(fromTempURL: temp)
-            prewarmExportsDirectory()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { self.shareURL = ShareItem(url: fileURL) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) { self.shareURL = ShareItem(url: temp) }
         } catch {
             self.errorMessage = localizationManager.localized("export_failed_with_message") + ": " + error.localizedDescription
             self.showingErrorAlert = true
@@ -1761,12 +2195,26 @@ struct SettingsView: View {
     // 生成导出数据并写入临时文件
     private func writeExportToTemporaryFile(filename: String = "") throws -> URL {
         let data = try makeExportJSONData()
-        // 命名：citetrack_YYYYMMDD.json（本地时区）
         let date = Date()
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyyMMdd"
-        fmt.locale = Locale(identifier: "en_US_POSIX")
-        let name = filename.isEmpty ? "citetrack_\(fmt.string(from: date)).json" : filename
+        // 命名：CiteTrack_yyyyMMdd-HHmmss_v<appVersion>_<device>.json（本地时区）
+        let df = DateFormatter()
+        df.dateFormat = "yyyyMMdd-HHmmss"
+        df.locale = Locale(identifier: "en_US_POSIX")
+        let ts = df.string(from: date)
+        let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0"
+        let device: String = {
+            #if targetEnvironment(macCatalyst)
+            return "macOS"
+            #else
+            switch UIDevice.current.userInterfaceIdiom {
+            case .pad: return "iPad"
+            case .phone: return "iPhone"
+            default: return UIDevice.current.model.replacingOccurrences(of: " ", with: "")
+            }
+            #endif
+        }()
+        let defaultName = "CiteTrack_\(ts)_v\(appVersion)_\(device).json"
+        let name = filename.isEmpty ? defaultName : filename
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try data.write(to: tempURL, options: [.atomic])
         return tempURL
@@ -1804,45 +2252,12 @@ struct SettingsView: View {
         return try JSONSerialization.data(withJSONObject: exportEntries, options: .prettyPrinted)
     }
 
-    // 将临时文件持久化到 Documents/Exports 下，提升可分享性与稳定性
-    private func persistExportFile(fromTempURL tempURL: URL) throws -> URL {
-        let fm = FileManager.default
-        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let dir = docs.appendingPathComponent("Exports", isDirectory: true)
-        if !fm.fileExists(atPath: dir.path) {
-            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
-        let filename = tempURL.lastPathComponent
-        let dest = dir.appendingPathComponent(filename)
-        if fm.fileExists(atPath: dest.path) {
-            try? fm.removeItem(at: dest)
-        }
-        // 使用移动代替拷贝，减少 IO 与状态不一致
-        try fm.moveItem(at: tempURL, to: dest)
-        // 取消文件保护，避免首次无法打开
-        try? fm.setAttributes([.protectionKey: FileProtectionType.none], ofItemAtPath: dest.path)
-        // 可选：排除备份
-        var rv = URLResourceValues()
-        rv.isExcludedFromBackup = true
-        var mut = dest
-        try? mut.setResourceValues(rv)
-        return dest
-    }
+    // 不再将导出文件持久化到 Documents/Exports，改为直接分享临时文件
+    // 保留占位实现以兼容旧调用路径（若有），直接返回传入临时URL
+    private func persistExportFile(fromTempURL tempURL: URL) throws -> URL { return tempURL }
 
-    // 预热 Exports 目录与文件提供者，降低首次分享慢/失败
-    private func prewarmExportsDirectory() {
-        let fm = FileManager.default
-        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let dir = docs.appendingPathComponent("Exports", isDirectory: true)
-        if !fm.fileExists(atPath: dir.path) {
-            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
-        let prewarmURL = dir.appendingPathComponent("._prewarm.json")
-        let data = "{}".data(using: .utf8) ?? Data()
-        // 写入-删除一次，触发系统层的目录/域初始化
-        try? data.write(to: prewarmURL, options: [.atomic])
-        try? fm.removeItem(at: prewarmURL)
-    }
+    // 不再预热 Exports 目录
+    private func prewarmExportsDirectory() { }
 
     struct ImportPickerView: UIViewControllerRepresentable {
         @Binding var isPresented: Bool
@@ -1947,11 +2362,25 @@ struct AddScholarView: View {
         NavigationView {
             Form {
                 Section(localizationManager.localized("scholar_information")) {
-                    TextField("Google Scholar ID", text: $scholarId)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                    HStack(spacing: 8) {
+                        TextField(localizationManager.localized("google_scholar_id_placeholder"), text: $scholarId)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .autocorrectionDisabled(true)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.asciiCapable)
+                        Button {
+                            activeScannerPresented = true
+                        } label: {
+                            Image(systemName: "camera.viewfinder")
+                                .font(.system(size: 20, weight: .medium))
+                        }
+                        .accessibilityLabel(localizationManager.localized("scan_scholar_id"))
+                    }
                     
                     TextField(localizationManager.localized("scholar_name_placeholder"), text: $scholarName)
                         .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .autocorrectionDisabled(true)
+                        .textInputAutocapitalization(.never)
                     
                     if !errorMessage.isEmpty {
                         Text(errorMessage)
@@ -1981,26 +2410,58 @@ struct AddScholarView: View {
                     }
                 }
             }
+            .sheet(isPresented: $activeScannerPresented) {
+                VisionTextScannerView { token in
+                    // 尝试从识别文本中提取学者ID
+                    if let extracted = GoogleScholarService.shared.extractScholarId(from: token) {
+                        scholarId = extracted
+                    } else {
+                        scholarId = token
+                    }
+                    activeScannerPresented = false
+                } onCancel: {
+                    activeScannerPresented = false
+                }
+            }
         }
     }
     
+    @State private var activeScannerPresented = false
+
     private func addScholar() {
         guard !scholarId.isEmpty else { return }
         
         isLoading = true
         errorMessage = ""
         
-        // 模拟网络请求延迟
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        // 尝试从输入中提取学者ID（支持URL和纯ID）
+        let extractedId = GoogleScholarService.shared.extractScholarId(from: scholarId)
+        
+        guard let finalScholarId = extractedId, !finalScholarId.isEmpty else {
             isLoading = false
-            
-            let name = scholarName.isEmpty ? "\(localizationManager.localized("scholar")) \(scholarId.prefix(8))" : scholarName
-            var newScholar = Scholar(id: scholarId, name: name)
-            newScholar.citations = Int.random(in: 100...1000)
-            newScholar.lastUpdated = Date()
-            
-            onAdd(newScholar)
-            dismiss()
+            errorMessage = localizationManager.localized("invalid_scholar_id_or_url")
+            return
+        }
+        
+        // 使用Google Scholar Service获取真实的学者信息
+        GoogleScholarService.shared.fetchScholarInfo(for: finalScholarId) { result in
+            DispatchQueue.main.async {
+                self.isLoading = false
+                
+                switch result {
+                case .success(let info):
+                    let name = self.scholarName.isEmpty ? info.name : self.scholarName
+                    var newScholar = Scholar(id: finalScholarId, name: name)
+                    newScholar.citations = info.citations
+                    newScholar.lastUpdated = Date()
+                    
+                    self.onAdd(newScholar)
+                    self.dismiss()
+                    
+                case .failure(let error):
+                    self.errorMessage = error.localizedDescription
+                }
+            }
         }
     }
 }
@@ -2221,7 +2682,7 @@ struct ScholarRowWithChartAndManagement: View {
             HStack(spacing: 0) {
                 // 更新按钮
                 Button(action: {
-                    print("🔍 [Management Debug] 点击了更新按钮: \(scholar.displayName)")
+                    print("🔍 [Management Debug] \(String(format: "debug_management_update_tap_print".localized, scholar.displayName))")
                     onUpdateTap()
                 }) {
                     VStack(spacing: 2) {
@@ -2249,7 +2710,7 @@ struct ScholarRowWithChartAndManagement: View {
                 
                 // 图表按钮
                 Button(action: {
-                    print("🔍 [Chart Debug] 点击了图表按钮: \(scholar.displayName)")
+                    print("🔍 [Chart Debug] \(String(format: "debug_chart_button_tap_print".localized, scholar.displayName))")
                     onChartTap()
                 }) {
                     VStack(spacing: 2) {
@@ -2806,7 +3267,7 @@ struct ScholarChartDetailView: View {
                                                     impactFeedback.impactOccurred()
                                                 }
                                                 selectedDataPoint = closest
-                                                print("🔍 [Chart Debug] 拖动吸附到数据点: \(closest.value)")
+                                                print("🔍 [Chart Debug] \(String(format: "debug_drag_to_data_point_print".localized, "\(closest.value)"))")
                                             }
                                         }
                                         .onEnded { value in
@@ -2817,7 +3278,7 @@ struct ScholarChartDetailView: View {
                                             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                             impactFeedback.impactOccurred()
                                             
-                                            print("🔍 [Chart Debug] 拖动结束，选中数据点: \(selectedDataPoint?.value ?? 0)")
+                                            print("🔍 [Chart Debug] \(String(format: "debug_drag_end_print".localized, "\(selectedDataPoint?.value ?? 0)"))")
                                         }
                                 )
                                 
@@ -2960,13 +3421,13 @@ struct ScholarChartDetailView: View {
             startDate = Calendar.current.date(byAdding: .day, value: -30, to: endDate) ?? endDate
         }
         
-        print("🔍 [Chart Debug] 加载学者 \(scholar.displayName) 的历史数据")
-        print("🔍 [Chart Debug] 时间范围: \(startDate) 到 \(endDate)")
+        print("🔍 [Chart Debug] \(String(format: "debug_load_scholar_data_print".localized, scholar.displayName))")
+        print("🔍 [Chart Debug] \(String(format: "debug_time_range_print".localized, "\(startDate)", "\(endDate)"))")
         
         // 从DataManager获取真实历史数据
         let histories = DataManager.shared.getHistory(for: scholar.id, from: startDate, to: endDate)
         
-        print("🔍 [Chart Debug] 获取到 \(histories.count) 条历史记录")
+        print("🔍 [Chart Debug] \(String(format: "debug_histories_count_print".localized, histories.count))")
         
         DispatchQueue.main.async {
             // 转换为图表数据格式
@@ -2977,11 +3438,11 @@ struct ScholarChartDetailView: View {
                 )
             }.sorted { $0.date < $1.date }
             
-            print("🔍 [Chart Debug] 转换后图表数据: \(self.chartData.count) 条")
+            print("🔍 [Chart Debug] \(String(format: "debug_chart_data_count_print".localized, self.chartData.count))")
             
             // 如果没有历史数据，显示当前引用数作为单个数据点
             if self.chartData.isEmpty, let currentCitations = self.scholar.citations {
-                print("🔍 [Chart Debug] 没有历史数据，使用当前引用数: \(currentCitations)")
+                print("🔍 [Chart Debug] \(String(format: "debug_no_history_data_print".localized, currentCitations))")
                 self.chartData = [ChartDataPoint(
                     date: Date(),
                     value: currentCitations
@@ -2991,7 +3452,7 @@ struct ScholarChartDetailView: View {
             // 结束加载状态
             self.isLoading = false
             
-            print("✅ 加载学者 \(self.scholar.displayName) 的历史数据: \(self.chartData.count) 条记录")
+            print("✅ \(String(format: "debug_load_scholar_success_print".localized, self.scholar.displayName, self.chartData.count))")
         }
     }
     
@@ -3064,14 +3525,14 @@ struct ScholarChartDetailView: View {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
         
-        print("🔍 [Chart Debug] 点击了数据点: \(point.value) at \(point.date)")
+        print("🔍 [Chart Debug] \(String(format: "debug_data_point_tap_print".localized, "\(point.value)", "\(point.date)"))")
         withAnimation(.easeInOut(duration: 0.2)) {
             if selectedDataPoint?.id == point.id {
                 selectedDataPoint = nil // 取消选中
-                print("🔍 [Chart Debug] 取消选中数据点")
+                print("🔍 [Chart Debug] \("debug_deselect_data_point_print".localized)")
             } else {
                 selectedDataPoint = point // 选中新点
-                print("🔍 [Chart Debug] 选中数据点: \(point.value)")
+                print("🔍 [Chart Debug] \(String(format: "debug_select_data_point_print".localized, "\(point.value)"))")
             }
         }
     }
@@ -3137,4 +3598,574 @@ extension Notification.Name {
     static let deepLinkScholarDetail = Notification.Name("deepLinkScholarDetail")
     static let widgetRefreshTriggered = Notification.Name("widgetRefreshTriggered")
     static let widgetScholarSwitched = Notification.Name("widgetScholarSwitched")
+    static let dismissTooltip = Notification.Name("dismissTooltip")
+    static let userDataChanged = Notification.Name("userDataChanged")
+}
+
+// MARK: - Custom Contribution Chart
+    struct CustomContributionChart: View {
+        let data: [Double]
+        let rows: Int
+        let columns: Int
+        
+        @State private var availableWidth: CGFloat = 0
+    @State private var selectedBlock: (row: Int, column: Int)? = nil
+    @State private var showTooltip: Bool = false
+     @State private var tooltipPosition: CGPoint = .zero
+     @State private var displayTooltipPosition: CGPoint = .zero
+     @State private var tooltipId: UUID = UUID()
+     @State private var autoFadeTimer: Timer?
+     @State private var scrollOffset: CGFloat = 0
+        
+        private let baseSpacing: CGFloat = 2.0
+        
+        private var blockSize: CGFloat {
+            let totalSpacing = CGFloat(columns - 1) * baseSpacing
+            let availableSpace = availableWidth - totalSpacing
+            let calculatedSize = availableSpace / CGFloat(columns)
+            
+            // 计算最大允许的方块大小，确保7行不会超过250像素高度
+            let maxHeight = 250.0
+            let maxBlockSize = (maxHeight - CGFloat(rows - 1) * baseSpacing) / CGFloat(rows)
+            
+            // 进一步放大方块，但不超过高度限制
+            return max(30, min(calculatedSize, min(45, maxBlockSize)))
+        }
+        
+        var body: some View {
+            GeometryReader { geometry in
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                    ZStack {
+                        // 空白处点击区域
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                if showTooltip {
+                                    // 取消自动淡出定时器
+                                    autoFadeTimer?.invalidate()
+                                    autoFadeTimer = nil
+                                    
+                                    // 淡出弹窗
+                                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                                        showTooltip = false
+                                    }
+                                    
+                                    // 延迟取消选中状态，让淡出动画完成
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                                            selectedBlock = nil
+                                        }
+                                    }
+                                }
+                            }
+                        
+                VStack(spacing: baseSpacing) {
+                    ForEach(0..<rows, id: \.self) { row in
+                        heatmapRow(row: row, geometry: geometry)
+                    }
+                }
+                .frame(width: {
+                    let cols = max(1, data.count / rows)
+                    let width = CGFloat(cols) * blockSize + CGFloat(cols - 1) * baseSpacing
+                    return width.isFinite && width > 0 ? width : 1
+                }())
+                    
+                     // 工具提示
+                    if showTooltip, let selected = selectedBlock {
+                        tooltipView(for: selected)
+                            .position(displayTooltipPosition)
+                            .opacity(showTooltip ? 1 : 0)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0), value: showTooltip)
+                            .id(tooltipId)
+                    }
+                    
+                    // 调试信息显示 - 已注释
+                    /*
+                    if showTooltip, let selected = selectedBlock {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("debug_info_title_print".localized)
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            let blockX = CGFloat(selected.column) * (blockSize + baseSpacing) + blockSize / 2
+                            let blockY = CGFloat(selected.row) * (blockSize + baseSpacing) + blockSize / 2
+                            
+                            Text(String(format: "debug_block_position_print".localized, String(format: "%.1f", blockX), String(format: "%.1f", blockY)))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                            
+                            Text(String(format: "debug_tooltip_position_print".localized, String(format: "%.1f", displayTooltipPosition.x), String(format: "%.1f", displayTooltipPosition.y)))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                            
+                            Text(String(format: "debug_column_row_print".localized, selected.column, selected.row))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                            
+                            Text(String(format: "debug_block_size_print".localized, String(format: "%.1f", blockSize)))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                            
+                            let index = selected.row * (data.count / rows) + selected.column
+                                let value = index < data.count ? data[index] : 0.0
+                            let refreshCount = Int(value * 10)
+                            
+                            Text(String(format: "debug_data_index_print".localized, index))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                            
+                            Text(String(format: "debug_refresh_count_print".localized, refreshCount))
+                                .font(.caption2)
+                                .foregroundColor(.white)
+                        }
+                        .padding(8)
+                        .background(Color.black.opacity(0.8))
+                        .cornerRadius(8)
+                        .position(x: geometry.size.width - 100, y: 50)
+                    }
+                    */
+                     
+                 }
+                .frame(width: {
+                    let cols = max(1, data.count / rows)
+                    let width = CGFloat(cols) * blockSize + CGFloat(cols - 1) * baseSpacing
+                    return width.isFinite && width > 0 ? width : 1
+                }())
+                }
+                .background(
+                    GeometryReader { contentGeometry in
+                        Color.clear
+                            .preference(key: ScrollOffsetPreferenceKey.self, 
+                                      value: contentGeometry.frame(in: .named("scrollContainer")).minX)
+                    }
+                )
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+                    scrollOffset = value
+                }
+                .onAppear {
+                    availableWidth = geometry.size.width
+                }
+                .onChange(of: geometry.size.width) { _, newWidth in
+                    availableWidth = newWidth
+                }
+            }
+            .coordinateSpace(name: "scrollContainer")
+            }
+            .frame(height: min(CGFloat(rows) * blockSize + CGFloat(rows - 1) * baseSpacing, 250))
+            .onReceive(NotificationCenter.default.publisher(for: .dismissTooltip)) { _ in
+                // 接收到淡出通知时，立即淡出弹窗
+                if showTooltip {
+                    // 取消自动淡出定时器
+                    autoFadeTimer?.invalidate()
+                    autoFadeTimer = nil
+                    
+                    // 淡出弹窗
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                        showTooltip = false
+                    }
+                    
+                    // 延迟取消选中状态，让淡出动画完成
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                            selectedBlock = nil
+                        }
+                    }
+                }
+            }
+        }
+    
+    private func colorForValue(_ value: Double, isSelected: Bool = false) -> Color {
+        let baseColor: Color
+        let opacity: Double
+        
+        if value <= 0.0 {
+            baseColor = Color(.systemGray5)
+            opacity = 1.0
+        } else if value <= 0.25 {
+            baseColor = Color(.systemBlue)
+            opacity = 0.4
+        } else if value <= 0.5 {
+            baseColor = Color(.systemBlue)
+            opacity = 0.6
+        } else if value <= 0.75 {
+            baseColor = Color(.systemBlue)
+            opacity = 0.8
+        } else {
+            baseColor = Color(.systemBlue)
+            opacity = 1.0
+        }
+        
+        // 选中时增加亮度和对比度
+        if isSelected {
+            return baseColor.opacity(min(opacity + 0.2, 1.0))
+        } else {
+            return baseColor.opacity(opacity)
+        }
+    }
+    
+    // MARK: - 交互处理方法
+    private func handleBlockTap(row: Int, column: Int, geometry: GeometryProxy) {
+        // 取消自动淡出定时器
+        autoFadeTimer?.invalidate()
+        autoFadeTimer = nil
+        
+        // 触觉反馈
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+        
+        if selectedBlock?.row == row && selectedBlock?.column == column {
+            // 取消选中 - 淡出动画
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                showTooltip = false
+            }
+            
+            // 延迟取消选中状态，让淡出动画完成
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                    selectedBlock = nil
+                }
+            }
+        } else {
+            // 选中新方块 - 先淡出再弹出
+            if selectedBlock != nil {
+                // 先淡出当前弹窗
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0)) {
+                    showTooltip = false
+                }
+                
+                // 延迟更新选中状态和位置，然后弹出新弹窗
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    // 先更新选中状态和位置（不显示，无动画）
+                    selectedBlock = (row: row, column: column)
+                    updateTooltipPosition(geometry: geometry)
+                    
+                    // 更新显示位置和ID（无动画）
+                    displayTooltipPosition = tooltipPosition
+                    tooltipId = UUID()
+                    
+                    // 然后弹出新弹窗
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0)) {
+                        showTooltip = true
+                    }
+                    
+                    // 启动自动淡出定时器
+                    startAutoFadeTimer()
+                }
+            } else {
+                // 直接弹出新弹窗
+                selectedBlock = (row: row, column: column)
+                updateTooltipPosition(geometry: geometry)
+                displayTooltipPosition = tooltipPosition
+                tooltipId = UUID()
+                
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0)) {
+                    showTooltip = true
+                }
+                
+                // 启动自动淡出定时器
+                startAutoFadeTimer()
+            }
+        }
+    }
+    
+    private func handleBlockLongPress(row: Int, column: Int, geometry: GeometryProxy) {
+        // 取消自动淡出定时器
+        autoFadeTimer?.invalidate()
+        autoFadeTimer = nil
+        
+        // 触觉反馈
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
+        if selectedBlock?.row == row && selectedBlock?.column == column {
+            // 长按已选中的方块，不做任何操作
+            return
+        }
+        
+        // 选中新方块 - 先淡出再弹出
+        if selectedBlock != nil {
+            // 先淡出当前弹窗
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8, blendDuration: 0)) {
+                showTooltip = false
+            }
+            
+            // 延迟更新选中状态和位置，然后弹出新弹窗
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                // 先更新选中状态和位置（不显示，无动画）
+                selectedBlock = (row: row, column: column)
+                updateTooltipPosition(geometry: geometry)
+                
+                // 更新显示位置和ID（无动画）
+                displayTooltipPosition = tooltipPosition
+                tooltipId = UUID()
+                
+                // 然后弹出新弹窗
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0)) {
+                    showTooltip = true
+                }
+                
+                // 启动自动淡出定时器
+                startAutoFadeTimer()
+            }
+        } else {
+            // 直接弹出新弹窗
+            selectedBlock = (row: row, column: column)
+            updateTooltipPosition(geometry: geometry)
+            displayTooltipPosition = tooltipPosition
+            tooltipId = UUID()
+            
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0)) {
+                showTooltip = true
+            }
+            
+            // 启动自动淡出定时器
+            startAutoFadeTimer()
+        }
+    }
+    
+    private func updateTooltipPosition(geometry: GeometryProxy) {
+        guard let selected = selectedBlock else { return }
+        
+        // 计算方块在屏幕上的位置
+        let blockX = CGFloat(selected.column) * (blockSize + baseSpacing) + blockSize / 2
+        let blockY = CGFloat(selected.row) * (blockSize + baseSpacing) + blockSize / 2
+        
+        // 智能弹窗位置判断，考虑左右边缘和上下边缘
+        let totalColumns = data.count / rows
+        
+        var finalX = blockX
+        var finalY = blockY
+        
+        // 左边缘判断：如果方块太靠左，弹窗往右移一格
+        if selected.column <= 1 {
+            finalX = blockX + (blockSize + baseSpacing) // 往右移一格
+        }
+        
+        // 右边缘判断：如果方块太靠右，弹窗往左移一格
+        if selected.column >= totalColumns - 2 {
+            finalX = blockX - (blockSize + baseSpacing) // 往左移一格
+        }
+        
+        // 上边缘判断：如果方块太靠上，弹窗往下移一格
+        if selected.row <= 1 {
+            finalY = blockY + (blockSize + baseSpacing) // 往下移一格
+        }
+        
+        // 下边缘判断：如果方块太靠下，弹窗往上移一格
+        if selected.row >= rows - 2 {
+            finalY = blockY - (blockSize + baseSpacing) // 往上移一格
+        }
+        
+        tooltipPosition = CGPoint(x: finalX, y: finalY)
+        
+        print("🔍 Debug: \(String(format: "debug_detailed_info_print".localized, "\(blockX)", "\(blockY)", "\(finalX)", "\(finalY)", "\(selected.column)", "\(totalColumns)", "\(selected.row)", "\(rows)"))")
+    }
+    
+    // 处理空白处点击
+    private func handleBackgroundTap() {
+        if showTooltip {
+            // 取消自动淡出定时器
+            autoFadeTimer?.invalidate()
+            autoFadeTimer = nil
+            
+            // 淡出弹窗
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                showTooltip = false
+            }
+            
+            // 延迟取消选中状态，让淡出动画完成
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                    selectedBlock = nil
+                }
+            }
+        }
+    }
+    
+    // 启动自动淡出定时器
+    private func startAutoFadeTimer() {
+        autoFadeTimer?.invalidate()
+        autoFadeTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                showTooltip = false
+            }
+            
+            // 延迟取消选中状态，让淡出动画完成
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8, blendDuration: 0)) {
+                    selectedBlock = nil
+                }
+            }
+        }
+    }
+    
+    // MARK: - 辅助函数
+    private func calculateRefreshCount(for value: Double) -> Int {
+        if value == 0.0 {
+            return 0
+        } else if value == 0.25 {
+            return 1
+        } else if value == 0.5 {
+            return Int.random(in: 2...3)
+        } else if value == 0.75 {
+            return Int.random(in: 4...6)
+        } else {
+            return Int.random(in: 7...10)
+        }
+    }
+    
+    // MARK: - 工具提示视图
+    // 计算热力图中指定位置的日期
+    // 从上到下+1天，从左到右+1周
+    private func getDateForHeatmapPosition(row: Int, column: Int) -> Date {
+        return UserBehaviorManager.shared.getDateForHeatmapPosition(row: row, column: column)
+    }
+    
+    private func getDataStartDate() -> Date { UserBehaviorManager.shared.getDateForHeatmapPosition(row: 0, column: 0) }
+    
+    @ViewBuilder
+    private func tooltipView(for selected: (row: Int, column: Int)) -> some View {
+        // 获取日期与刷新次数（来自行为管理器）
+        let targetDate = getDateForHeatmapPosition(row: selected.row, column: selected.column)
+        let refreshCount: Int = UserBehaviorManager.shared.refreshCount(on: targetDate)
+        
+        let dateString = formatDateForTooltip(targetDate)
+        
+        VStack(spacing: 6) {
+            // 刷新次数显示
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.caption2)
+                    .foregroundColor(.blue)
+                
+                Text(String(format: "refresh_count_display_print".localized, refreshCount))
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+            }
+            
+            // 日期显示
+            HStack(spacing: 4) {
+                Image(systemName: "calendar")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                
+                Text(dateString)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            ZStack {
+                // 主背景 - 更亮的白色
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.regularMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.white.opacity(0.9))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.8), Color.white.opacity(0.4)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                    )
+                
+                // 白色发光效果
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.3), Color.white.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blur(radius: 2)
+            }
+        )
+        .scaleEffect(showTooltip ? 1.0 : 0.3)
+        .opacity(showTooltip ? 1.0 : 0.0)
+        .offset(y: showTooltip ? 0 : 20)
+        .shadow(color: Color.gray.opacity(0.15), radius: 2, x: 0, y: 1)
+        .animation(.spring(response: 0.6, dampingFraction: 0.8, blendDuration: 0), value: showTooltip)
+    }
+    
+    private func formatDateForTooltip(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd"
+        return formatter.string(from: date)
+    }
+    
+    // MARK: - Heatmap Row Helper
+    @ViewBuilder
+    private func heatmapRow(row: Int, geometry: GeometryProxy) -> some View {
+        HStack(spacing: baseSpacing) {
+            ForEach(0..<(data.count / rows), id: \.self) { column in
+                // 列优先索引：列=周，行为天
+                let index = column * rows + row
+                let value = index < data.count ? data[index] : 0.0
+                let isSelected = selectedBlock?.row == row && selectedBlock?.column == column
+                
+                Rectangle()
+                    .fill(colorForValue(value, isSelected: isSelected))
+                    .frame(width: blockSize, height: blockSize)
+                    .cornerRadius(max(1, blockSize * 0.15))
+                    .overlay(
+                        // 选中时的发光边框
+                        RoundedRectangle(cornerRadius: max(1, blockSize * 0.15))
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.white.opacity(0.9), Color.white.opacity(0.6)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: isSelected ? 2 : 0
+                            )
+                    )
+                    .shadow(
+                        color: isSelected ? Color.white.opacity(0.8) : Color.clear,
+                        radius: isSelected ? 8 : 0,
+                        x: 0,
+                        y: isSelected ? 4 : 0
+                    )
+                    .shadow(
+                        color: isSelected ? Color.white.opacity(0.6) : Color.clear,
+                        radius: isSelected ? 12 : 0,
+                        x: 0,
+                        y: isSelected ? 6 : 0
+                    )
+                    .shadow(
+                        color: isSelected ? Color.white.opacity(0.4) : Color.clear,
+                        radius: isSelected ? 16 : 0,
+                        x: 0,
+                        y: isSelected ? 8 : 0
+                    )
+                    .scaleEffect(isSelected ? 1.15 : 1.0)
+                    .offset(y: isSelected ? -2 : 0)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.6, blendDuration: 0), value: isSelected)
+                    .onTapGesture {
+                        handleBlockTap(row: row, column: column, geometry: geometry)
+                    }
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded { _ in
+                                // 阻止事件传播到父级
+                            }
+                    )
+                    .onLongPressGesture(minimumDuration: 0.1) {
+                        handleBlockLongPress(row: row, column: column, geometry: geometry)
+                    }
+            }
+        }
+    }
 }

@@ -30,24 +30,50 @@ public class GoogleScholarService: ObservableObject {
         public var errorDescription: String? {
             switch self {
             case .invalidURL:
-                return "无效的URL"
+                return "invalid_url".localized
             case .noData:
-                return "没有数据返回"
+                return "no_data_returned".localized
             case .parsingError:
-                return "数据解析失败"
+                return "parsing_error".localized
             case .networkError(let error):
-                return "网络错误: \(error.localizedDescription)"
+                return String(format: "network_error".localized, error.localizedDescription)
             case .rateLimited:
-                return "请求过于频繁，请稍后再试"
+                return "rate_limited_error".localized
             case .scholarNotFound:
-                return "未找到该学者"
+                return "scholar_not_found".localized
             case .invalidScholarId:
-                return "无效的学者ID"
+                return "invalid_scholar_id".localized
             }
         }
     }
     
     // MARK: - Public Methods
+    
+    /// Extract scholar ID from Google Scholar URL
+    public func extractScholarId(from urlString: String) -> String? {
+        // 清理URL字符串，移除多余的空格
+        let cleanedUrl = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // 检查是否已经是纯ID（不包含URL）
+        if !cleanedUrl.contains("scholar.google.com") && !cleanedUrl.contains("http") {
+            return cleanedUrl
+        }
+        
+        // 尝试从URL中提取学者ID
+        let patterns = [
+            #"scholar\.google\.com/citations\?user=([^&]+)"#,
+            #"scholar\.google\.com/citations\?user=([^&]+)&"#,
+            #"user=([^&]+)"#
+        ]
+        
+        for pattern in patterns {
+            if let scholarId = extractFirstMatch(from: cleanedUrl, pattern: pattern) {
+                return scholarId
+            }
+        }
+        
+        return nil
+    }
     
     /// Fetch scholar information (name and citations)
     public func fetchScholarInfo(for scholarId: String, completion: @escaping (Result<(name: String, citations: Int), ScholarError>) -> Void) {

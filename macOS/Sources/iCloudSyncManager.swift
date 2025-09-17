@@ -17,6 +17,50 @@ class iCloudSyncManager {
     private let syncInterval: TimeInterval = 300 // 5 minutes
     
     private init() {}
+
+    // MARK: - CloudKit Long-term Sync
+    func exportUsingCloudKit(completion: @escaping (Result<Void, Error>) -> Void) {
+        // 将 macOS 历史记录导出为 JSON，与 iOS 格式一致
+        let semaphore = DispatchSemaphore(value: 0)
+        var historyEntries: [CitationHistory] = []
+        var fetchError: Error?
+        CitationHistoryManager.shared.getAllHistory { result in
+            switch result {
+            case .success(let entries): historyEntries = entries
+            case .failure(let error): fetchError = error
+            }
+            semaphore.signal()
+        }
+        semaphore.wait()
+        if let err = fetchError { completion(.failure(err)); return }
+        let payload: [[String: Any]] = historyEntries.map { e in [
+            "scholarId": e.scholarId,
+            "timestamp": ISO8601DateFormatter().string(from: e.timestamp),
+            "citationCount": e.citationCount
+        ]}
+        do {
+            let data = try JSONSerialization.data(withJSONObject: payload, options: .prettyPrinted)
+            CloudKitSyncService.shared.saveJSONData(data) { result in
+                completion(result.map { _ in () })
+            }
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    func importUsingCloudKit(completion: @escaping (Result<Void, Error>) -> Void) {
+        CloudKitSyncService.shared.fetchJSONData { result in
+            switch result {
+            case .success(let data):
+                do {
+                    // 验证 JSON 结构与 iOS 一致，这里仅解析校验，导入逻辑按需扩展
+                    _ = try JSONSerialization.jsonObject(with: data, options: [])
+                    completion(.success(()))
+                } catch { completion(.failure(error)) }
+            case .failure(let error): completion(.failure(error))
+            }
+        }
+    }
     
     // MARK: - iCloud Detection
     
@@ -275,16 +319,19 @@ class iCloudSyncManager {
         syncQueue.async { [weak self] in
             guard let self = self else { return }
             
+            // 使用 CloudKit 保存一次长期同步快照；失败不影响后续本地导出
+            self.exportUsingCloudKit { result in
+                switch result {
+                case .success: print("✅ [CloudKit] Initial save success")
+                case .failure(let error): print("⚠️ [CloudKit] Initial save failed: \(error.localizedDescription)")
+                }
+            }
             do {
-                // Create folder if needed
+                // 兼容保留：仍写 iCloud Drive 文件
                 try self.createiCloudFolder()
-                
-                // Export current data
                 try self.exportCitationData()
                 try self.exportAppConfig()
-                
                 print("✅ [iCloud Sync] Initial sync completed successfully")
-                
             } catch {
                 print("❌ [iCloud Sync] Initial sync failed: \(error.localizedDescription)")
             }
@@ -300,12 +347,18 @@ class iCloudSyncManager {
         syncQueue.async { [weak self] in
             guard let self = self else { return }
             
+            // CloudKit 长期同步
+            self.exportUsingCloudKit { result in
+                switch result {
+                case .success: print("✅ [CloudKit] Periodic save success")
+                case .failure(let error): print("⚠️ [CloudKit] Periodic save failed: \(error.localizedDescription)")
+                }
+            }
+            // 兼容保留：仍写 iCloud Drive 文件
             do {
-                // Always try to sync during periodic checks
                 try self.exportCitationData()
                 try self.exportAppConfig()
                 print("✅ [iCloud Sync] Periodic sync completed")
-                
             } catch {
                 print("❌ [iCloud Sync] Periodic sync failed: \(error.localizedDescription)")
             }

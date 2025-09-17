@@ -634,7 +634,7 @@
 "CiteTrack - 학술 인용 추적 도구"
 "CiteTrack - 学术引用追踪工具"
 "CiteTrack - 学術引用追跡ツール"
-"CiteTrack - Academic Citation Tracking Tool"
+"CiteTrack - Academic Citation Tracker"
 "CiteTrack - Akademisches Zitations-Tracking-Tool"
 "CiteTrack - Herramienta de Seguimiento de Citas Académicas"
 "CiteTrack - Outil de Suivi des Citations Académiques"

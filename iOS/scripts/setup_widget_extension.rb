@@ -24,7 +24,7 @@ if widget_target.nil?
   widget_target = project.new_target(:app_extension, WIDGET_TARGET_NAME, :ios, '17.0')
   widget_target.product_type = 'com.apple.product-type.app-extension'
   widget_target.build_configurations.each do |config|
-    config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.citetrack.CiteTrack.widget2'
+    config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.citetrack.CiteTrack.widget'
     config.build_settings['INFOPLIST_FILE'] = 'iOS/CiteTrackWidgetExtension/WidgetInfo.plist'
     config.build_settings['SWIFT_VERSION'] = '5.0'
     config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '17.0'
