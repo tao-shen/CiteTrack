@@ -1448,6 +1448,15 @@ struct NewScholarView: View {
             isRefreshing = false
             print("✅ [批量更新] \(String(format: "debug_batch_update_final_direct_print".localized, refreshProgress, totalScholars, totalDeltaLocal))")
             showBatchRefreshPopupAndConfetti(totalDelta: totalDeltaLocal)
+            // 批量刷新完成后，触发一次 iCloud 同步（与自动刷新保持一致）
+            let f = DateFormatter(); f.locale = .current; f.timeZone = .current; f.dateStyle = .medium; f.timeStyle = .medium
+            print("🚀 [CiteTrackApp] Batch finished at: \(f.string(from: Date())) → bootstrap + performImmediateSync + delayed check")
+            iCloudSyncManager.shared.bootstrapContainerIfPossible()
+            iCloudSyncManager.shared.performImmediateSync()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                print("🔍 [CiteTrackApp] Post-batch checkSyncStatus() …")
+                iCloudSyncManager.shared.checkSyncStatus()
+            }
         }
     }
 

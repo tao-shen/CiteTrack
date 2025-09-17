@@ -159,7 +159,8 @@ class iCloudSyncManager: ObservableObject {
 		DispatchQueue.main.async {
 			self.isExporting = true
 			self.syncStatus = LocalizationManager.shared.localized("exporting_to_icloud")
-			print("🚀 [CloudKit Sync] performImmediateSync started")
+			let df = DateFormatter(); df.locale = .current; df.timeZone = .current; df.dateStyle = .medium; df.timeStyle = .medium
+			print("🚀 [CloudKit Sync] performImmediateSync started at: \(df.string(from: Date()))")
 		}
 		exportUsingCloudKit { result in
 			DispatchQueue.main.async {
@@ -186,6 +187,10 @@ class iCloudSyncManager: ObservableObject {
 								try? fm.createDirectory(at: docs, withIntermediateDirectories: true)
 								try jsonData.write(to: mirrorURL, options: [.atomic])
 								print("✅ [iCloud Container Mirror] Wrote long-term file: \(mirrorURL.path)")
+								if let attrs = try? fm.attributesOfItem(atPath: mirrorURL.path), let m = attrs[.modificationDate] as? Date {
+									let df = DateFormatter(); df.locale = .current; df.timeZone = .current; df.dateStyle = .medium; df.timeStyle = .medium
+									print("🕒 [Mirror] mtime: \(df.string(from: m))")
+								}
 							} catch {
 								print("⚠️ [iCloud Container Mirror] Failed to write mirror: \(error)")
 							}
@@ -207,6 +212,7 @@ class iCloudSyncManager: ObservableObject {
 					}
 					// 在镜像文件写入完成后刷新状态，确保上次同步时间从最新文件时间读取
 					group.notify(queue: .main) {
+						print("🔁 [CloudKit Sync] checkSyncStatus after mirror writes …")
 						self.checkSyncStatus()
 					}
 				case .failure(let error):

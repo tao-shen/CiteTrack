@@ -17,6 +17,15 @@ public class AutoUpdateManager: ObservableObject {
     private var updateTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
     
+    private func formatLocal(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.timeZone = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    
     private init() {
         setupObservers()
         scheduleNextUpdate()
@@ -69,7 +78,7 @@ public class AutoUpdateManager: ObservableObject {
                         await self?.performAutoUpdate()
                     }
                 }
-                print("🔄 [AutoUpdateManager] \(String(format: "debug_auto_update_started".localized, nextUpdate.description))")
+                print("🔄 [AutoUpdateManager] \(String(format: "debug_auto_update_started".localized, formatLocal(nextUpdate)))")
             } else {
                 // 如果设置的时间已过期，立即执行更新
                 Task {
@@ -101,7 +110,7 @@ public class AutoUpdateManager: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 self?.nextUpdateDate = userSetTime
             }
-            print("📅 [AutoUpdateManager] 使用用户设置的下次更新时间: \(userSetTime)")
+            print("📅 [AutoUpdateManager] 使用用户设置的下次更新时间: \(formatLocal(userSetTime))")
             return
         }
         
@@ -115,7 +124,7 @@ public class AutoUpdateManager: ObservableObject {
             self?.settingsManager.nextUpdateDate = nextUpdate
         }
         
-        print("📅 [AutoUpdateManager] 按频率计算的下次更新时间: \(nextUpdate)")
+        print("📅 [AutoUpdateManager] 按频率计算的下次更新时间: \(formatLocal(nextUpdate))")
     }
     
     // MARK: - Update Execution
@@ -134,7 +143,17 @@ public class AutoUpdateManager: ObservableObject {
         
         let scholars = dataManager.scholars
         guard !scholars.isEmpty else {
-            print("ℹ️ [AutoUpdateManager] 没有学者需要更新")
+            print("ℹ️ [AutoUpdateManager] 没有学者需要更新（仍将进行一次 iCloud 同步）")
+            // 即使没有学者，也执行一次同步，确保 ios_data.json / 状态更新
+            let nowStr: String = { let f = DateFormatter(); f.locale = .current; f.timeZone = .current; f.dateStyle = .medium; f.timeStyle = .medium; return f.string(from: Date()) }()
+            print("🧭 [AutoUpdateManager] AutoUpdate (empty) at: \(nowStr)")
+            print("🚀 [AutoUpdateManager] (empty) bootstrap + performImmediateSync …")
+            iCloudSyncManager.shared.bootstrapContainerIfPossible()
+            iCloudSyncManager.shared.performImmediateSync()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                print("🔍 [AutoUpdateManager] (empty) checkSyncStatus() now …")
+                iCloudSyncManager.shared.checkSyncStatus()
+            }
             isUpdating = false
             scheduleNextUpdate()
             return
@@ -179,6 +198,28 @@ public class AutoUpdateManager: ObservableObject {
         #if os(iOS)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+        
+        // 自动刷新完成后，进行一次 iCloud 同步（引导容器可见性 + 立即同步 + 状态刷新）
+        let nowStr: String = {
+            let f = DateFormatter(); f.locale = .current; f.timeZone = .current; f.dateStyle = .medium; f.timeStyle = .medium; return f.string(from: Date())
+        }()
+        print("🧭 [AutoUpdateManager] AutoUpdate finished at: \(nowStr)")
+        print("🧭 [AutoUpdateManager] iCloud available: \(iCloudSyncManager.shared.isiCloudAvailable ? "YES" : "NO")")
+        if let container = iCloudSyncManager.shared.getiCloudContainerURL() { print("🧭 [AutoUpdateManager] iCloud container: \(container.path)") } else { print("🧭 [AutoUpdateManager] iCloud container: nil") }
+        if let docs = iCloudSyncManager.shared.getPublicDocumentsURL() { print("🧭 [AutoUpdateManager] iCloud Documents: \(docs.path)") } else { print("🧭 [AutoUpdateManager] iCloud Documents: nil") }
+        
+        print("🚀 [AutoUpdateManager] Will bootstrap iCloud container visibility …")
+        iCloudSyncManager.shared.bootstrapContainerIfPossible()
+        print("✅ [AutoUpdateManager] bootstrapContainerIfPossible invoked")
+        
+        print("🚀 [AutoUpdateManager] Calling performImmediateSync …")
+        iCloudSyncManager.shared.performImmediateSync()
+        print("⏳ [AutoUpdateManager] Scheduled checkSyncStatus in 2s …")
+        // 轻微延迟后再次刷新状态，避免系统写入滞后导致界面未更新
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            print("🔍 [AutoUpdateManager] checkSyncStatus() now …")
+            iCloudSyncManager.shared.checkSyncStatus()
+        }
         
         isUpdating = false
         scheduleNextUpdate()

@@ -35,9 +35,9 @@
 		EE62AC8D536887913EF9C1E8 /* CiteTrackWidgetExtension/CiteTrackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6789012345678 /* CiteTrackWidgetExtension/CiteTrackWidget.swift */; };
 		FFA0B1C0FFA0B1C0FFA0B1C0FFA0B1 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B2C3D100B2C3D100B2C3D100B2C /* LocalizationManager.swift */; };
 		InitViewBuild123456789012345678901234 /* InitializationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = InitView123456789012345678901234 /* InitializationView.swift */; };
+		UserBehaviorBuild123456789012345678901234 /* UserBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = UserBehaviorFileRef123456789012345678901234 /* UserBehavior.swift */; };
 		VSCANBUILDREF1234567890ABCDEF /* VisionTextScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = VSCANFILEREF1234567890ABCDEF /* VisionTextScannerView.swift */; };
 		WelcomeConfigBuild123456789012345678901234 /* WelcomeConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = WelcomeConfig123456789012345678901234 /* WelcomeConfig.swift */; };
-		UserBehaviorBuild123456789012345678901234 /* UserBehavior.swift in Sources */ = {isa = PBXBuildFile; fileRef = UserBehaviorFileRef123456789012345678901234 /* UserBehavior.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -94,9 +94,9 @@
 		EE78919FEE78919FEE78919FEE789 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
 		FB3BED8CD3B848C9924BDEB4 /* CiteTrackWidgetExtension.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; name = CiteTrackWidgetExtension.entitlements; path = CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements; sourceTree = "<group>"; };
 		InitView123456789012345678901234 /* InitializationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InitializationView.swift; sourceTree = "<group>"; };
+		UserBehaviorFileRef123456789012345678901234 /* UserBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserBehavior.swift; sourceTree = "<group>"; };
 		VSCANFILEREF1234567890ABCDEF /* VisionTextScannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisionTextScannerView.swift; sourceTree = "<group>"; };
 		WelcomeConfig123456789012345678901234 /* WelcomeConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeConfig.swift; sourceTree = "<group>"; };
-		UserBehaviorFileRef123456789012345678901234 /* UserBehavior.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserBehavior.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -548,7 +548,7 @@
 				CODE_SIGN_ENTITLEMENTS = CiteTrack/CiteTrackDebug.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"CiteTrack/Preview Content\"";
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				ENABLE_PREVIEWS = YES;
@@ -568,7 +568,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -592,7 +592,7 @@
 				CODE_SIGN_ENTITLEMENTS = CiteTrack/CiteTrack.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"CiteTrack/Preview Content\"";
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				ENABLE_PREVIEWS = YES;
@@ -612,7 +612,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
