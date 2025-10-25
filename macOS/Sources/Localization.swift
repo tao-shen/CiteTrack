@@ -108,7 +108,7 @@ class LocalizationManager {
                 print("✅ 语言已切换到: \(language.displayName)")
                 
                 // 在主线程发送通知，确保UI更新的一致性
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     NotificationCenter.default.post(
                         name: .languageChanged, 
                         object: self, 
@@ -132,7 +132,7 @@ class LocalizationManager {
                 self.isLanguageSwitching = false
                 
                 // 发送错误通知
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     NotificationCenter.default.post(
                         name: .languageChangeFailed,
                         object: self,
@@ -396,8 +396,7 @@ class LocalizationManager {
             "citation_change_no_change": "No change in citations",
             
             // Additional Error Messages
-            "data_load_failed": "Data Load Failed",
-            "export_failed": "Export Failed"
+            "data_load_failed": "Data Load Failed"
         ]
         
         // Chinese Simplified
@@ -622,8 +621,7 @@ class LocalizationManager {
             "citation_change_no_change": "引用量无变化",
             
             // Additional Error Messages
-            "data_load_failed": "数据加载失败",
-            "export_failed": "导出失败"
+            "data_load_failed": "数据加载失败"
         ]
         
         // Japanese
@@ -773,8 +771,7 @@ class LocalizationManager {
             "citation_change_no_change": "引用数に変化なし",
             
             // Additional Error Messages
-            "data_load_failed": "データの読み込みに失敗しました",
-            "export_failed": "エクスポートに失敗しました"
+            "data_load_failed": "データの読み込みに失敗しました"
         ]
         
         // Add more languages as needed...

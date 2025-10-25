@@ -46,7 +46,7 @@ class DashboardView: NSView {
         // Create 4 statistics cards
         let cardTitles = ["Total Citations", "Monthly Change", "Growth Rate", "Trend"]
         
-        for title in cardTitles {
+        for _ in cardTitles {
             let card = StatisticsCardView()
             card.theme = theme
             statisticsCards.append(card)
@@ -76,40 +76,80 @@ class DashboardView: NSView {
             return
         }
         
-        let statisticsData = [
-            StatisticData(
-                title: "Total Citations",
-                value: scholar.citations ?? 0,
-                subtitle: "all time",
-                icon: NSImage(systemSymbolName: "quote.bubble", accessibilityDescription: "Citations"),
-                change: nil,
-                type: .number
-            ),
-            StatisticData(
-                title: "Monthly Change",
-                value: stats.totalChange,
-                subtitle: "this period",
-                icon: NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: "Change"),
-                change: StatisticChange(value: stats.growthRate, isPositive: stats.totalChange >= 0),
-                type: .number
-            ),
-            StatisticData(
-                title: "Growth Rate",
-                value: stats.growthRate,
-                subtitle: "percentage",
-                icon: NSImage(systemSymbolName: "percent", accessibilityDescription: "Growth"),
-                change: nil,
-                type: .percentage
-            ),
-            StatisticData(
-                title: "Trend",
-                value: stats.trend.symbol,
-                subtitle: stats.trend.displayName,
-                icon: trendIcon(for: stats.trend),
-                change: nil,
-                type: .text
-            )
-        ]
+        var statisticsData: [StatisticData] = []
+        
+        if #available(macOS 11.0, *) {
+            statisticsData = [
+                StatisticData(
+                    title: "Total Citations",
+                    value: scholar.citations ?? 0,
+                    subtitle: "all time",
+                    icon: NSImage(systemSymbolName: "quote.bubble", accessibilityDescription: "Citations"),
+                    change: nil,
+                    type: .number
+                ),
+                StatisticData(
+                    title: "Monthly Change",
+                    value: stats.totalChange,
+                    subtitle: "this period",
+                    icon: NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: "Change"),
+                    change: StatisticChange(value: stats.growthRate, isPositive: stats.totalChange >= 0),
+                    type: .number
+                ),
+                StatisticData(
+                    title: "Growth Rate",
+                    value: stats.growthRate,
+                    subtitle: "percentage",
+                    icon: NSImage(systemSymbolName: "percent", accessibilityDescription: "Growth"),
+                    change: nil,
+                    type: .percentage
+                ),
+                StatisticData(
+                    title: "Trend",
+                    value: stats.trend.symbol,
+                    subtitle: stats.trend.displayName,
+                    icon: trendIcon(for: stats.trend),
+                    change: nil,
+                    type: .text
+                )
+            ]
+        } else {
+            // macOS 10.15 fallback without icons
+            statisticsData = [
+                StatisticData(
+                    title: "Total Citations",
+                    value: scholar.citations ?? 0,
+                    subtitle: "all time",
+                    icon: nil,
+                    change: nil,
+                    type: .number
+                ),
+                StatisticData(
+                    title: "Monthly Change",
+                    value: stats.totalChange,
+                    subtitle: "this period",
+                    icon: nil,
+                    change: StatisticChange(value: stats.growthRate, isPositive: stats.totalChange >= 0),
+                    type: .number
+                ),
+                StatisticData(
+                    title: "Growth Rate",
+                    value: stats.growthRate,
+                    subtitle: "percentage",
+                    icon: nil,
+                    change: nil,
+                    type: .percentage
+                ),
+                StatisticData(
+                    title: "Trend",
+                    value: stats.trend.symbol,
+                    subtitle: stats.trend.displayName,
+                    icon: nil,
+                    change: nil,
+                    type: .text
+                )
+            ]
+        }
         
         // Update cards with animation
         for (index, cardData) in statisticsData.enumerated() {
@@ -131,15 +171,20 @@ class DashboardView: NSView {
     }
     
     private func trendIcon(for trend: CitationTrend) -> NSImage? {
-        switch trend {
-        case .increasing:
-            return NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: "Increasing")
-        case .decreasing:
-            return NSImage(systemSymbolName: "arrow.down.right", accessibilityDescription: "Decreasing")
-        case .stable:
-            return NSImage(systemSymbolName: "arrow.right", accessibilityDescription: "Stable")
-        case .unknown:
-            return NSImage(systemSymbolName: "questionmark", accessibilityDescription: "Unknown")
+        if #available(macOS 11.0, *) {
+            switch trend {
+            case .increasing:
+                return NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: "Increasing")
+            case .decreasing:
+                return NSImage(systemSymbolName: "arrow.down.right", accessibilityDescription: "Decreasing")
+            case .stable:
+                return NSImage(systemSymbolName: "arrow.right", accessibilityDescription: "Stable")
+            case .unknown:
+                return NSImage(systemSymbolName: "questionmark", accessibilityDescription: "Unknown")
+            }
+        } else {
+            // macOS 10.15 fallback
+            return nil
         }
     }
 }

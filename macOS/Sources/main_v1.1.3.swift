@@ -203,10 +203,14 @@ class DataManager: ObservableObject {
 }
 
 // MARK: - Menu Bar Manager
+@MainActor
 class MenuBarManager: NSObject, ObservableObject {
     private var statusItem: NSStatusItem?
     private var dataManager: DataManager
     private var settingsWindow: SettingsWindow?
+    #if !APP_STORE
+    weak var updaterController: SPUStandardUpdaterController?
+    #endif
     
     init(dataManager: DataManager) {
         self.dataManager = dataManager
@@ -277,17 +281,15 @@ class MenuBarManager: NSObject, ObservableObject {
     }
     
     @objc private func updateNow() {
-        Task {
+        Task { @MainActor in
             await dataManager.updateAllScholars()
-            DispatchQueue.main.async {
                 self.updateMenu()
-            }
         }
     }
     
     @objc private func checkForUpdates() {
         #if !APP_STORE
-        SUUpdater.shared()?.checkForUpdates(nil)
+        updaterController?.checkForUpdates(nil)
         #else
         // App Store 版本不支持内置更新（通过 App Store 更新）
         #endif
@@ -310,6 +312,9 @@ class MenuBarManager: NSObject, ObservableObject {
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var dataManager: DataManager!
     private var menuBarManager: MenuBarManager!
+    #if !APP_STORE
+    private var updaterController: SPUStandardUpdaterController!
+    #endif
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 隐藏 Dock 图标
@@ -317,12 +322,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 初始化 Sparkle（仅非 App Store）
         #if !APP_STORE
-        SUUpdater.shared()?.automaticallyChecksForUpdates = true
-        SUUpdater.shared()?.updateCheckInterval = 86400 // 24 hours
+        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        updaterController.updater.automaticallyChecksForUpdates = true
+        updaterController.updater.updateCheckInterval = 86400 // 24 hours
         #endif
         
         dataManager = DataManager()
         menuBarManager = MenuBarManager(dataManager: dataManager)
+        #if !APP_STORE
+        menuBarManager.updaterController = updaterController
+        #endif
         
         // 初始更新
         Task {

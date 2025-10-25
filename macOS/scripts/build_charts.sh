@@ -7,7 +7,7 @@
 cd "$(dirname "$0")/.."
 
 APP_NAME="CiteTrack"
-VERSION="2.0.0"
+VERSION="1.0.0"
 BUILD_DIR="build"
 SOURCES_DIR="Sources"
 

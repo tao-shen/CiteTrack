@@ -1,6 +1,7 @@
 import Cocoa
 import Foundation
 
+@MainActor
 class SettingsWindow: NSObject {
     private var window: NSWindow?
     private var dataManager: DataManager
@@ -119,12 +120,10 @@ class SettingsWindow: NSObject {
     }
     
     @objc private func refreshData() {
-        Task {
+        Task { @MainActor in
             await dataManager.updateAllScholars()
-            DispatchQueue.main.async {
-                self.scholars = self.dataManager.scholars
-                self.tableView.reloadData()
-            }
+            self.scholars = self.dataManager.scholars
+            self.tableView.reloadData()
         }
     }
 }

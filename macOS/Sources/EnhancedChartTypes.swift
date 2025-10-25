@@ -19,12 +19,17 @@ enum ChartType: String, CaseIterable {
     }
     
     var icon: NSImage? {
-        switch self {
-        case .line: return NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: displayName)
-        case .area: return NSImage(systemSymbolName: "chart.line.uptrend.xyaxis.circle", accessibilityDescription: displayName)
-        case .bar: return NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription: displayName)
-        case .scatter: return NSImage(systemSymbolName: "chart.dots.scatter", accessibilityDescription: displayName)
-        case .smoothLine: return NSImage(systemSymbolName: "chart.line.flattrend.xyaxis", accessibilityDescription: displayName)
+        if #available(macOS 11.0, *) {
+            switch self {
+            case .line: return NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: displayName)
+            case .area: return NSImage(systemSymbolName: "chart.line.uptrend.xyaxis.circle", accessibilityDescription: displayName)
+            case .bar: return NSImage(systemSymbolName: "chart.bar.xaxis", accessibilityDescription: displayName)
+            case .scatter: return NSImage(systemSymbolName: "chart.dots.scatter", accessibilityDescription: displayName)
+            case .smoothLine: return NSImage(systemSymbolName: "chart.line.flattrend.xyaxis", accessibilityDescription: displayName)
+            }
+        } else {
+            // Fallback for macOS 10.15
+            return nil
         }
     }
     
@@ -385,7 +390,7 @@ class ModernChartView: NSView {
     
     // MARK: - Animation
     private func animateChart() {
-        guard let path = dataLayer?.path else { return }
+        guard dataLayer?.path != nil else { return }
         
         let animation = CABasicAnimation(keyPath: "strokeEnd")
         animation.fromValue = 0.0
@@ -408,7 +413,7 @@ class ModernChartView: NSView {
     }
     
     override func mouseMoved(with event: NSEvent) {
-        guard isMouseInside, let data = chartData else { return }
+        guard isMouseInside, chartData != nil else { return }
         
         let location = convert(event.locationInWindow, from: nil)
         let chartRect = chartBounds()
@@ -512,7 +517,7 @@ class ModernChartView: NSView {
 // MARK: - Tooltip Window
 class TooltipWindow: NSWindow {
     
-    private let contentView = TooltipContentView()
+    private let tooltipContentView = TooltipContentView()
     
     override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(
@@ -531,11 +536,11 @@ class TooltipWindow: NSWindow {
         level = .floating
         ignoresMouseEvents = true
         
-        self.contentView = contentView
+        self.contentView = tooltipContentView
     }
     
     func showTooltip(value: Int, date: Date, at location: NSPoint, theme: ChartTheme) {
-        contentView.configure(value: value, date: date, theme: theme)
+        tooltipContentView.configure(value: value, date: date, theme: theme)
         
         let windowRect = NSRect(
             x: location.x - frame.width / 2,
@@ -618,12 +623,15 @@ class TooltipContentView: NSView {
     }
     
     func configure(value: Int, date: Date, theme: ChartTheme) {
-        valueLabel.stringValue = "\(value.formattedWithCommas()) citations"
+        let numberFormatter = NumberFormatter()
+        numberFormatter.numberStyle = .decimal
+        let formattedValue = numberFormatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        valueLabel.stringValue = "\(formattedValue) citations"
         
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        dateLabel.stringValue = formatter.string(from: date)
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateStyle = .medium
+        dateFormatter.timeStyle = .none
+        dateLabel.stringValue = dateFormatter.string(from: date)
     }
     
     override func layout() {

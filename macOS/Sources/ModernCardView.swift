@@ -4,10 +4,10 @@ import Cocoa
 class ModernCardView: NSView {
     
     // MARK: - Properties
-    private let cornerRadius: CGFloat = 12
-    private let shadowOpacity: Float = 0.08
-    private let shadowOffset = NSSize(width: 0, height: 2)
-    private let shadowRadius: CGFloat = 8
+    fileprivate let cornerRadius: CGFloat = 12
+    fileprivate let shadowOpacity: Float = 0.08
+    fileprivate let shadowOffset = NSSize(width: 0, height: 2)
+    fileprivate let shadowRadius: CGFloat = 8
     
     var theme: ChartTheme = .academic {
         didSet {
@@ -15,8 +15,8 @@ class ModernCardView: NSView {
         }
     }
     
-    private var backgroundLayer: CALayer?
-    private var shadowLayer: CALayer?
+    fileprivate var backgroundLayer: CALayer?
+    fileprivate var shadowLayer: CALayer?
     
     // MARK: - Initialization
     override init(frame frameRect: NSRect) {
@@ -240,20 +240,24 @@ class StatisticsCardView: ModernCardView {
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
         
+        let baseOpacity = self.shadowOpacity
+        let layer = self.shadowLayer
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             self.layer?.transform = CATransform3DMakeScale(1.02, 1.02, 1.0)
-            self.shadowLayer?.shadowOpacity = shadowOpacity * 1.5
+            layer?.shadowOpacity = baseOpacity * 1.5
         }
     }
     
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         
+        let baseOpacity = self.shadowOpacity
+        let layer = self.shadowLayer
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.2
             self.layer?.transform = CATransform3DIdentity
-            self.shadowLayer?.shadowOpacity = shadowOpacity
+            layer?.shadowOpacity = baseOpacity
         }
     }
     

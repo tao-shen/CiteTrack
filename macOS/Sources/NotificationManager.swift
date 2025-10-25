@@ -96,7 +96,7 @@ class NotificationManager {
     
     func checkNotificationPermission(completion: @escaping (Bool) -> Void) {
         notificationCenter.getNotificationSettings { settings in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async(qos: .userInitiated) {
                 completion(settings.authorizationStatus == .authorized)
             }
         }
@@ -189,7 +189,7 @@ class NotificationManager {
     }
     
     private func sendPopupNotification(for change: CitationChange) {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async(qos: .userInitiated) {
             let alert = NSAlert()
             alert.messageText = "Citation Update"
             alert.informativeText = "\(change.scholarName): \(change.changeDescription)"
@@ -261,7 +261,7 @@ class NotificationManager {
         }
         
         if settings.notificationTypes.contains(.popup) {
-            DispatchQueue.main.async {
+            DispatchQueue.main.async(qos: .userInitiated) {
                 let alert = NSAlert()
                 alert.messageText = "Citation Updates"
                 alert.informativeText = message + "\n\nAffected scholars: \(changes.map { $0.scholarName }.joined(separator: ", "))"

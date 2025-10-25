@@ -334,7 +334,7 @@ class CoreDataManager {
         print("User Info: \(error.userInfo)")
         
         // Post notification for error handling in UI
-        DispatchQueue.main.async {
+        DispatchQueue.main.async(qos: .userInitiated) {
             NotificationCenter.default.post(
                 name: .coreDataError,
                 object: nil,

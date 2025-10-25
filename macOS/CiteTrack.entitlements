@@ -2,29 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <!-- App Sandbox 必须启用 -->
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-
-    <!-- 网络访问（抓取 Google Scholar） -->
-    <key>com.apple.security.network.client</key>
-    <true/>
-
-    <!-- iCloud / CloudKit 容器（与 iOS 一致） -->
-    <key>com.apple.developer.icloud-container-identifiers</key>
-    <array>
-        <string>iCloud.com.citetrack.CiteTrack</string>
-    </array>
-    <key>com.apple.developer.icloud-services</key>
-    <array>
-        <string>CloudDocuments</string>
-        <string>CloudKit</string>
-    </array>
-    <key>com.apple.developer.ubiquity-container-identifiers</key>
-    <array>
-        <string>iCloud.com.citetrack.CiteTrack</string>
-    </array>
-    <key>com.apple.developer.ubiquity-kvstore-identifier</key>
-    <string>$(TeamIdentifierPrefix)com.citetrack.CiteTrack</string>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
 </dict>
 </plist>

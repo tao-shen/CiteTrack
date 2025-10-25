@@ -198,7 +198,7 @@ extension GoogleScholarService {
             
             GoogleScholarService.lastRequestTime = Date()
             
-            DispatchQueue.main.async {
+            DispatchQueue.main.async(qos: .userInitiated) {
                 self?.fetchScholarInfo(for: scholarId, completion: completion)
             }
         }

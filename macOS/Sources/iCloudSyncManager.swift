@@ -19,35 +19,31 @@ class iCloudSyncManager {
     private init() {}
 
     // MARK: - CloudKit Long-term Sync
+    // Note: CloudKitSyncService is not implemented in this version
+    // Using iCloud Drive file-based sync instead
     func exportUsingCloudKit(completion: @escaping (Result<Void, Error>) -> Void) {
-        do {
-            let payload = try makeExportJSONData()
-            let unified = try makeAppDataJSON(exportPayload: payload)
-            CloudKitSyncService.shared.saveJSONData(unified) { result in
-                // 将统一文件镜像到容器 Documents 下，便于在“文件”中查看
-                if case .success = result, let docs = self.documentsURL {
-                    let mirrorURL = docs.appendingPathComponent(CloudKitSyncService.shared.normalizedFileName)
-                    do { try unified.write(to: mirrorURL, options: [.atomic]); print("✅ [iCloud Mirror] Wrote: \(mirrorURL.path)") }
-                    catch { print("⚠️ [iCloud Mirror] Failed: \(error.localizedDescription)") }
+        // Fallback to file-based export
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                // 使用新的DataManager导出为iOS兼容格式
+                let jsonData = try DataManager.shared.exportToiOSFormat()
+                try self.exportCitationData(jsonData: jsonData)
+                try self.exportAppConfig()
+                DispatchQueue.main.async(qos: .userInitiated) {
+                    completion(.success(()))
                 }
-                completion(result.map { _ in () })
+            } catch {
+                DispatchQueue.main.async(qos: .userInitiated) {
+                    completion(.failure(error))
+                }
             }
-        } catch {
-            completion(.failure(error))
         }
     }
 
     func importUsingCloudKit(completion: @escaping (Result<Void, Error>) -> Void) {
-        CloudKitSyncService.shared.fetchJSONData { result in
-            switch result {
-            case .success(let data):
-                DispatchQueue.global(qos: .userInitiated).async {
-                    do { _ = try self.importFromUnifiedData(data); DispatchQueue.main.async { completion(.success(())) } }
-                    catch { DispatchQueue.main.async { completion(.failure(error)) } }
-                }
-            case .failure(let error): completion(.failure(error))
-            }
-        }
+        // Fallback to file-based import - not fully implemented yet
+        completion(.failure(NSError(domain: "iCloudSyncManager", code: -1, 
+            userInfo: [NSLocalizedDescriptionKey: "CloudKit import not available, please use iCloud Drive sync"])))
     }
     
     // MARK: - iCloud Detection
@@ -187,15 +183,19 @@ class iCloudSyncManager {
     
     // MARK: - Export Functions
     
-    /// Export citation data to iCloud
-    func exportCitationData() throws {
+    /// Export citation data to iCloud (新方法 - 兼容iOS格式)
+    private func exportCitationData(jsonData: Data) throws {
         guard let citationURL = citationDataURL else {
             throw iCloudError.invalidURL
         }
-        let jsonData = try makeExportJSONData()
         try jsonData.write(to: citationURL)
-        
         print("✅ Citation data exported to iCloud: \(citationURL.path)")
+    }
+    
+    /// Export citation data to iCloud (向后兼容的方法)
+    func exportCitationData() throws {
+        let jsonData = try DataManager.shared.exportToiOSFormat()
+        try exportCitationData(jsonData: jsonData)
     }
     
     /// Export app configuration to iCloud
@@ -216,7 +216,7 @@ class iCloudSyncManager {
         print("🔄 [iCloud Sync] Enabling automatic sync...")
         isAutoSyncEnabled = true
         
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async(qos: .userInitiated) { [weak self] in
             self?.startSyncTimer()
         }
         
@@ -229,7 +229,7 @@ class iCloudSyncManager {
         print("⏹️ [iCloud Sync] Disabling automatic sync...")
         isAutoSyncEnabled = false
         
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async(qos: .userInitiated) { [weak self] in
             self?.stopSyncTimer()
         }
     }
@@ -420,7 +420,7 @@ class iCloudSyncManager {
             print("❌ [iCloud Debug] Cannot find any iCloud folder to open")
             
             // Show an alert to the user
-            DispatchQueue.main.async {
+            DispatchQueue.main.async(qos: .userInitiated) {
                 let alert = NSAlert()
                 alert.messageText = "iCloud Drive Not Available"
                 alert.informativeText = "Please ensure iCloud Drive is enabled in System Preferences and try again."
@@ -503,7 +503,7 @@ class iCloudSyncManager {
     /// 构建当前应用数据（与 iOS 的 makeCurrentAppData 保持兼容）
     private func makeCurrentAppData() -> [String: Any] {
         let settings = PreferencesManager.shared
-        var dict: [String: Any] = [
+        let dict: [String: Any] = [
             "version": "1.1",
             "exportDate": ISO8601DateFormatter().string(from: Date()),
             "settings": [
@@ -598,7 +598,7 @@ class iCloudSyncManager {
 
         if let citationHistory = dict["citationHistory"] as? [[String: Any]] {
             let pm = PreferencesManager.shared
-            var existing = pm.scholars
+            let existing = pm.scholars
             let existingIds = Set(existing.map { $0.id })
 
             let groupedByScholar = Dictionary(grouping: citationHistory) { $0["scholarId"] as? String ?? "" }
@@ -646,7 +646,7 @@ class iCloudSyncManager {
         var importedScholars = 0
 
         let pm = PreferencesManager.shared
-        var existing = pm.scholars
+        let existing = pm.scholars
         let existingIds = Set(existing.map { $0.id })
 
         let grouped = Dictionary(grouping: array) { $0["scholarId"] as? String ?? "" }

@@ -157,6 +157,7 @@ class SettingsWindowController: NSWindowController {
         
         setupGeneralTab()
         setupScholarTab()
+        setupDataManagementTab()
         // Charts tab removed - now available as separate window from main menu
     }
     
@@ -184,8 +185,187 @@ class SettingsWindowController: NSWindowController {
         tabView.addTabViewItem(scholarTabItem)
     }
     
+    private func setupDataManagementTab() {
+        let dataTabItem = NSTabViewItem()
+        dataTabItem.label = "Data"  // Will be localized
+        
+        let dataView = NSView()
+        dataTabItem.view = dataView
+        
+        setupDataManagementSection(in: dataView)
+        
+        tabView.addTabViewItem(dataTabItem)
+    }
+    
     // Charts tab functionality moved to separate ChartsWindowController
     // Access via main menu > Charts
+    
+    private func setupDataManagementSection(in parentView: NSView) {
+        let stackView = NSStackView()
+        stackView.orientation = .vertical
+        stackView.spacing = 16
+        stackView.alignment = .leading
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        parentView.addSubview(stackView)
+        
+        // Title
+        let titleLabel = NSTextField(labelWithString: "Data Management")
+        titleLabel.font = NSFont.boldSystemFont(ofSize: 16)
+        stackView.addArrangedSubview(titleLabel)
+        
+        // Export section
+        let exportButton = NSButton(title: "Export Data...", target: self, action: #selector(exportData))
+        exportButton.bezelStyle = .rounded
+        stackView.addArrangedSubview(exportButton)
+        
+        let exportLabel = NSTextField(labelWithString: "Export citation history to CSV or JSON file")
+        exportLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        exportLabel.textColor = .secondaryLabelColor
+        stackView.addArrangedSubview(exportLabel)
+        
+        stackView.addArrangedSubview(NSView()) // Spacer
+        
+        // Import section
+        let importButton = NSButton(title: "Import Data...", target: self, action: #selector(importData))
+        importButton.bezelStyle = .rounded
+        stackView.addArrangedSubview(importButton)
+        
+        let importLabel = NSTextField(labelWithString: "Import data from backup file")
+        importLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        importLabel.textColor = .secondaryLabelColor
+        stackView.addArrangedSubview(importLabel)
+        
+        stackView.addArrangedSubview(NSView()) // Spacer
+        
+        // iCloud sync section
+        let icloudLabel = NSTextField(labelWithString: "iCloud Sync")
+        icloudLabel.font = NSFont.boldSystemFont(ofSize: 14)
+        stackView.addArrangedSubview(icloudLabel)
+        
+        let syncToiCloudButton = NSButton(title: "Export to iCloud", target: self, action: #selector(syncToiCloud))
+        syncToiCloudButton.bezelStyle = .rounded
+        stackView.addArrangedSubview(syncToiCloudButton)
+        
+        let syncFromiCloudButton = NSButton(title: "Import from iCloud", target: self, action: #selector(syncFromiCloud))
+        syncFromiCloudButton.bezelStyle = .rounded
+        stackView.addArrangedSubview(syncFromiCloudButton)
+        
+        let icloudStatusLabel = NSTextField(labelWithString: iCloudSyncManager.shared.isiCloudAvailable ? "iCloud is available" : "iCloud is not available")
+        icloudStatusLabel.font = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize)
+        icloudStatusLabel.textColor = iCloudSyncManager.shared.isiCloudAvailable ? .systemGreen : .systemRed
+        stackView.addArrangedSubview(icloudStatusLabel)
+        
+        NSLayoutConstraint.activate([
+            stackView.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 24),
+            stackView.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 24),
+            stackView.trailingAnchor.constraint(lessThanOrEqualTo: parentView.trailingAnchor, constant: -24),
+            stackView.bottomAnchor.constraint(lessThanOrEqualTo: parentView.bottomAnchor, constant: -24)
+        ])
+    }
+    
+    @objc private func exportData() {
+        let savePanel = NSSavePanel()
+        if #available(macOS 11.0, *) {
+            savePanel.allowedContentTypes = [.json, .commaSeparatedText]
+        } else {
+            savePanel.allowedFileTypes = ["json", "csv"]
+        }
+        savePanel.nameFieldStringValue = "CiteTrack_Export_\(Date().timeIntervalSince1970).json"
+        
+        savePanel.begin { response in
+            guard response == .OK, let url = savePanel.url else { return }
+            
+            let format: ExportFormat = url.pathExtension.lowercased() == "csv" ? .csv : .json
+            
+            CitationHistoryManager.shared.exportAllHistory(format: format) { result in
+                DispatchQueue.main.async(qos: .userInitiated) {
+                    switch result {
+                    case .success(let data):
+                        do {
+                            try data.write(to: url)
+                            self.showAlert(title: "Export Successful", message: "Data exported to \(url.lastPathComponent)")
+                        } catch {
+                            self.showAlert(title: "Export Failed", message: error.localizedDescription)
+                        }
+                    case .failure(let error):
+                        self.showAlert(title: "Export Failed", message: error.localizedDescription)
+                    }
+                }
+            }
+        }
+    }
+    
+    @objc private func importData() {
+        let openPanel = NSOpenPanel()
+        if #available(macOS 11.0, *) {
+            openPanel.allowedContentTypes = [.json]
+        } else {
+            openPanel.allowedFileTypes = ["json"]
+        }
+        openPanel.allowsMultipleSelection = false
+        openPanel.message = "选择从iOS导出的数据文件（citation_data.json 或 ios_data.json）"
+        
+        openPanel.begin { response in
+            guard response == .OK, let url = openPanel.urls.first else { return }
+            
+            do {
+                let data = try Data(contentsOf: url)
+                let result = try DataManager.shared.importFromiOSData(jsonData: data)
+                
+                DispatchQueue.main.async(qos: .userInitiated) {
+                    self.showAlert(
+                        title: "导入成功",
+                        message: "成功导入 \(result.importedScholars) 位学者和 \(result.importedHistory) 条历史记录"
+                    )
+                    self.loadData()
+                }
+            } catch {
+                DispatchQueue.main.async(qos: .userInitiated) {
+                    self.showAlert(title: "导入失败", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+    
+    @objc private func syncToiCloud() {
+        iCloudSyncManager.shared.exportUsingCloudKit { result in
+            DispatchQueue.main.async(qos: .userInitiated) {
+                switch result {
+                case .success:
+                    self.showAlert(title: "Sync Successful", message: "Data exported to iCloud successfully")
+                case .failure(let error):
+                    self.showAlert(title: "Sync Failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+    
+    @objc private func syncFromiCloud() {
+        iCloudSyncManager.shared.importUsingCloudKit { result in
+            DispatchQueue.main.async(qos: .userInitiated) {
+                switch result {
+                case .success:
+                    self.showAlert(title: "Sync Successful", message: "Data imported from iCloud successfully")
+                    self.loadData()
+                case .failure(let error):
+                    self.showAlert(title: "Sync Failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+    
+    private func showAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        if let window = window {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
+    }
     
     private func setupGeneralSettings(in parentView: NSView) {
         let settingsStack = NSStackView()
@@ -668,7 +848,7 @@ class SettingsWindowController: NSWindowController {
     
     @objc private func languageChanged() {
         // 确保UI更新在主线程执行
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async(qos: .userInitiated) { [weak self] in
             guard let strongSelf = self else { return }
             
             // 重新设置窗口标题和UI文本
@@ -687,7 +867,7 @@ class SettingsWindowController: NSWindowController {
     }
     
     @objc private func languageChangeFailed(_ notification: Notification) {
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async(qos: .userInitiated) { [weak self] in
             guard let strongSelf = self else { return }
             
             // 重置语言选择到之前的值
@@ -802,7 +982,7 @@ class SettingsWindowController: NSWindowController {
             
             // 获取学者信息
             googleScholarService.fetchScholarInfo(for: scholarId) { [weak self] result in
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     guard let strongSelf = self else { return }
                     
                     switch result {
@@ -877,7 +1057,7 @@ class SettingsWindowController: NSWindowController {
                     case .success(let citations):
                         successCount += 1
                         // 在主线程更新PreferencesManager
-                        DispatchQueue.main.async {
+                        DispatchQueue.main.async(qos: .userInitiated) {
                             PreferencesManager.shared.updateScholar(withId: scholar.id, citations: citations)
                         }
                         
@@ -887,7 +1067,7 @@ class SettingsWindowController: NSWindowController {
                     
                     // 当所有请求完成时
                     if completedCount == totalCount {
-                        DispatchQueue.main.async {
+                        DispatchQueue.main.async(qos: .userInitiated) {
                             guard let strongSelf = self else { return }
                             
                             // 重新加载本地数据
@@ -1013,7 +1193,7 @@ class SettingsWindowController: NSWindowController {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let status = iCloudSyncManager.shared.getFileStatus()
             
-            DispatchQueue.main.async {
+            DispatchQueue.main.async(qos: .userInitiated) {
                 guard let statusLabel = objc_getAssociatedObject(self as Any, "iCloudStatusLabel") as? NSTextField else { return }
                 statusLabel.stringValue = status.description
                 
@@ -1080,7 +1260,7 @@ class SettingsWindowController: NSWindowController {
     
     @objc private func scholarsDataUpdated() {
         // 确保数据更新在主线程执行
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async(qos: .userInitiated) { [weak self] in
             self?.loadData()
         }
     }

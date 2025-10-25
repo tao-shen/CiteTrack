@@ -92,12 +92,12 @@ class CitationHistoryManager {
                     CitationHistory.fromCoreDataEntity(entity)
                 }
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(histories))
                 }
             } catch {
                 print("❌ 获取历史数据失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -125,12 +125,12 @@ class CitationHistoryManager {
                     CitationHistory.fromCoreDataEntity(entity)
                 }
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(histories))
                 }
             } catch {
                 print("❌ 获取指定时间范围历史数据失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -150,12 +150,12 @@ class CitationHistoryManager {
                 let entities = try context.fetch(fetchRequest)
                 let latestHistory = entities.first.flatMap { CitationHistory.fromCoreDataEntity($0) }
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(latestHistory))
                 }
             } catch {
                 print("❌ 获取最新历史记录失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -178,12 +178,12 @@ class CitationHistoryManager {
                     CitationHistory.fromCoreDataEntity(entity)
                 }
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(histories))
                 }
             } catch {
                 print("❌ 获取全部历史数据失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -210,12 +210,12 @@ class CitationHistoryManager {
                 try context.save()
                 print("✅ 删除学者 \(scholarId) 的 \(deleteCount) 条历史记录")
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(deleteCount))
                 }
             } catch {
                 print("❌ 删除历史记录失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -240,12 +240,12 @@ class CitationHistoryManager {
                 try context.save()
                 print("✅ 删除 \(deleteCount) 条旧历史记录 (早于 \(date))")
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(deleteCount))
                 }
             } catch {
                 print("❌ 删除旧历史记录失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -265,7 +265,7 @@ class CitationHistoryManager {
                 
                 let entities = try context.fetch(fetchRequest)
                 guard let entity = entities.first else {
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async(qos: .userInitiated) {
                         completion(.failure(NSError(domain: "CitationHistoryManager", code: 404, userInfo: [NSLocalizedDescriptionKey: "Entry not found"])))
                     }
                     return
@@ -279,12 +279,12 @@ class CitationHistoryManager {
                 try context.save()
                 print("✅ 更新历史记录条目: \(entry.id)")
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(()))
                 }
             } catch {
                 print("❌ 更新历史记录条目失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -310,12 +310,12 @@ class CitationHistoryManager {
                 try context.save()
                 print("✅ 删除 \(deleteCount) 条历史记录条目")
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(deleteCount))
                 }
             } catch {
                 print("❌ 删除历史记录条目失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -340,12 +340,12 @@ class CitationHistoryManager {
                 try context.save()
                 print("✅ 删除 \(deleteCount) 条历史记录 (晚于 \(date))")
                 
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.success(deleteCount))
                 }
             } catch {
                 print("❌ 删除历史记录失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -474,16 +474,16 @@ class CitationHistoryManager {
             case .success(let histories):
                 do {
                     let data = try self?.formatDataForExport(histories: histories, format: format) ?? Data()
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async(qos: .userInitiated) {
                         completion(.success(data))
                     }
                 } catch {
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async(qos: .userInitiated) {
                         completion(.failure(error))
                     }
                 }
             case .failure(let error):
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -497,16 +497,16 @@ class CitationHistoryManager {
             case .success(let histories):
                 do {
                     let data = try self?.formatDataForExport(histories: histories, format: format) ?? Data()
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async(qos: .userInitiated) {
                         completion(.success(data))
                     }
                 } catch {
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async(qos: .userInitiated) {
                         completion(.failure(error))
                     }
                 }
             case .failure(let error):
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -520,16 +520,16 @@ class CitationHistoryManager {
             case .success(let histories):
                 do {
                     let data = try self?.formatDataForExport(histories: histories, format: format) ?? Data()
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async(qos: .userInitiated) {
                         completion(.success(data))
                     }
                 } catch {
-                    DispatchQueue.main.async {
+                    DispatchQueue.main.async(qos: .userInitiated) {
                         completion(.failure(error))
                     }
                 }
             case .failure(let error):
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(.failure(error))
                 }
             }
@@ -554,12 +554,12 @@ class CitationHistoryManager {
                 fetchRequest.predicate = NSPredicate(format: "scholarId == %@", scholarId)
                 
                 let count = try context.count(for: fetchRequest)
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(count)
                 }
             } catch {
                 print("❌ 获取历史数据数量失败: \(error)")
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     completion(0)
                 }
             }

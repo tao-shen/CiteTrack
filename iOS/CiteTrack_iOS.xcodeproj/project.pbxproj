@@ -281,7 +281,7 @@
 					};
 				};
 			};
-			buildConfigurationList = BD7794A40BD7794A40BD7794A40BD /* Build configuration list for PBXProject "CiteTrack_tauon" */;
+			buildConfigurationList = BD7794A40BD7794A40BD7794A40BD /* Build configuration list for PBXProject "CiteTrack_iOS" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -586,7 +586,7 @@
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -634,7 +634,7 @@
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				REGISTER_APP_GROUPS = YES;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -665,7 +665,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		BD7794A40BD7794A40BD7794A40BD /* Build configuration list for PBXProject "CiteTrack_tauon" */ = {
+		BD7794A40BD7794A40BD7794A40BD /* Build configuration list for PBXProject "CiteTrack_iOS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				CE8805B5CE8805B5CE8805B5CE8805 /* Debug */,

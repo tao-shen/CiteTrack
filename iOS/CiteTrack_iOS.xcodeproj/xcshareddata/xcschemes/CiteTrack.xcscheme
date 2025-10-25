@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
    LastUpgradeVersion = "2600"
-   wasCreatedForAppExtension = "YES"
    version = "1.7">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -19,7 +18,7 @@
                BlueprintIdentifier = "68224F4F68224F4F68224F4F68224"
                BuildableName = "CiteTrack.app"
                BlueprintName = "CiteTrack"
-               ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
+               ReferencedContainer = "container:CiteTrack_iOS.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -48,7 +47,7 @@
             BlueprintIdentifier = "68224F4F68224F4F68224F4F68224"
             BuildableName = "CiteTrack.app"
             BlueprintName = "CiteTrack"
-            ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
+            ReferencedContainer = "container:CiteTrack_iOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -65,7 +64,7 @@
             BlueprintIdentifier = "68224F4F68224F4F68224F4F68224"
             BuildableName = "CiteTrack.app"
             BlueprintName = "CiteTrack"
-            ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
+            ReferencedContainer = "container:CiteTrack_iOS.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

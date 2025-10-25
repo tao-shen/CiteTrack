@@ -337,7 +337,7 @@ class PreferencesManager {
     }
     
     private func updateActivationPolicy() {
-        DispatchQueue.main.async {
+        DispatchQueue.main.async(qos: .userInitiated) {
             if self.showInDock {
                 NSApp.setActivationPolicy(.regular)
             } else {
@@ -489,7 +489,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func handleCoreDataError(_ notification: Notification) {
         guard let error = notification.userInfo?["error"] as? NSError else { return }
         
-        DispatchQueue.main.async {
+        DispatchQueue.main.async(qos: .userInitiated) {
             let alert = NSAlert()
             alert.messageText = L("error_database_title")
             alert.informativeText = L("error_database_message", error.localizedDescription)
@@ -726,7 +726,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             let oldCitations = currentCitations[scholar.id] ?? 0
             
             scholarService.fetchScholarInfo(for: scholar.id) { [weak self] result in
-                DispatchQueue.main.async {
+                DispatchQueue.main.async(qos: .userInitiated) {
                     // 使用 weak-strong dance 模式
                     guard let strongSelf = self else { 
                         group.leave()
@@ -750,7 +750,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                                 changeDetails.append("\(scholar.name): \(oldCitations) → \(newCitations) (\(changeText))")
                             }
                             
-                            DispatchQueue.main.async {
+                            DispatchQueue.main.async(qos: .userInitiated) {
                                 // 更新数据 (在主线程执行)
                                 strongSelf.currentCitations[scholar.id] = newCitations
                                 PreferencesManager.shared.updateScholar(withId: scholar.id, name: info.name, citations: newCitations)
@@ -910,7 +910,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func scholarsUpdated() {
         // 确保UI和数据更新在主线程执行
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async(qos: .userInitiated) { [weak self] in
             guard let strongSelf = self else { return }
             strongSelf.loadScholars()
             if !strongSelf.scholars.isEmpty {
@@ -930,7 +930,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func languageChanged() {
         // 确保UI更新在主线程执行
-        DispatchQueue.main.async { [weak self] in
+        DispatchQueue.main.async(qos: .userInitiated) { [weak self] in
             guard let strongSelf = self else { return }
             // 重新构建菜单以更新所有文本
             strongSelf.rebuildMenu()
@@ -945,7 +945,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // Use the new background data collection service for manual updates
         backgroundDataService.performManualCollection { [weak self] result in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async(qos: .userInitiated) {
                 guard let self = self else { return }
                 switch result {
                 case .success(let results):
@@ -961,7 +961,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateCitation(for scholar: Scholar) {
         // Use the new service with automatic history saving
         scholarService.fetchAndSaveCitationCount(for: scholar.id) { [weak self] result in
-            DispatchQueue.main.async {
+            DispatchQueue.main.async(qos: .userInitiated) {
                 guard let self = self else { return }
                 switch result {
                 case .success(let count):
@@ -980,4 +980,4 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-app.run() 
+app.run()
