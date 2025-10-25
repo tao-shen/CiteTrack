@@ -60,21 +60,29 @@ public class DataManager: ObservableObject {
     
     private init() {
         print("🔍 [DataManager] \(String(format: "debug_initializing_app_group".localized, appGroupIdentifier))")
-        testAppGroupAccess()
+        
+        // 🚀 优化：快速初始化核心数据
         performAppGroupMigrationIfNeeded()
         loadScholars()
+        
         // 加载置顶集合
         if let arr = userDefaults.array(forKey: pinnedKey) as? [String] {
             pinnedIds = Set(arr)
             print("🧪 [DataManager] \(String(format: "debug_loading_pinned_scholars".localized, pinnedIds.count))")
         }
+        
         // 加载显示顺序
         if let arr = userDefaults.array(forKey: orderKey) as? [String] {
             displayOrder = arr
             print("🧪 [DataManager] \(String(format: "debug_loading_display_order".localized, displayOrder.count))")
         }
+        
         // 若未初始化顺序，以当前学者顺序构建
-        if displayOrder.isEmpty { displayOrder = scholars.map { $0.id }; saveOrder() }
+        if displayOrder.isEmpty { 
+            displayOrder = scholars.map { $0.id }
+            saveOrder() 
+        }
+        
         // 初始化全局上次刷新时间（优先App Group）
         if let ag = UserDefaults(suiteName: appGroupIdentifier),
            let t = ag.object(forKey: "LastRefreshTime") as? Date {
@@ -85,12 +93,21 @@ public class DataManager: ObservableObject {
             print("🧪 [DataManager] \(String(format: "debug_init_read_last_refresh_standard".localized, "\(t)"))")
         }
         
-        // 初始化时主动同步小组件数据
-        saveWidgetData()
-        print("🔄 [DataManager] \("debug_init_complete".localized)")
-
         // 启动监听与轮询，确保主App能感知小组件写入
         setupLastRefreshObservers()
+        
+        print("🔄 [DataManager] \("debug_init_complete".localized)")
+        
+        // 🚀 优化：延迟执行非关键的初始化任务，避免阻塞启动
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            // App Group 测试（非关键）
+            self?.testAppGroupAccess()
+            
+            // 延迟同步小组件数据（可能较耗时）
+            DispatchQueue.main.async {
+                self?.saveWidgetData()
+            }
+        }
     }
     
     /// 测试 App Group 访问权限

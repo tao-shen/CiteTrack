@@ -1,6 +1,8 @@
 import Cocoa
 import Foundation
+#if !APP_STORE
 import Sparkle
+#endif
 
 // MARK: - L() Function for Localization
 

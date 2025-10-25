@@ -124,8 +124,8 @@ struct CiteTrackApp: App {
         // 方法2实现：使用公共普遍性容器，无需FileProvider扩展
         NSLog("🔧 [CiteTrackApp] \("debug_using_public_container".localized)")
 
-        // 首次启动尝试从 iCloud 导入（若存在 Citetrack 目录与数据）
-        DispatchQueue.main.async {
+        // 🚀 优化：延迟启动 iCloud 导入，避免阻塞 App 启动
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             if iCloudSyncManager.shared.isiCloudAvailable {
                 // 优先读取容器 Documents 下两个文件（ios_data.json 与 citation_data.json）
                 iCloudSyncManager.shared.importConfigOnFirstLaunch()
@@ -152,23 +152,33 @@ struct CiteTrackApp: App {
                 }
                 .onAppear {
                     NSLog("🧪 [CiteTrackApp] WindowGroup.onAppear")
-                    // Prewarm haptics early to prevent first-gesture hitch
+                    
+                    // 🚀 优化：立即预热触觉反馈（非常快，不会卡顿）
                     HapticsManager.prewarm()
-                    // 启动时检查蜂窝数据可用性
-                    CellularDataPermission.shared.triggerCheck()
-                    // 启动即触发一次轻量的网络访问以申请网络权限（非阻塞、短超时，不访问 Google）
-                    NetworkPermissionTrigger.trigger()
-                    // iCloud Drive文件夹现在由用户设置控制，不再自动创建
-                    // 执行初始化流程
+                    
+                    // 🚀 优化：后台异步执行权限检查，完全不阻塞 UI
+                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
+                        // 启动时检查蜂窝数据可用性
+                        CellularDataPermission.shared.triggerCheck()
+                        // 启动即触发一次轻量的网络访问以申请网络权限（非阻塞、短超时）
+                        NetworkPermissionTrigger.trigger()
+                    }
+                    
+                    // 🚀 优化：延迟执行初始化流程（仅首次启动需要）
                     Task {
+                        // 延迟 0.3 秒，确保 UI 先渲染并可交互
+                        try? await Task.sleep(nanoseconds: 300_000_000)
                         await initializationService.performInitialization()
                     }
-                    // 启动即触发一次 iCloud 可用性与容器检查，确保日志能在控制台出现
-                    let icloud = iCloudSyncManager.shared
-                    print("🧪 [CiteTrackApp] Trigger initial iCloud checks on launch")
-                    NSLog("🧪 [CiteTrackApp] Trigger initial iCloud checks on launch (NSLog)")
-                    icloud.checkSyncStatus()
-                    icloud.bootstrapContainerIfPossible()
+                    
+                    // 🚀 优化：延迟并后台执行 iCloud 检查
+                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) {
+                        let icloud = iCloudSyncManager.shared
+                        print("🧪 [CiteTrackApp] Trigger initial iCloud checks on launch")
+                        NSLog("🧪 [CiteTrackApp] Trigger initial iCloud checks on launch (NSLog)")
+                        icloud.checkSyncStatus()
+                        icloud.bootstrapContainerIfPossible()
+                    }
                 }
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -326,12 +336,23 @@ struct CiteTrackApp: App {
 // MARK: - Network Permission Trigger
 enum NetworkPermissionTrigger {
     static func trigger() {
-        guard let url = URL(string: "https://example.com/robots.txt") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        request.timeoutInterval = 3.0
-        let task = URLSession.shared.dataTask(with: request) { _, _, _ in }
-        task.resume()
+        // 🚀 优化：在后台异步执行，避免阻塞主线程
+        DispatchQueue.global(qos: .utility).async {
+            guard let url = URL(string: "https://www.apple.com/library/test/success.html") else { return }
+            var request = URLRequest(url: url)
+            request.httpMethod = "HEAD"
+            request.timeoutInterval = 1.0  // 减少超时时间到1秒
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    print("⚠️ [NetworkPermission] Network probe completed with error (expected): \(error.localizedDescription)")
+                } else {
+                    print("✅ [NetworkPermission] Network probe successful")
+                }
+            }
+            task.resume()
+        }
     }
 }
 
@@ -485,7 +506,7 @@ struct MainView: View {
             
             VStack(alignment: .leading, spacing: 4) {
                 
-                Text("App Usage")
+                Text("app_usage".localized)
                     .font(.headline)
                     .foregroundColor(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -536,9 +557,41 @@ struct MainView: View {
     }
     
     // MARK: - Contribution Data Generation
+    
+    // 展示模式开关：0=真实用户数据，1=随机演示数据（仅代码内赋值）
+    private let heatmapDemoMode: Int = 0
+    
+    /// 生成随机热力图数据（52列 x 7行 = 364 个单元，列优先）
+    private func generateRandomHeatmapData() -> [Double] {
+        var data: [Double] = []
+        data.reserveCapacity(52 * 7)
+        
+        // 简单权重分布，让随机结果更接近真实：
+        // 0.0:55%  0.25:15%  0.5:15%  0.75:10%  1.0:5%
+        func randomIntensity() -> Double {
+            let roll = Double.random(in: 0..<1)
+            if roll < 0.55 { return 0.0 }
+            if roll < 0.70 { return 0.25 }
+            if roll < 0.85 { return 0.5 }
+            if roll < 0.95 { return 0.75 }
+            return 1.0
+        }
+        
+        for _ in 0..<52 { // 列（周）
+            for _ in 0..<7 { // 行（周内天）
+                data.append(randomIntensity())
+            }
+        }
+        return data
+    }
     private func generateContributionData() -> [Double] {
-        // 统一从用户行为层获取热力图数据
-        return UserBehaviorManager.shared.getHeatmapData()
+        // 根据展示模式切换数据源
+        if heatmapDemoMode == 1 {
+            return generateRandomHeatmapData()
+        } else {
+            // 统一从用户行为层获取热力图数据
+            return UserBehaviorManager.shared.getHeatmapData()
+        }
     }
 
     // 获取或初始化应用安装日期（与 UserBehavior.installDateKey 保持一致）
@@ -620,7 +673,7 @@ struct MainView: View {
             
             // 新增：学者增长折线图（使用 SwiftUICharts 多学者对比）
             NavigationView {
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: true) {
                     VStack(spacing: 12) {
                         // 🟠 橙色区域：外层ScholarsGrowthLineChartView - 图表组件容器
                         ScholarsGrowthLineChartView()
@@ -750,9 +803,11 @@ struct DashboardView: View {
         NavigationView {
             ZStack {
                 ScrollView {
-                VStack(spacing: 20) {
-                    // 统计卡片
-                    HStack(spacing: 12) {
+                LazyVStack(spacing: 20) {
+                    // 头部区域：统计卡片 + 排序控件
+                    VStack(spacing: 12) {
+                        // 统计卡片
+                        HStack(spacing: 12) {
                         StatisticsCard(
                             title: localizationManager.localized("my_citations"),
                             value: {
@@ -772,21 +827,22 @@ struct DashboardView: View {
                             icon: "person.2.fill",
                             color: .green
                         )
-                    }
-                    
-                    // 排序控件
-                    if !dataManager.scholars.isEmpty {
-                        Picker(localizationManager.localized("sort_by"), selection: $sortOption) {
-                            ForEach(SortOption.allCases, id: \.self) { option in
-                                Text(option.title(localizationManager)).tag(option)
-                            }
                         }
-                        .pickerStyle(SegmentedPickerStyle())
+                        
+                        // 排序控件
+                        if !dataManager.scholars.isEmpty {
+                            Picker(localizationManager.localized("sort_by"), selection: $sortOption) {
+                                ForEach(SortOption.allCases, id: \.self) { option in
+                                    Text(option.title(localizationManager)).tag(option)
+                                }
+                            }
+                            .pickerStyle(SegmentedPickerStyle())
+                        }
                     }
                     
                     // 学者列表（支持排序与前三名勋章）
                     if !dataManager.scholars.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
+                        LazyVStack(alignment: .leading, spacing: 10) {
                             Text(localizationManager.localized("citation_ranking"))
                                 .font(.headline)
                             
@@ -817,29 +873,29 @@ struct DashboardView: View {
                         }
                         .padding(.vertical, 40)
                     }
-                    // 榜单下方空白区域：增加透明手势区域，扩展可滑动范围
-                    Color.clear
-                        .frame(height: 280)
+                    // 移除额外空白，让滚动长度严格由内容决定
                 }
                 .padding()
+                }
                 .contentShape(Rectangle())
-                .highPriorityGesture(
-                    DragGesture(minimumDistance: 10)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 20)
+                        .onChanged { value in
+                            // 若垂直位移更大，交给 ScrollView 处理
+                            let dx = value.translation.width
+                            let dy = value.translation.height
+                            guard abs(dx) > abs(dy) * 1.5 else { return }
+                        }
                         .onEnded { value in
                             let dx = value.translation.width
                             let dy = value.translation.height
-                            // 增强水平意图判定与阈值，避免与纵向滚动冲突
-                            guard abs(dx) > abs(dy) * 1.2, abs(dx) > 60 else { return }
-                            if dx < 0 {
-                                moveSortSelection(offset: 1)
-                            } else {
-                                moveSortSelection(offset: -1)
-                            }
+                            // 仅识别明显的水平滑动，避免拦截纵向滚动
+                            guard abs(dx) > abs(dy) * 1.5, abs(dx) > 60 else { return }
+                            moveSortSelection(offset: dx < 0 ? 1 : -1)
                             let impact = UIImpactFeedbackGenerator(style: .light)
                             impact.impactOccurred()
                         }
                 )
-                }
             }
             .navigationTitle(localizationManager.localized("dashboard_title"))
         }
@@ -1188,12 +1244,12 @@ struct NewScholarView: View {
 
                     // It's me / Not me
                     if confirmedMyScholarId == nil {
-                        Button("It's me") {
+                        Button("its_me".localized) {
                             confirmedMyScholarId = scholar.id
                         }
                         .tint(.green)
                     } else if confirmedMyScholarId == scholar.id {
-                        Button("Not me") {
+                        Button("not_me".localized) {
                             confirmedMyScholarId = nil
                         }
                         .tint(.gray)
@@ -1965,9 +2021,12 @@ struct SettingsView: View {
             }
             .navigationTitle(localizationManager.localized("settings"))
             .onAppear {
-                iCloudManager.checkSyncStatus()
-                iCloudManager.bootstrapContainerIfPossible()
-                iCloudManager.runDeepDiagnostics()
+                // 🚀 优化：后台异步执行 iCloud 检查，避免阻塞 UI
+                DispatchQueue.global(qos: .utility).async {
+                    iCloudManager.checkSyncStatus()
+                    iCloudManager.bootstrapContainerIfPossible()
+                    iCloudManager.runDeepDiagnostics()
+                }
             }
             .alert(localizationManager.localized("import_from_icloud_alert_title"), isPresented: $showingImportAlert) {
                 Button(localizationManager.localized("cancel"), role: .cancel) { }
@@ -2496,7 +2555,7 @@ struct EditScholarView: View {
             Form {
                 Section(localizationManager.localized("scholar_information")) {
                     HStack {
-                        Text("Scholar ID")
+                        Text(localizationManager.localized("scholar_id"))
                             .foregroundColor(.secondary)
                         Spacer()
                         Text(scholar.id)
@@ -3177,11 +3236,11 @@ struct ScholarChartDetailView: View {
                                         .foregroundColor(.secondary)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.6)
-                                        .frame(width: 40, alignment: .trailing)
+                                        .frame(width: 55, alignment: .trailing)
                                         .frame(height: 32) // 固定每个标签高度为32，总高度160/5=32
                                 }
                             }
-                            .frame(width: 40) // 增加Y轴宽度以避免文字被截断
+                            .frame(width: 55) // 增加Y轴宽度以容纳4位有效数字（例如 1.081k）
                             
                             VStack {
                                 ZStack {
@@ -3554,15 +3613,31 @@ struct ChartDataPoint: Identifiable {
     let value: Int
 }
 
-// 数字格式化函数
+// 数字格式化函数，显示4位有效数字
 func formatNumber(_ number: Int) -> String {
-    if number >= 1_000_000_000 {
-        return String(format: "%.1fB", Double(number) / 1_000_000_000)
-    } else if number >= 1_000_000 {
-        return String(format: "%.1fM", Double(number) / 1_000_000)
-    } else if number >= 1_000 {
-        return String(format: "%.1fK", Double(number) / 1_000)
+    let absNumber = abs(number)
+    
+    // 根据数值大小选择单位和计算小数位数
+    if absNumber >= 1_000_000_000 {
+        // 十亿级别
+        let value = Double(number) / 1_000_000_000
+        let integerDigits = String(Int(abs(value))).count
+        let decimalPlaces = max(0, 4 - integerDigits)
+        return String(format: "%.\(decimalPlaces)fb", value)
+    } else if absNumber >= 1_000_000 {
+        // 百万级别
+        let value = Double(number) / 1_000_000
+        let integerDigits = String(Int(abs(value))).count
+        let decimalPlaces = max(0, 4 - integerDigits)
+        return String(format: "%.\(decimalPlaces)fm", value)
+    } else if absNumber >= 1_000 {
+        // 千级别：1.081k (1位整数+3位小数) 或 987.9k (3位整数+1位小数)
+        let value = Double(number) / 1_000
+        let integerDigits = String(Int(abs(value))).count
+        let decimalPlaces = max(0, 4 - integerDigits)
+        return String(format: "%.\(decimalPlaces)fk", value)
     } else {
+        // 小于1000：直接显示整数
         return "\(number)"
     }
 }

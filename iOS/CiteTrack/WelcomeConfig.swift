@@ -1,10 +1,20 @@
 import SwiftUI
+import UIKit
 import WSOnBoarding
 
 // 扩展 WSOnBoarding 库中的 WSWelcomeConfig
 extension WSWelcomeConfig {
     /// CiteTrack 应用的欢迎页配置
     static var citeTrackWelcome: WSWelcomeConfig {
+        // 优先使用我们在 Assets 中提供的 WelcomeIcon 资源；不存在则回退 SF Symbol
+        let resolvedIconName: String? = {
+            #if os(iOS)
+            return UIImage(named: "WelcomeIcon") != nil ? "WelcomeIcon" : nil
+            #else
+            return nil
+            #endif
+        }()
+
         return WSWelcomeConfig(
             appName: "CiteTrack",
             introText: "app_description".localized,
@@ -34,14 +44,42 @@ extension WSWelcomeConfig {
                     color: .purple
                 )
             ],
-            iconSymbol: "doc.text.magnifyingglass",
-            // 注意：应用图标集不会作为可运行时加载的图片暴露在资产目录中
-            // 这里不再指定 iconName，避免运行时查找失败
-            iconName: nil,
+            iconSymbol: resolvedIconName == nil ? "app" : nil,
+            // 若能解析到可用的 App 图标，则使用；否则由 iconSymbol 兜底
+            iconName: resolvedIconName,
             backgroundImageName: nil,
             primaryColor: .blue,
-            continueButtonText: "开始使用",
-            disclaimerText: "您的学术数据将安全存储在本地设备上，并通过 iCloud 进行加密同步。我们重视您的隐私，不会收集或分享您的个人信息。"
+            continueButtonText: "continue".localized,
+            disclaimerText: "privacy_disclaimer".localized,
+            customTitle: "welcome_to_citetrack".localized
         )
+    }
+}
+
+// MARK: - Helpers
+private extension WSWelcomeConfig {
+    /// 从 Info.plist 中解析主 App Icon 的基础文件名
+    /// 返回如 "AppIcon60x60" 这类基础名（系统会自动匹配倍率与后缀）
+    static func primaryAppIconBaseName() -> String? {
+        guard let info = Bundle.main.infoDictionary else { return nil }
+        // iOS 使用 CFBundleIcons → CFBundlePrimaryIcon → CFBundleIconFiles
+        if let icons = info["CFBundleIcons"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String],
+           let last = files.last, !last.isEmpty {
+            return last
+        }
+        // 兼容旧键或简化键
+        if let icons = info["CFBundleIcons~iphone"] as? [String: Any],
+           let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+           let files = primary["CFBundleIconFiles"] as? [String],
+           let last = files.last, !last.isEmpty {
+            return last
+        }
+        // 兜底：若存在 CFBundleIconFile，尝试返回
+        if let name = info["CFBundleIconFile"] as? String, !name.isEmpty {
+            return name
+        }
+        return nil
     }
 }

@@ -65,7 +65,15 @@ class WidgetLocalization {
         "export_failed_with_message": "Export failed",
         "import_failed_with_message": "Import failed",
         "failed_with_colon": "Failed",
-        "dashboard": "Dashboard"
+        "dashboard": "Dashboard",
+        // Added keys for headlines & badges
+        "team_performance": "Team Performance",
+        "performance_excellent": "Excellent",
+        "performance_good": "Good",
+        "performance_starting": "Starting",
+        "realtime_citation_tracking": "Real-time Citation Tracking",
+        "scholar_ranking_comparison": "Scholar Ranking Comparison",
+        "trend_change_analysis": "Trend Change Analysis"
     ]
     
     private let chineseLocalizations: [String: String] = [
@@ -104,7 +112,15 @@ class WidgetLocalization {
         "export_failed_with_message": "导出失败",
         "import_failed_with_message": "导入失败",
         "failed_with_colon": "失败",
-        "dashboard": "仪表板"
+        "dashboard": "仪表板",
+        // Added keys for headlines & badges
+        "team_performance": "团队表现",
+        "performance_excellent": "优秀",
+        "performance_good": "良好",
+        "performance_starting": "起步",
+        "realtime_citation_tracking": "实时引用数追踪",
+        "scholar_ranking_comparison": "学者排名对比",
+        "trend_change_analysis": "趋势变化分析"
     ]
     
     private let japaneseLocalizations: [String: String] = [

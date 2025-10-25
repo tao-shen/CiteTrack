@@ -2601,7 +2601,7 @@ struct LargeWidgetView: View {
                                 }
                             }.count
                             
-                            Text("\(growingScholars) 位学者引用数上升")
+                            Text("\(growingScholars) " + "scholars".widgetLocalized + " " + "citation_trend".widgetLocalized)
                                 .font(.caption2)
                                 .foregroundColor(.green)
                                 .lineLimit(1)
@@ -2611,13 +2611,13 @@ struct LargeWidgetView: View {
                         Spacer(minLength: 8)
                         
                         VStack(alignment: .trailing, spacing: 1) {
-                            Text("团队表现")
+                            Text("team_performance".widgetLocalized)
                                 .font(.caption2)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.primary)
                                 .lineLimit(1)
                             
-                            let performance = entry.totalCitations > 1000 ? "优秀" : entry.totalCitations > 500 ? "良好" : "起步"
+                            let performance = entry.totalCitations > 1000 ? "performance_excellent".widgetLocalized : entry.totalCitations > 500 ? "performance_good".widgetLocalized : "performance_starting".widgetLocalized
                             Text(performance)
                                 .font(.caption2)
                                 .foregroundColor(entry.totalCitations > 1000 ? .green : entry.totalCitations > 500 ? .orange : .blue)
@@ -2642,13 +2642,13 @@ struct LargeWidgetView: View {
                         .foregroundColor(.blue.opacity(0.6))
                     
                     VStack(spacing: 6) {
-                        Text("学术影响力仪表板")
+                        Text("academic_influence".widgetLocalized + " " + "dashboard".widgetLocalized)
                             .font(.headline)
                             .fontWeight(.bold)
                             .minimumScaleFactor(0.8)
                             .lineLimit(1)
                         
-                        Text("添加学者开始构建您的\n学术影响力追踪仪表板")
+                        Text("add_scholars_to_track".widgetLocalized)
                             .font(.caption2)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -2662,7 +2662,7 @@ struct LargeWidgetView: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                                 .font(.caption2)
-                            Text("实时引用数追踪")
+                            Text("realtime_citation_tracking".widgetLocalized)
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                                 .minimumScaleFactor(0.8)
@@ -2673,7 +2673,7 @@ struct LargeWidgetView: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                                 .font(.caption2)
-                            Text("学者排名对比")
+                            Text("scholar_ranking_comparison".widgetLocalized)
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                                 .minimumScaleFactor(0.8)
@@ -2684,7 +2684,7 @@ struct LargeWidgetView: View {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.green)
                                 .font(.caption2)
-                            Text("趋势变化分析")
+                            Text("trend_change_analysis".widgetLocalized)
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                                 .minimumScaleFactor(0.8)

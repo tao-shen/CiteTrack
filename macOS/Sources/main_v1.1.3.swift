@@ -1,7 +1,9 @@
 import Cocoa
 import Foundation
 import ServiceManagement
+#if !APP_STORE
 import Sparkle
+#endif
 
 // MARK: - User Defaults Keys
 extension UserDefaults {
@@ -284,7 +286,11 @@ class MenuBarManager: NSObject, ObservableObject {
     }
     
     @objc private func checkForUpdates() {
+        #if !APP_STORE
         SUUpdater.shared()?.checkForUpdates(nil)
+        #else
+        // App Store 版本不支持内置更新（通过 App Store 更新）
+        #endif
     }
     
     @objc private func openSettings() {
@@ -309,9 +315,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 隐藏 Dock 图标
         NSApp.setActivationPolicy(.accessory)
         
-        // 初始化 Sparkle
+        // 初始化 Sparkle（仅非 App Store）
+        #if !APP_STORE
         SUUpdater.shared()?.automaticallyChecksForUpdates = true
         SUUpdater.shared()?.updateCheckInterval = 86400 // 24 hours
+        #endif
         
         dataManager = DataManager()
         menuBarManager = MenuBarManager(dataManager: dataManager)

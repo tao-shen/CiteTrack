@@ -168,18 +168,32 @@ class AppInitializationService: ObservableObject {
         
         print("🔄 [AppInitialization] \(String(format: "debug_init_start_update".localized, scholars.count))")
         
-        var successCount = 0
-        
-        for scholar in scholars {
-            await MainActor.run {
-                initializationProgress = String(format: "debug_init_update_scholar".localized, scholar.name)
+        // 🚀 优化：使用 TaskGroup 并行更新所有学者，而不是串行执行
+        typealias ScholarResult = (Scholar, Result<(name: String, citations: Int), GoogleScholarService.ScholarError>)
+        let results: [ScholarResult] = await withTaskGroup(of: ScholarResult.self, returning: [ScholarResult].self) { group in
+            for scholar in scholars {
+                group.addTask {
+                    let result: Result<(name: String, citations: Int), GoogleScholarService.ScholarError> = await withCheckedContinuation { continuation in
+                        self.googleScholarService.fetchScholarInfo(for: scholar.id) { result in
+                            continuation.resume(returning: result)
+                        }
+                    }
+                    return (scholar, result)
+                }
             }
             
-            // 使用GoogleScholarService更新学者数据
-            let result = await withCheckedContinuation { continuation in
-                googleScholarService.fetchScholarInfo(for: scholar.id) { result in
-                    continuation.resume(returning: result)
-                }
+            var allResults: [ScholarResult] = []
+            for await result in group {
+                allResults.append(result)
+            }
+            return allResults
+        }
+        
+        // 处理所有结果
+        var successCount = 0
+        for (scholar, result) in results {
+            await MainActor.run {
+                initializationProgress = String(format: "debug_init_update_scholar".localized, scholar.name)
             }
             
             switch result {

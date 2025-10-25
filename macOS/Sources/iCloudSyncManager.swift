@@ -5,10 +5,10 @@ import Cocoa
 class iCloudSyncManager {
     static let shared = iCloudSyncManager()
     
-    private let iCloudContainerIdentifier: String? = nil // Use default container
+    private let iCloudContainerIdentifier: String? = "iCloud.com.citetrack.CiteTrack" // Use explicit shared container
     private let folderName = "CiteTrack"
     private let dataFileName = "citation_data.json"
-    private let configFileName = "app_config.json"
+    private let configFileName = "ios_data.json"
     
     // Auto sync properties
     private var syncTimer: Timer?
@@ -20,27 +20,16 @@ class iCloudSyncManager {
 
     // MARK: - CloudKit Long-term Sync
     func exportUsingCloudKit(completion: @escaping (Result<Void, Error>) -> Void) {
-        // 将 macOS 历史记录导出为 JSON，与 iOS 格式一致
-        let semaphore = DispatchSemaphore(value: 0)
-        var historyEntries: [CitationHistory] = []
-        var fetchError: Error?
-        CitationHistoryManager.shared.getAllHistory { result in
-            switch result {
-            case .success(let entries): historyEntries = entries
-            case .failure(let error): fetchError = error
-            }
-            semaphore.signal()
-        }
-        semaphore.wait()
-        if let err = fetchError { completion(.failure(err)); return }
-        let payload: [[String: Any]] = historyEntries.map { e in [
-            "scholarId": e.scholarId,
-            "timestamp": ISO8601DateFormatter().string(from: e.timestamp),
-            "citationCount": e.citationCount
-        ]}
         do {
-            let data = try JSONSerialization.data(withJSONObject: payload, options: .prettyPrinted)
-            CloudKitSyncService.shared.saveJSONData(data) { result in
+            let payload = try makeExportJSONData()
+            let unified = try makeAppDataJSON(exportPayload: payload)
+            CloudKitSyncService.shared.saveJSONData(unified) { result in
+                // 将统一文件镜像到容器 Documents 下，便于在“文件”中查看
+                if case .success = result, let docs = self.documentsURL {
+                    let mirrorURL = docs.appendingPathComponent(CloudKitSyncService.shared.normalizedFileName)
+                    do { try unified.write(to: mirrorURL, options: [.atomic]); print("✅ [iCloud Mirror] Wrote: \(mirrorURL.path)") }
+                    catch { print("⚠️ [iCloud Mirror] Failed: \(error.localizedDescription)") }
+                }
                 completion(result.map { _ in () })
             }
         } catch {
@@ -52,11 +41,10 @@ class iCloudSyncManager {
         CloudKitSyncService.shared.fetchJSONData { result in
             switch result {
             case .success(let data):
-                do {
-                    // 验证 JSON 结构与 iOS 一致，这里仅解析校验，导入逻辑按需扩展
-                    _ = try JSONSerialization.jsonObject(with: data, options: [])
-                    completion(.success(()))
-                } catch { completion(.failure(error)) }
+                DispatchQueue.global(qos: .userInitiated).async {
+                    do { _ = try self.importFromUnifiedData(data); DispatchQueue.main.async { completion(.success(())) } }
+                    catch { DispatchQueue.main.async { completion(.failure(error)) } }
+                }
             case .failure(let error): completion(.failure(error))
             }
         }
@@ -155,9 +143,9 @@ class iCloudSyncManager {
         return iCloudContainerURL?.appendingPathComponent("Documents")
     }
     
-    /// Get CiteTrack folder URL
+    /// Get CiteTrack folder URL（与 iOS 对齐：直接使用容器 Documents 根目录）
     private var citeTrackFolderURL: URL? {
-        return documentsURL?.appendingPathComponent(folderName)
+        return documentsURL
     }
     
     /// Get citation data file URL
@@ -201,39 +189,10 @@ class iCloudSyncManager {
     
     /// Export citation data to iCloud
     func exportCitationData() throws {
-        let semaphore = DispatchSemaphore(value: 0)
-        var historyEntries: [CitationHistory] = []
-        var fetchError: Error?
-        
-        CitationHistoryManager.shared.getAllHistory { result in
-            switch result {
-            case .success(let entries):
-                historyEntries = entries
-            case .failure(let error):
-                fetchError = error
-            }
-            semaphore.signal()
-        }
-        
-        semaphore.wait()
-        
-        if let error = fetchError {
-            throw error
-        }
-        
-        let exportData: [[String: Any]] = historyEntries.map { entry in
-            return [
-                "scholarId": entry.scholarId,
-                "timestamp": ISO8601DateFormatter().string(from: entry.timestamp),
-                "citationCount": entry.citationCount
-            ]
-        }
-        
         guard let citationURL = citationDataURL else {
             throw iCloudError.invalidURL
         }
-        
-        let jsonData = try JSONSerialization.data(withJSONObject: exportData, options: .prettyPrinted)
+        let jsonData = try makeExportJSONData()
         try jsonData.write(to: citationURL)
         
         print("✅ Citation data exported to iCloud: \(citationURL.path)")
@@ -244,21 +203,7 @@ class iCloudSyncManager {
         guard let configURL = configFileURL else {
             throw iCloudError.invalidURL
         }
-        
-        let prefs = PreferencesManager.shared
-        let config: [String: Any] = [
-            "version": "1.0",
-            "exportDate": ISO8601DateFormatter().string(from: Date()),
-            "settings": [
-                "language": LocalizationManager.shared.currentLanguageCode,
-                "updateInterval": prefs.updateInterval,
-                "showInDock": prefs.showInDock,
-                "showInMenuBar": prefs.showInMenuBar,
-                "launchAtLogin": prefs.launchAtLogin
-            ]
-        ]
-        
-        let jsonData = try JSONSerialization.data(withJSONObject: config, options: .prettyPrinted)
+        let jsonData = try JSONSerialization.data(withJSONObject: makeCurrentAppData(), options: .prettyPrinted)
         try jsonData.write(to: configURL)
         
         print("✅ App config exported to iCloud: \(configURL.path)")
@@ -553,7 +498,192 @@ class iCloudSyncManager {
     }
 }
 
-// MARK: - Data Structures
+    // MARK: - Unified Export/Import Helpers (align with iOS)
+
+    /// 构建当前应用数据（与 iOS 的 makeCurrentAppData 保持兼容）
+    private func makeCurrentAppData() -> [String: Any] {
+        let settings = PreferencesManager.shared
+        var dict: [String: Any] = [
+            "version": "1.1",
+            "exportDate": ISO8601DateFormatter().string(from: Date()),
+            "settings": [
+                "updateInterval": settings.updateInterval,
+                "showInDock": settings.showInDock,
+                "showInMenuBar": settings.showInMenuBar,
+                "launchAtLogin": settings.launchAtLogin,
+                "iCloudSyncEnabled": settings.iCloudSyncEnabled,
+                "language": LocalizationManager.shared.currentLanguageCode
+            ]
+        ]
+        return dict
+    }
+
+    /// 包装导出负载（学术数据）为统一应用数据 JSON
+    private func makeAppDataJSON(exportPayload: Data) throws -> Data {
+        var unified = makeCurrentAppData()
+        if let arr = try? JSONSerialization.jsonObject(with: exportPayload) as? [[String: Any]] {
+            unified["citationHistory"] = arr
+        } else if let obj = try? JSONSerialization.jsonObject(with: exportPayload) as? [String: Any] {
+            unified.merge(obj) { _, new in new }
+        }
+        return try JSONSerialization.data(withJSONObject: unified, options: .prettyPrinted)
+    }
+
+    /// 生成导出JSON数据（与 iOS 相同的条目结构）
+    private func makeExportJSONData() throws -> Data {
+        let formatter = ISO8601DateFormatter()
+        let scholars = PreferencesManager.shared.scholars
+        let scholarNameById: [String: String] = Dictionary(uniqueKeysWithValues: scholars.map { ($0.id, $0.name) })
+
+        let semaphore = DispatchSemaphore(value: 0)
+        var allHistory: [CitationHistory] = []
+        CitationHistoryManager.shared.getAllHistory { result in
+            if case .success(let items) = result { allHistory = items }
+            semaphore.signal()
+        }
+        semaphore.wait()
+
+        let historyByScholar: [String: [CitationHistory]] = Dictionary(grouping: allHistory, by: { $0.scholarId })
+        var exportEntries: [[String: Any]] = []
+
+        for (scholarId, histories) in historyByScholar {
+            let scholarName = scholarNameById[scholarId] ?? "Scholar \(scholarId.prefix(8))"
+            for h in histories.sorted(by: { $0.timestamp < $1.timestamp }) {
+                exportEntries.append([
+                    "scholarId": scholarId,
+                    "scholarName": scholarName,
+                    "timestamp": formatter.string(from: h.timestamp),
+                    "citationCount": h.citationCount
+                ])
+            }
+        }
+
+        for s in scholars {
+            if historyByScholar[s.id] == nil, let citations = s.citations {
+                let ts = s.lastUpdated ?? Date()
+                exportEntries.append([
+                    "scholarId": s.id,
+                    "scholarName": s.name,
+                    "timestamp": formatter.string(from: ts),
+                    "citationCount": citations
+                ])
+            }
+        }
+
+        return try JSONSerialization.data(withJSONObject: exportEntries, options: .prettyPrinted)
+    }
+
+    /// 统一导入：支持 settings + citationHistory
+    private func importFromUnifiedData(_ data: Data) throws -> (importedScholars: Int, importedHistory: Int) {
+        let json = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let dict = json as? [String: Any] else {
+            if let _ = json as? [[String: Any]] { return try importFromArrayPayload(data) }
+            throw iCloudError.importFailed("Invalid JSON structure")
+        }
+
+        if let settings = dict["settings"] as? [String: Any] {
+            let pm = PreferencesManager.shared
+            if let updateInterval = settings["updateInterval"] as? TimeInterval { pm.updateInterval = updateInterval }
+            if let showInDock = settings["showInDock"] as? Bool { pm.showInDock = showInDock }
+            if let showInMenuBar = settings["showInMenuBar"] as? Bool { pm.showInMenuBar = showInMenuBar }
+            if let launchAtLogin = settings["launchAtLogin"] as? Bool { pm.launchAtLogin = launchAtLogin }
+            if let iCloudSyncEnabled = settings["iCloudSyncEnabled"] as? Bool { pm.iCloudSyncEnabled = iCloudSyncEnabled }
+            if let languageCode = settings["language"] as? String, let lang = LocalizationManager.Language(rawValue: languageCode) {
+                LocalizationManager.shared.setLanguage(lang)
+            }
+        }
+
+        var importedHistory = 0
+        var importedScholars = 0
+
+        if let citationHistory = dict["citationHistory"] as? [[String: Any]] {
+            let pm = PreferencesManager.shared
+            var existing = pm.scholars
+            let existingIds = Set(existing.map { $0.id })
+
+            let groupedByScholar = Dictionary(grouping: citationHistory) { $0["scholarId"] as? String ?? "" }
+            for (scholarId, entries) in groupedByScholar {
+                guard !scholarId.isEmpty else { continue }
+                let name = (entries.last? ["scholarName"]) as? String ?? "Scholar \(scholarId.prefix(8))"
+                if !existingIds.contains(scholarId) {
+                    var s = Scholar(id: scholarId, name: name)
+                    if let last = entries.last,
+                       let count = last["citationCount"] as? Int,
+                       let tsStr = last["timestamp"] as? String,
+                       let ts = ISO8601DateFormatter().date(from: tsStr) {
+                        s.citations = count
+                        s.lastUpdated = ts
+                    }
+                    pm.addScholar(s)
+                    importedScholars += 1
+                }
+            }
+
+            let group = DispatchGroup()
+            for entry in citationHistory {
+                guard let scholarId = entry["scholarId"] as? String,
+                      let count = entry["citationCount"] as? Int,
+                      let tsString = entry["timestamp"] as? String,
+                      let ts = ISO8601DateFormatter().date(from: tsString) else { continue }
+                group.enter()
+                let h = CitationHistory(scholarId: scholarId, citationCount: count, timestamp: ts)
+                CitationHistoryManager.shared.saveHistoryEntry(h) { result in
+                    if case .success = result { importedHistory += 1 }
+                    group.leave()
+                }
+            }
+            group.wait()
+        }
+
+        return (importedScholars, importedHistory)
+    }
+
+    /// 兼容仅数组负载（[[String:Any]]）的导入
+    private func importFromArrayPayload(_ data: Data) throws -> (importedScholars: Int, importedHistory: Int) {
+        let json = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let array = json as? [[String: Any]] else { return (0, 0) }
+        var importedHistory = 0
+        var importedScholars = 0
+
+        let pm = PreferencesManager.shared
+        var existing = pm.scholars
+        let existingIds = Set(existing.map { $0.id })
+
+        let grouped = Dictionary(grouping: array) { $0["scholarId"] as? String ?? "" }
+        for (scholarId, entries) in grouped {
+            guard !scholarId.isEmpty else { continue }
+            let name = (entries.last? ["scholarName"]) as? String ?? "Scholar \(scholarId.prefix(8))"
+            if !existingIds.contains(scholarId) {
+                var s = Scholar(id: scholarId, name: name)
+                if let last = entries.last,
+                   let count = last["citationCount"] as? Int,
+                   let tsStr = last["timestamp"] as? String,
+                   let ts = ISO8601DateFormatter().date(from: tsStr) {
+                    s.citations = count
+                    s.lastUpdated = ts
+                }
+                pm.addScholar(s)
+                importedScholars += 1
+            }
+        }
+
+        let group = DispatchGroup()
+        for entry in array {
+            guard let scholarId = entry["scholarId"] as? String,
+                  let count = entry["citationCount"] as? Int,
+                  let tsString = entry["timestamp"] as? String,
+                  let ts = ISO8601DateFormatter().date(from: tsString) else { continue }
+            group.enter()
+            let h = CitationHistory(scholarId: scholarId, citationCount: count, timestamp: ts)
+            CitationHistoryManager.shared.saveHistoryEntry(h) { result in
+                if case .success = result { importedHistory += 1 }
+                group.leave()
+            }
+        }
+        group.wait()
+
+        return (importedScholars, importedHistory)
+    }
 
 struct iCloudFileStatus {
     let iCloudAvailable: Bool

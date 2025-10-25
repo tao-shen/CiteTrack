@@ -22,20 +22,6 @@
                ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "YES"
-            buildForArchiving = "YES"
-            buildForAnalyzing = "YES">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "49C743B1DE4AFA45CD67A1F1"
-               BuildableName = "CiteTrackWidgetExtension.appex"
-               BlueprintName = "CiteTrackWidgetExtension"
-               ReferencedContainer = "container:CiteTrack_tauon.xcodeproj">
-            </BuildableReference>
-         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction

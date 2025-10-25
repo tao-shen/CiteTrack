@@ -44,47 +44,54 @@ class iCloudSyncManager: ObservableObject {
 			print("ℹ️ [FirstLaunch Import] iCloud not available, skip")
 			return
 		}
-		// 引导容器
-		bootstrapContainerIfPossible()
-		// 如检测到现有备份，先弹窗询问
-		if let docs = documentsURL {
-			let fm = FileManager.default
-			let iosURL = docs.appendingPathComponent("ios_data.json")
-			let citURL = docs.appendingPathComponent("citation_data.json")
-			let hasIOS = fm.fileExists(atPath: iosURL.path)
-			let hasCIT = fm.fileExists(atPath: citURL.path)
-			if hasIOS || hasCIT {
-				DispatchQueue.main.async {
-					self.importPromptMessage = hasIOS && hasCIT ? "检测到 iCloud 备份（配置与数据），是否导入？" : "检测到 iCloud 备份，是否导入？"
-					self.showImportPrompt = true
-					NotificationCenter.default.post(name: Notification.Name("iCloudImportPromptAvailable"), object: nil)
-				}
-				return
-			}
-		}
-		DispatchQueue.global(qos: .userInitiated).async {
-			let fm = FileManager.default
+		
+		// 🚀 优化：延迟执行，避免阻塞启动
+		DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
+			// 引导容器（后台执行）
+			self.bootstrapContainerIfPossible()
+			
+			// 如检测到现有备份，先弹窗询问
 			if let docs = self.documentsURL {
+				let fm = FileManager.default
 				let iosURL = docs.appendingPathComponent("ios_data.json")
 				let citURL = docs.appendingPathComponent("citation_data.json")
-				if fm.fileExists(atPath: iosURL.path) {
-					try? fm.startDownloadingUbiquitousItem(at: iosURL)
-					print("🔄 [FirstLaunch Import] startDownloading ios_data.json …")
+				let hasIOS = fm.fileExists(atPath: iosURL.path)
+				let hasCIT = fm.fileExists(atPath: citURL.path)
+				if hasIOS || hasCIT {
+					DispatchQueue.main.async {
+						self.importPromptMessage = hasIOS && hasCIT ? "检测到 iCloud 备份（配置与数据），是否导入？" : "检测到 iCloud 备份，是否导入？"
+						self.showImportPrompt = true
+						NotificationCenter.default.post(name: Notification.Name("iCloudImportPromptAvailable"), object: nil)
+					}
+					return
 				}
-				if fm.fileExists(atPath: citURL.path) {
-					try? fm.startDownloadingUbiquitousItem(at: citURL)
-					print("🔄 [FirstLaunch Import] startDownloading citation_data.json …")
-				}
-				// 给系统一些时间同步元数据
-				Thread.sleep(forTimeInterval: 1.0)
 			}
-			self.importFromiCloud { result in
-				switch result {
-				case .success(let info):
-					print("✅ [FirstLaunch Import] Imported: scholars=\(info.importedScholars) history=\(info.importedHistory) config=\(info.configImported)")
-					UserDefaults.standard.set(true, forKey: flagKey)
-				case .failure(let err):
-					print("⚠️ [FirstLaunch Import] No data imported: \(err.localizedDescription)")
+			
+			// 🚀 优化：异步下载，使用异步等待替代阻塞sleep
+			Task {
+				let fm = FileManager.default
+				if let docs = self.documentsURL {
+					let iosURL = docs.appendingPathComponent("ios_data.json")
+					let citURL = docs.appendingPathComponent("citation_data.json")
+					if fm.fileExists(atPath: iosURL.path) {
+						try? fm.startDownloadingUbiquitousItem(at: iosURL)
+						print("🔄 [FirstLaunch Import] startDownloading ios_data.json …")
+					}
+					if fm.fileExists(atPath: citURL.path) {
+						try? fm.startDownloadingUbiquitousItem(at: citURL)
+						print("🔄 [FirstLaunch Import] startDownloading citation_data.json …")
+					}
+					// 🚀 优化：使用 Task.sleep 替代阻塞的 Thread.sleep
+					try? await Task.sleep(nanoseconds: 1_000_000_000) // 1秒
+				}
+				self.importFromiCloud { result in
+					switch result {
+					case .success(let info):
+						print("✅ [FirstLaunch Import] Imported: scholars=\(info.importedScholars) history=\(info.importedHistory) config=\(info.configImported)")
+						UserDefaults.standard.set(true, forKey: flagKey)
+					case .failure(let err):
+						print("⚠️ [FirstLaunch Import] No data imported: \(err.localizedDescription)")
+					}
 				}
 			}
 		}
@@ -612,7 +619,7 @@ class iCloudSyncManager: ObservableObject {
 	func getiCloudContainerURL() -> URL? {
 		// 使用在Xcode中配置的容器标识符
 		// 如果传nil，则会获取第一个在entitlements中声明的容器
-		guard let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: "iCloud.com.citetrack.CiteTrack") else {
+        guard let containerURL = FileManager.default.url(forUbiquityContainerIdentifier: "iCloud.com.citetrack.CiteTrack") else {
 			print("无法获取iCloud容器URL。请检查：")
 			print("- 用户是否已登录iCloud？")
 			print("- 应用的iCloud同步是否已在系统设置中启用？")
@@ -697,7 +704,7 @@ class iCloudSyncManager: ObservableObject {
 			do {
 				let appInfo = [
 					"app_name": "CiteTrack",
-					"bundle_id": "com.citetrack.CiteTrack",
+                    "bundle_id": "com.citetrack.CiteTrack",
 					"version": "1.0.1",
 					"created_at": ISO8601DateFormatter().string(from: Date())
 				]

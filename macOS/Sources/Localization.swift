@@ -47,10 +47,21 @@ class LocalizationManager {
     
     private init() {
         // 检测系统语言
-        let systemLanguage = Locale.current.languageCode ?? "en"
-        self.currentLanguage = Language(rawValue: systemLanguage) ?? .english
+        let systemLanguageCode = (Locale.current.languageCode ?? "en").lowercased()
+        self.currentLanguage = Language(rawValue: systemLanguageCode) ?? .english
         
-        // 检查用户设置
+        // 一次性迁移：若曾保存为中文而系统并非中文，则清除保存的偏好，回归系统语言
+        if !UserDefaults.standard.bool(forKey: "MacLanguageMigration20250922Done") {
+            if let saved = UserDefaults.standard.string(forKey: "AppLanguage"),
+               let savedEnum = Language(rawValue: saved),
+               !(systemLanguageCode.hasPrefix("zh") ? savedEnum == .chinese : true),
+               !systemLanguageCode.hasPrefix(savedEnum.rawValue.lowercased()) {
+                UserDefaults.standard.removeObject(forKey: "AppLanguage")
+            }
+            UserDefaults.standard.set(true, forKey: "MacLanguageMigration20250922Done")
+        }
+        
+        // 再次检查用户设置（如仍存在则优先）
         if let savedLanguage = UserDefaults.standard.string(forKey: "AppLanguage"),
            let language = Language(rawValue: savedLanguage) {
             self.currentLanguage = language

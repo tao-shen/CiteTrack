@@ -21,9 +21,9 @@ struct FileProviderSettingsView: View {
                             .foregroundColor(fileProviderManager.isFileProviderEnabled ? .green : .red)
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("File Provider 状态")
+                            Text("fp_status_title".localized)
                                 .font(.headline)
-                            Text(fileProviderManager.isFileProviderEnabled ? "已启用 - 在文件应用中可见" : "未启用")
+                            Text(fileProviderManager.isFileProviderEnabled ? "fp_status_enabled".localized : "fp_status_disabled".localized)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -32,9 +32,9 @@ struct FileProviderSettingsView: View {
                     }
                     .padding(.vertical, 4)
                 } header: {
-                    Text("系统集成状态")
+                    Text("fp_integration_section".localized)
                 } footer: {
-                    Text("File Provider Extension 允许 CiteTrack 在「文件」应用中显示为独立的文件源，提供更深度的系统集成。")
+                    Text("fp_integration_footer".localized)
                 }
                 
                 // MARK: - 控制部分
@@ -45,7 +45,7 @@ struct FileProviderSettingsView: View {
                         }) {
                             HStack {
                                 Image(systemName: "minus.circle")
-                                Text("禁用 File Provider")
+                                Text("fp_disable_button".localized)
                             }
                         }
                         .foregroundColor(.red)
@@ -55,15 +55,15 @@ struct FileProviderSettingsView: View {
                         }) {
                             HStack {
                                 Image(systemName: "plus.circle")
-                                Text("启用 File Provider")
+                                Text("fp_enable_button".localized)
                             }
                         }
                         .foregroundColor(.blue)
                     }
                 } header: {
-                    Text("File Provider 控制")
+                    Text("fp_control_section".localized)
                 } footer: {
-                    Text("启用后，CiteTrack 将在「文件」应用的侧边栏中显示为 'CiteTrack Documents'。")
+                    Text("fp_control_footer".localized)
                 }
                 
                 // MARK: - 数据操作部分
@@ -73,7 +73,7 @@ struct FileProviderSettingsView: View {
                     }) {
                         HStack {
                             Image(systemName: "square.and.arrow.up")
-                            Text("导出学者数据到 File Provider")
+                            Text("fp_export_button".localized)
                         }
                     }
                     .disabled(!fileProviderManager.isFileProviderEnabled || dataManager.scholars.isEmpty)
@@ -83,14 +83,14 @@ struct FileProviderSettingsView: View {
                     }) {
                         HStack {
                             Image(systemName: "folder")
-                            Text("在文件应用中打开")
+                            Text("fp_open_in_files_button".localized)
                         }
                     }
                     .disabled(!fileProviderManager.isFileProviderEnabled)
                 } header: {
-                    Text("数据管理")
+                    Text("data_management".localized)
                 } footer: {
-                    Text("导出功能将创建包含所有学者数据的 .citetrack 文件，可在文件应用中访问和分享。")
+                    Text("fp_data_footer".localized)
                 }
                 
                 // MARK: - 功能说明部分
@@ -98,46 +98,46 @@ struct FileProviderSettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         FeatureRow(
                             icon: "sidebar.left",
-                            title: "侧边栏显示",
-                            description: "在文件应用侧边栏中显示 'CiteTrack Documents'"
+                            title: "fp_feature_sidebar_title".localized,
+                            description: "fp_feature_sidebar_desc".localized
                         )
                         
                         FeatureRow(
                             icon: "doc.badge.gearshape",
-                            title: "自定义图标",
-                            description: "使用 CiteTrack 应用图标标识文件源"
+                            title: "fp_feature_icon_title".localized,
+                            description: "fp_feature_icon_desc".localized
                         )
                         
                         FeatureRow(
                             icon: "square.and.arrow.up",
-                            title: "数据导出",
-                            description: "将学者数据导出为标准文件格式"
+                            title: "fp_feature_export_title".localized,
+                            description: "fp_feature_export_desc".localized
                         )
                         
                         FeatureRow(
                             icon: "icloud.and.arrow.up",
-                            title: "云端同步",
-                            description: "通过 App Group 与主应用共享数据"
+                            title: "fp_feature_sync_title".localized,
+                            description: "fp_feature_sync_desc".localized
                         )
                     }
                 } header: {
-                    Text("File Provider 功能特性")
+                    Text("fp_features_section".localized)
                 }
                 
                 // MARK: - 技术信息部分
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("实现方法:")
+                            Text("fp_tech_method_label".localized)
                                 .font(.caption.weight(.medium))
                             Spacer()
-                            Text("方法2 - File Provider Extension")
+                            Text("fp_tech_method_value".localized)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
                         
                         HStack {
-                            Text("域标识符:")
+                            Text("fp_domain_identifier_label".localized)
                                 .font(.caption.weight(.medium))
                             Spacer()
                             Text("com.citetrack.fileprovider")
@@ -146,7 +146,7 @@ struct FileProviderSettingsView: View {
                         }
                         
                         HStack {
-                            Text("App Group:")
+                            Text("fp_app_group_label".localized)
                                 .font(.caption.weight(.medium))
                             Spacer()
                             Text("group.com.citetrack.CiteTrack")
@@ -155,7 +155,7 @@ struct FileProviderSettingsView: View {
                         }
                         
                         HStack {
-                            Text("系统要求:")
+                            Text("fp_system_requirements_label".localized)
                                 .font(.caption.weight(.medium))
                             Spacer()
                             Text("iOS 16.0+")
@@ -164,21 +164,21 @@ struct FileProviderSettingsView: View {
                         }
                     }
                 } header: {
-                    Text("技术信息")
+                    Text("fp_tech_info_section".localized)
                 }
             }
-            .navigationTitle("File Provider 设置")
+            .navigationTitle("fp_nav_title".localized)
             .navigationBarTitleDisplayMode(.large)
         }
-        .alert("导出成功", isPresented: $showingExportSuccess) {
-            Button("好的", role: .cancel) { }
+        .alert("fp_export_success_title".localized, isPresented: $showingExportSuccess) {
+            Button("ok".localized, role: .cancel) { }
         } message: {
-            Text("学者数据已成功导出到 File Provider。您可以在文件应用中查看。")
+            Text("fp_export_success_message".localized)
         }
-        .alert("错误", isPresented: $showingError) {
-            Button("好的", role: .cancel) { }
+        .alert("fp_error_title".localized, isPresented: $showingError) {
+            Button("ok".localized, role: .cancel) { }
         } message: {
-            Text(errorMessage)
+            Text(errorMessage.isEmpty ? "unknown_error".localized : errorMessage)
         }
         .onAppear {
             // 检查最新状态
@@ -248,15 +248,15 @@ struct FileProviderSettingsViewCompat: View {
                     .font(.system(size: 60))
                     .foregroundColor(.gray)
                 
-                Text("File Provider Extension")
+                Text("fp_ext_title".localized)
                     .font(.title2.weight(.semibold))
                 
-                Text("此功能需要 iOS 16.0 或更高版本")
+                Text("fp_ext_requirement".localized)
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                 
-                Text("File Provider Extension 提供深度的系统集成，允许应用在文件应用中显示为独立的文件源。")
+                Text("fp_ext_description".localized)
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -265,7 +265,7 @@ struct FileProviderSettingsViewCompat: View {
                 Spacer()
             }
             .padding()
-            .navigationTitle("File Provider")
+            .navigationTitle("fp_nav_title_compat".localized)
             .navigationBarTitleDisplayMode(.large)
         }
     }

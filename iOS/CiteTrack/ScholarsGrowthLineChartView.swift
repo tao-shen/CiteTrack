@@ -280,7 +280,10 @@ struct ScholarsGrowthLineChartView: View {
             .onAppear {
                 // 通知父视图图表区域的实际高度
                 let chartHeight = geometry.size.height
+                // 🚀 优化：移除频繁的高度调试打印
+                #if DEBUG_CHART_VERBOSE
                 print(String(format: "debug_chart_height".localized, "\(chartHeight)"))
+                #endif
             }
         }
         // .frame(height: 500) // 设置一个合理的基础高度，让图表有足够的显示空间
@@ -332,13 +335,15 @@ struct ScholarsGrowthLineChartView: View {
         let values: [Double] = rawValues.map { Double($0) }
         let dates = cleanedHistory.map { $0.timestamp }
         
-        // 调试信息：打印数据范围，帮助定位小数显示问题
+        // 🚀 优化：移除频繁的调试打印，避免影响性能
+        #if DEBUG_CHART_VERBOSE
         print("📊 [Debug] Scholar: \(scholar.displayName)")
         print("📊 [Debug] Raw values: \(rawValues)")
         print("📊 [Debug] Double values: \(values)")
         print("📊 [Debug] Dates: \(dates)")
         print("📊 [Debug] Min: \(minValue), Max: \(maxValue), Range: \(range)")
         print("📊 [Debug] Adjusted Min: \(adjustedMin), Max: \(adjustedMax)")
+        #endif
         
         let title = scholar.displayName
         let legend = label(for: selectedDays)
@@ -581,21 +586,35 @@ struct LineView: View {
             maxWidth = Swift.max(maxWidth, estimatedWidth)
         }
         
-        // 确保最小宽度为30像素，最大不超过60像素
-        return Swift.max(30, Swift.min(60, maxWidth))
+        // 确保最小宽度为30像素，最大不超过70像素（增加以容纳更长的标签）
+        return Swift.max(30, Swift.min(70, maxWidth))
     }
     
-    // 格式化数字为简写形式 (k, m, b) - 用于LineView
+    // 格式化数字为简写形式 (k, m, b) - 用于LineView，显示4位有效数字
     func formatNumber(_ number: Double) -> String {
         let absNumber = abs(number)
         
+        // 根据数值大小选择单位和计算小数位数
         if absNumber >= 1_000_000_000 {
-            return String(format: "%.1fB", number / 1_000_000_000)
+            // 十亿级别
+            let value = number / 1_000_000_000
+            let integerDigits = String(Int(abs(value))).count
+            let decimalPlaces = max(0, 4 - integerDigits)
+            return String(format: "%.\(decimalPlaces)fb", value)
         } else if absNumber >= 1_000_000 {
-            return String(format: "%.1fM", number / 1_000_000)
+            // 百万级别
+            let value = number / 1_000_000
+            let integerDigits = String(Int(abs(value))).count
+            let decimalPlaces = max(0, 4 - integerDigits)
+            return String(format: "%.\(decimalPlaces)fm", value)
         } else if absNumber >= 1_000 {
-            return String(format: "%.1fK", number / 1_000)
+            // 千级别：1.081k (1位整数+3位小数) 或 987.9k (3位整数+1位小数)
+            let value = number / 1_000
+            let integerDigits = String(Int(abs(value))).count
+            let decimalPlaces = max(0, 4 - integerDigits)
+            return String(format: "%.\(decimalPlaces)fk", value)
         } else {
+            // 小于1000：直接显示整数
             return String(format: "%.0f", number)
         }
     }
@@ -610,17 +629,31 @@ struct Legend: View {
     var specifier: String = "%.0f"
     let padding:CGFloat = 3
     
-    // 格式化数字为简写形式 (k, m, b)
+    // 格式化数字为简写形式 (k, m, b)，显示4位有效数字
     func formatNumber(_ number: Double) -> String {
         let absNumber = abs(number)
         
+        // 根据数值大小选择单位和计算小数位数
         if absNumber >= 1_000_000_000 {
-            return String(format: "%.1fB", number / 1_000_000_000)
+            // 十亿级别
+            let value = number / 1_000_000_000
+            let integerDigits = String(Int(abs(value))).count
+            let decimalPlaces = max(0, 4 - integerDigits)
+            return String(format: "%.\(decimalPlaces)fb", value)
         } else if absNumber >= 1_000_000 {
-            return String(format: "%.1fM", number / 1_000_000)
+            // 百万级别
+            let value = number / 1_000_000
+            let integerDigits = String(Int(abs(value))).count
+            let decimalPlaces = max(0, 4 - integerDigits)
+            return String(format: "%.\(decimalPlaces)fm", value)
         } else if absNumber >= 1_000 {
-            return String(format: "%.1fK", number / 1_000)
+            // 千级别：1.081k (1位整数+3位小数) 或 987.9k (3位整数+1位小数)
+            let value = number / 1_000
+            let integerDigits = String(Int(abs(value))).count
+            let decimalPlaces = max(0, 4 - integerDigits)
+            return String(format: "%.\(decimalPlaces)fk", value)
         } else {
+            // 小于1000：直接显示整数
             return String(format: "%.0f", number)
         }
     }
@@ -637,8 +670,8 @@ struct Legend: View {
             maxWidth = Swift.max(maxWidth, estimatedWidth)
         }
         
-        // 确保最小宽度为30像素，最大不超过60像素
-        return Swift.max(30, Swift.min(60, maxWidth))
+        // 确保最小宽度为30像素，最大不超过70像素（增加以容纳更长的标签）
+        return Swift.max(30, Swift.min(70, maxWidth))
     }
 
     var stepWidth: CGFloat {

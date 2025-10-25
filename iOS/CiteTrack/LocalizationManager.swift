@@ -72,19 +72,35 @@ public class LocalizationManager: ObservableObject {
     
     private init() {
         let savedLanguage = UserDefaults.standard.string(forKey: "SelectedLanguage")
-        let userExplicit = UserDefaults.standard.bool(forKey: "UserExplicitLanguage")
+        var userExplicit = UserDefaults.standard.bool(forKey: "UserExplicitLanguage")
+        // 一次性迁移：若曾意外保留中文为显式语言，但系统语言非中文，则回归系统语言
+        if !UserDefaults.standard.bool(forKey: "LanguageMigration20250922Done") {
+            let systemLangCode: String = {
+                if #available(iOS 16.0, *) { return Locale.current.language.languageCode?.identifier ?? "en" }
+                else { return Locale.current.languageCode ?? "en" }
+            }().lowercased()
+            if userExplicit,
+               let saved = savedLanguage,
+               let savedEnum = Language(rawValue: saved),
+               !(systemLangCode.hasPrefix("zh") ? savedEnum == .chinese : true),
+               !systemLangCode.hasPrefix(savedEnum.rawValue.lowercased()) {
+                // 清除显式标记，后续按系统语言初始化
+                userExplicit = false
+                UserDefaults.standard.set(false, forKey: "UserExplicitLanguage")
+            }
+            UserDefaults.standard.set(true, forKey: "LanguageMigration20250922Done")
+        }
         
         if userExplicit, let saved = savedLanguage, let language = Language(rawValue: saved) {
             // 用户在设置中明确选择过语言，则优先采用用户选择
             self.currentLanguage = language
         } else {
-            // 默认跟随系统语言（更健壮：识别 zh/zh-Hans/zh-Hant 以及 Bundle 首选本地化）
-            let preferred = Bundle.main.preferredLocalizations.first ?? "en"
+            // 默认严格跟随系统语言；无法识别时回退英文
             let systemLanguageCode: String = {
                 if #available(iOS 16.0, *) {
-                    return Locale.current.language.languageCode?.identifier ?? preferred
+                    return Locale.current.language.languageCode?.identifier ?? "en"
                 } else {
-                    return Locale.current.languageCode ?? preferred
+                    return Locale.current.languageCode ?? "en"
                 }
             }()
             let code = systemLanguageCode.lowercased()
@@ -100,8 +116,6 @@ public class LocalizationManager: ObservableObject {
                 self.currentLanguage = .french
             } else if code.hasPrefix("de") {
                 self.currentLanguage = .german
-            } else if preferred.lowercased().hasPrefix("zh") { // 兜底根据 Bundle 配置
-                self.currentLanguage = .chinese
             } else {
                 self.currentLanguage = .english
             }
@@ -113,11 +127,14 @@ public class LocalizationManager: ObservableObject {
     // MARK: - Public Methods
     
     public func localized(_ key: String) -> String {
-        guard let languageDict = localizations[currentLanguage] else {
-            return key
+        // 优先当前语言 → 英文回退 → 返回 key
+        if let value = localizations[currentLanguage]?[key] {
+            return value
         }
-        
-        return languageDict[key] ?? key
+        if let fallback = localizations[.english]?[key] {
+            return fallback
+        }
+        return key
     }
     
     public func switchLanguage(to language: Language, completion: @escaping () -> Void = {}) {
@@ -154,6 +171,111 @@ public class LocalizationManager: ObservableObject {
         loadSpanishLocalizations()
         loadFrenchLocalizations()
         loadGermanLocalizations()
+        // 统一补充缺失键，避免个别语言未覆盖导致的显示问题
+        addSupplementalKeys()
+    }
+
+    // 额外补充键：集中在此处为各语言注入新增加且可能缺失的键
+    private func addSupplementalKeys() {
+        // English
+        var en = localizations[.english] ?? [:]
+        en["sort_by"] = en["sort_by"] ?? "Sort By"
+        en["icloud_backup_found"] = en["icloud_backup_found"] ?? (en["icloud_data_found"] ?? "iCloud data found")
+        en["notice"] = en["notice"] ?? "Notice"
+        en["app_usage"] = en["app_usage"] ?? "App Usage"
+        en["its_me"] = en["its_me"] ?? "It's me"
+        en["not_me"] = en["not_me"] ?? "Not me"
+        en["unknown_error"] = en["unknown_error"] ?? "Unknown error"
+        // File Provider settings related
+        en["fp_status_title"] = en["fp_status_title"] ?? "File Provider Status"
+        en["fp_status_enabled"] = en["fp_status_enabled"] ?? "Enabled - Visible in Files app"
+        en["fp_status_disabled"] = en["fp_status_disabled"] ?? "Disabled"
+        en["fp_integration_section"] = en["fp_integration_section"] ?? "System Integration Status"
+        en["fp_integration_footer"] = en["fp_integration_footer"] ?? "File Provider Extension allows CiteTrack to appear as a separate file source in the Files app, providing deeper system integration."
+        en["fp_control_section"] = en["fp_control_section"] ?? "File Provider Control"
+        en["fp_control_footer"] = en["fp_control_footer"] ?? "After enabling, CiteTrack will appear as 'CiteTrack Documents' in the Files app sidebar."
+        en["fp_disable_button"] = en["fp_disable_button"] ?? "Disable File Provider"
+        en["fp_enable_button"] = en["fp_enable_button"] ?? "Enable File Provider"
+        en["fp_export_button"] = en["fp_export_button"] ?? "Export scholar data to File Provider"
+        en["fp_open_in_files_button"] = en["fp_open_in_files_button"] ?? "Open in Files app"
+        en["fp_data_footer"] = en["fp_data_footer"] ?? "Export will create a .citetrack file containing all scholar data. You can access and share it from the Files app."
+        en["fp_features_section"] = en["fp_features_section"] ?? "File Provider Features"
+        en["fp_feature_sidebar_title"] = en["fp_feature_sidebar_title"] ?? "Sidebar Display"
+        en["fp_feature_sidebar_desc"] = en["fp_feature_sidebar_desc"] ?? "Show 'CiteTrack Documents' in the Files app sidebar"
+        en["fp_feature_icon_title"] = en["fp_feature_icon_title"] ?? "Custom Icon"
+        en["fp_feature_icon_desc"] = en["fp_feature_icon_desc"] ?? "Use the CiteTrack app icon to identify the file source"
+        en["fp_feature_export_title"] = en["fp_feature_export_title"] ?? "Data Export"
+        en["fp_feature_export_desc"] = en["fp_feature_export_desc"] ?? "Export scholar data to a standard file format"
+        en["fp_feature_sync_title"] = en["fp_feature_sync_title"] ?? "Cloud Sync"
+        en["fp_feature_sync_desc"] = en["fp_feature_sync_desc"] ?? "Share data with the main app via App Group"
+        en["fp_tech_info_section"] = en["fp_tech_info_section"] ?? "Technical Information"
+        en["fp_tech_method_label"] = en["fp_tech_method_label"] ?? "Implementation Method:"
+        en["fp_tech_method_value"] = en["fp_tech_method_value"] ?? "Method 2 - File Provider Extension"
+        en["fp_domain_identifier_label"] = en["fp_domain_identifier_label"] ?? "Domain Identifier:"
+        en["fp_app_group_label"] = en["fp_app_group_label"] ?? "App Group:"
+        en["fp_system_requirements_label"] = en["fp_system_requirements_label"] ?? "System Requirements:"
+        en["fp_nav_title"] = en["fp_nav_title"] ?? "File Provider Settings"
+        en["fp_export_success_title"] = en["fp_export_success_title"] ?? "Export Successful"
+        en["fp_export_success_message"] = en["fp_export_success_message"] ?? "Scholar data has been successfully exported to File Provider. You can view it in the Files app."
+        en["fp_error_title"] = en["fp_error_title"] ?? "Error"
+        en["fp_ext_title"] = en["fp_ext_title"] ?? "File Provider Extension"
+        en["fp_ext_requirement"] = en["fp_ext_requirement"] ?? "This feature requires iOS 16.0 or later"
+        en["fp_ext_description"] = en["fp_ext_description"] ?? "File Provider Extension provides deep system integration, allowing the app to appear as a separate file source in the Files app."
+        en["fp_nav_title_compat"] = en["fp_nav_title_compat"] ?? "File Provider"
+        // WelcomeConfig supplemental keys
+        en["continue"] = en["continue"] ?? "Continue"
+        en["privacy_disclaimer"] = en["privacy_disclaimer"] ?? "Your academic data is securely stored on your device and synced via iCloud with encryption. We value your privacy and do not collect or share your personal information."
+        localizations[.english] = en
+
+        // Chinese (Simplified)
+        var zh = localizations[.chinese] ?? [:]
+        zh["sort_by"] = zh["sort_by"] ?? "排序方式"
+        zh["icloud_backup_found"] = zh["icloud_backup_found"] ?? (zh["icloud_data_found"] ?? "已找到iCloud数据")
+        zh["notice"] = zh["notice"] ?? "通知"
+        zh["app_usage"] = zh["app_usage"] ?? "应用使用"
+        zh["its_me"] = zh["its_me"] ?? "是我"
+        zh["not_me"] = zh["not_me"] ?? "不是我"
+        zh["unknown_error"] = zh["unknown_error"] ?? "未知错误"
+        // File Provider settings related (Chinese)
+        zh["fp_status_title"] = zh["fp_status_title"] ?? "File Provider 状态"
+        zh["fp_status_enabled"] = zh["fp_status_enabled"] ?? "已启用 - 在文件应用中可见"
+        zh["fp_status_disabled"] = zh["fp_status_disabled"] ?? "未启用"
+        zh["fp_integration_section"] = zh["fp_integration_section"] ?? "系统集成状态"
+        zh["fp_integration_footer"] = zh["fp_integration_footer"] ?? "File Provider Extension 允许 CiteTrack 在「文件」应用中显示为独立的文件源，提供更深度的系统集成。"
+        zh["fp_control_section"] = zh["fp_control_section"] ?? "File Provider 控制"
+        zh["fp_control_footer"] = zh["fp_control_footer"] ?? "启用后，CiteTrack 将在「文件」应用的侧边栏中显示为 'CiteTrack Documents'。"
+        zh["fp_disable_button"] = zh["fp_disable_button"] ?? "禁用 File Provider"
+        zh["fp_enable_button"] = zh["fp_enable_button"] ?? "启用 File Provider"
+        zh["fp_export_button"] = zh["fp_export_button"] ?? "导出学者数据到 File Provider"
+        zh["fp_open_in_files_button"] = zh["fp_open_in_files_button"] ?? "在文件应用中打开"
+        zh["fp_data_footer"] = zh["fp_data_footer"] ?? "导出功能将创建包含所有学者数据的 .citetrack 文件，可在文件应用中访问和分享。"
+        zh["fp_features_section"] = zh["fp_features_section"] ?? "File Provider 功能特性"
+        zh["fp_feature_sidebar_title"] = zh["fp_feature_sidebar_title"] ?? "侧边栏显示"
+        zh["fp_feature_sidebar_desc"] = zh["fp_feature_sidebar_desc"] ?? "在文件应用侧边栏中显示 'CiteTrack Documents'"
+        zh["fp_feature_icon_title"] = zh["fp_feature_icon_title"] ?? "自定义图标"
+        zh["fp_feature_icon_desc"] = zh["fp_feature_icon_desc"] ?? "使用 CiteTrack 应用图标标识文件源"
+        zh["fp_feature_export_title"] = zh["fp_feature_export_title"] ?? "数据导出"
+        zh["fp_feature_export_desc"] = zh["fp_feature_export_desc"] ?? "将学者数据导出为标准文件格式"
+        zh["fp_feature_sync_title"] = zh["fp_feature_sync_title"] ?? "云端同步"
+        zh["fp_feature_sync_desc"] = zh["fp_feature_sync_desc"] ?? "通过 App Group 与主应用共享数据"
+        zh["fp_tech_info_section"] = zh["fp_tech_info_section"] ?? "技术信息"
+        zh["fp_tech_method_label"] = zh["fp_tech_method_label"] ?? "实现方法:"
+        zh["fp_tech_method_value"] = zh["fp_tech_method_value"] ?? "方法2 - File Provider Extension"
+        zh["fp_domain_identifier_label"] = zh["fp_domain_identifier_label"] ?? "域标识符:"
+        zh["fp_app_group_label"] = zh["fp_app_group_label"] ?? "App Group:"
+        zh["fp_system_requirements_label"] = zh["fp_system_requirements_label"] ?? "系统要求:"
+        zh["fp_nav_title"] = zh["fp_nav_title"] ?? "File Provider 设置"
+        zh["fp_export_success_title"] = zh["fp_export_success_title"] ?? "导出成功"
+        zh["fp_export_success_message"] = zh["fp_export_success_message"] ?? "学者数据已成功导出到 File Provider。您可以在文件应用中查看。"
+        zh["fp_error_title"] = zh["fp_error_title"] ?? "错误"
+        zh["fp_ext_title"] = zh["fp_ext_title"] ?? "File Provider Extension"
+        zh["fp_ext_requirement"] = zh["fp_ext_requirement"] ?? "此功能需要 iOS 16.0 或更高版本"
+        zh["fp_ext_description"] = zh["fp_ext_description"] ?? "File Provider Extension 提供深度的系统集成，允许应用在文件应用中显示为独立的文件源。"
+        zh["fp_nav_title_compat"] = zh["fp_nav_title_compat"] ?? "File Provider"
+        // WelcomeConfig supplemental keys
+        zh["continue"] = zh["continue"] ?? "继续"
+        zh["privacy_disclaimer"] = zh["privacy_disclaimer"] ?? "您的学术数据将安全存储在本地设备上，并通过 iCloud 进行加密同步。我们重视您的隐私，不会收集或分享您的个人信息。"
+        localizations[.chinese] = zh
     }
     
     private func loadEnglishLocalizations() {
