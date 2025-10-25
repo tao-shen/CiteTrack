@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
+	<string>app_icon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.citetrack.CiteTrack</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -30,12 +30,8 @@
 	<string>NSApplication</string>
 	<key>NSMainStoryboardFile</key>
 	<string></string>
-	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/yourusername/citetrack/main/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>YOUR_PUBLIC_KEY_HERE</string>
 	<key>SUEnableAutomaticChecks</key>
-	<true/>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

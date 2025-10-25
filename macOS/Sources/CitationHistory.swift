@@ -3,19 +3,19 @@ import CoreData
 import Cocoa
 
 // MARK: - Citation History Data Model
-struct CitationHistory: Codable, Identifiable, Equatable {
-    let id: UUID
-    let scholarId: String
-    let citationCount: Int
-    let timestamp: Date
-    let source: DataSource
-    let createdAt: Date
+public struct CitationHistory: Codable, Identifiable, Equatable {
+    public let id: UUID
+    public let scholarId: String
+    public let citationCount: Int
+    public let timestamp: Date
+    public let source: DataSource
+    public let createdAt: Date
     
-    enum DataSource: String, Codable, CaseIterable {
+    public enum DataSource: String, Codable, CaseIterable {
         case automatic = "automatic"
         case manual = "manual"
         
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .automatic:
                 return L("data_source_automatic")
@@ -25,7 +25,7 @@ struct CitationHistory: Codable, Identifiable, Equatable {
         }
     }
     
-    init(id: UUID = UUID(), scholarId: String, citationCount: Int, timestamp: Date = Date(), source: DataSource = .automatic, createdAt: Date = Date()) {
+    public init(id: UUID = UUID(), scholarId: String, citationCount: Int, timestamp: Date = Date(), source: DataSource = .automatic, createdAt: Date = Date()) {
         self.id = id
         self.scholarId = scholarId
         self.citationCount = citationCount
@@ -35,12 +35,12 @@ struct CitationHistory: Codable, Identifiable, Equatable {
     }
     
     // MARK: - Validation
-    func isValid() -> Bool {
+    public func isValid() -> Bool {
         return !scholarId.isEmpty && citationCount >= 0
     }
     
     // MARK: - Core Data Conversion
-    func toCoreDataEntity(in context: NSManagedObjectContext) -> CitationHistoryEntity {
+    public func toCoreDataEntity(in context: NSManagedObjectContext) -> CitationHistoryEntity {
         let entity = CitationHistoryEntity(context: context)
         entity.id = self.id
         entity.scholarId = self.scholarId
@@ -51,7 +51,7 @@ struct CitationHistory: Codable, Identifiable, Equatable {
         return entity
     }
     
-    static func fromCoreDataEntity(_ entity: CitationHistoryEntity) -> CitationHistory? {
+    public static func fromCoreDataEntity(_ entity: CitationHistoryEntity) -> CitationHistory? {
         // Verify that required source string can be converted to enum
         guard let source = DataSource(rawValue: entity.source) else {
             print("Warning: Invalid source value '\(entity.source)' for CitationHistoryEntity")

@@ -1,0 +1,57 @@
+{
+  "scholars": [
+    {
+      "id": "test_scholar_1",
+      "name": "Test Scholar 1",
+      "displayName": "Test Scholar 1",
+      "citations": 1000,
+      "lastUpdated": "2025-10-25T19:07:34.685831+00:00"
+    },
+    {
+      "id": "test_scholar_2",
+      "name": "Test Scholar 2",
+      "displayName": "Test Scholar 2",
+      "citations": 2000,
+      "lastUpdated": "2025-10-25T19:07:34.686270+00:00"
+    }
+  ],
+  "citationHistory": [
+    {
+      "id": "history_0",
+      "scholarId": "test_scholar_1",
+      "citationCount": 1000,
+      "timestamp": "2025-10-25T10:00:00+00:00",
+      "source": "automatic"
+    },
+    {
+      "id": "history_1",
+      "scholarId": "test_scholar_1",
+      "citationCount": 1010,
+      "timestamp": "2025-10-25T11:00:00+00:00",
+      "source": "automatic"
+    },
+    {
+      "id": "history_2",
+      "scholarId": "test_scholar_1",
+      "citationCount": 1020,
+      "timestamp": "2025-10-25T12:00:00+00:00",
+      "source": "automatic"
+    },
+    {
+      "id": "history_3",
+      "scholarId": "test_scholar_1",
+      "citationCount": 1030,
+      "timestamp": "2025-10-25T13:00:00+00:00",
+      "source": "automatic"
+    },
+    {
+      "id": "history_4",
+      "scholarId": "test_scholar_1",
+      "citationCount": 1040,
+      "timestamp": "2025-10-25T14:00:00+00:00",
+      "source": "automatic"
+    }
+  ],
+  "exportDate": "2025-10-25T19:07:34.686288+00:00",
+  "version": "1.0.0"
+}

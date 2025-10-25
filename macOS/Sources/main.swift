@@ -20,13 +20,13 @@ extension UserDefaults {
 
 
 // MARK: - Scholar Model
-struct Scholar: Codable, Identifiable {
-    let id: String
-    var name: String
-    var citations: Int?
-    var lastUpdated: Date?
+public struct Scholar: Codable, Identifiable {
+    public let id: String
+    public var name: String
+    public var citations: Int?
+    public var lastUpdated: Date?
     
-    init(id: String, name: String = "") {
+    public init(id: String, name: String = "") {
         self.id = id
         self.name = name.isEmpty ? "学者 \(id.prefix(8))" : name
         self.citations = nil
@@ -417,16 +417,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let backgroundDataService = BackgroundDataCollectionService.shared
     private var isUpdating = false
     
-    // Sparkle updater (excluded for App Store build)
-    #if !APP_STORE
-    private var updaterController: SPUStandardUpdaterController!
-    #endif
+    // Sparkle updater (disabled for development)
+    // #if !APP_STORE
+    // private var updaterController: SPUStandardUpdaterController!
+    // #endif
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
-        // Initialize Sparkle updater (non-App Store only)
-        #if !APP_STORE
-        setupSparkleUpdater()
-        #endif
+        // 首先设置应用为常规模式，确保显示在 Dock 中
+        NSApp.setActivationPolicy(.regular)
+        
+        // Initialize Sparkle updater (disabled for development)
+        // #if !APP_STORE
+        // setupSparkleUpdater()
+        // #endif
         
         // Initialize Core Data stack
         initializeCoreData()
@@ -459,11 +462,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    #if !APP_STORE
-    private func setupSparkleUpdater() {
-        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
-    }
-    #endif
+    // #if !APP_STORE
+    // private func setupSparkleUpdater() {
+    //     updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    // }
+    // #endif
     
     private func initializeCoreData() {
         // Perform migration check
@@ -886,15 +889,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func checkForUpdates() {
-        #if !APP_STORE
-        updaterController.checkForUpdates(nil)
-        #else
+        // #if !APP_STORE
+        // updaterController.checkForUpdates(nil)
+        // #else
         // App Store 版本不支持内置更新（通过 App Store 更新）
         let alert = NSAlert()
         alert.messageText = L("menu_check_updates")
         alert.informativeText = L("please_update_from_app_store")
         alert.runModal()
-        #endif
+        // #endif
     }
     
     @objc private func showAbout() {
