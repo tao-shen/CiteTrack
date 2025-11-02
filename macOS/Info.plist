@@ -30,13 +30,13 @@
 	<string>NSApplication</string>
 	<key>NSMainStoryboardFile</key>
 	<string></string>
-	<key>SUEnableAutomaticChecks</key>
-	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
 </dict>
 </plist>
 

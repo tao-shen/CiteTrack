@@ -196,18 +196,46 @@ class ModernToolbar: NSView {
     // MARK: - Public Methods
     func updateScholarList(_ scholars: [Scholar], selectedScholar: Scholar?) {
         scholarSelectionButton.options = scholars.map { $0.name }
+        scholarSelectionButton.isEnabled = !scholars.isEmpty
+
         if let selected = selectedScholar,
            let index = scholars.firstIndex(where: { $0.id == selected.id }) {
-            scholarSelectionButton.selectedIndex = index
-            scholarSelectionButton.title = selected.name
+            scholarSelectionButton.setSelectedIndex(index, title: selected.name)
+        } else if let first = scholars.first {
+            scholarSelectionButton.setSelectedIndex(0, title: first.name)
+        } else {
+            scholarSelectionButton.setDisplayTitle(L("menu_no_scholars"))
         }
-        
+
         scholarSelectionButton.onSelect = { [weak self] index in
+            guard scholars.indices.contains(index) else { return }
             let scholar = scholars[index]
             self?.onScholarChanged?(scholar)
         }
     }
     
+    func updateTimeRangeSelection(selectedRange: TimeRange, customLabel: String? = nil) {
+        if let index = TimeRange.allCases.firstIndex(of: selectedRange) {
+            timeRangeButton.setSelectedIndex(index, title: customLabel ?? selectedRange.displayName)
+        } else {
+            timeRangeButton.setDisplayTitle(customLabel ?? selectedRange.displayName)
+        }
+    }
+    
+    func updateChartTypeSelection(_ chartType: ChartType) {
+        if let index = ChartType.allCases.firstIndex(of: chartType) {
+            chartTypeButton.setSelectedIndex(index)
+        }
+    }
+    
+    func updateThemeSelection(_ theme: ChartTheme) {
+        if let index = ChartTheme.allCases.firstIndex(of: theme) {
+            themeButton.setSelectedIndex(index, title: theme.displayName)
+        } else {
+            themeButton.setDisplayTitle(theme.displayName)
+        }
+    }
+
     func setRealTimeStatus(_ isEnabled: Bool) {
         realTimeIndicator.isEnabled = isEnabled
     }
@@ -312,6 +340,24 @@ class ModernDropdownButton: NSButton {
         arrowImageView.contentTintColor = theme.colors.textSecondary
     }
     
+    func setDisplayTitle(_ text: String) {
+        title = text
+        titleLabel.stringValue = text
+    }
+    
+    func setSelectedIndex(_ index: Int, title customTitle: String? = nil) {
+        selectedIndex = index
+        let displayTitle: String
+        if let customTitle = customTitle {
+            displayTitle = customTitle
+        } else if options.indices.contains(index) {
+            displayTitle = options[index]
+        } else {
+            displayTitle = self.title
+        }
+        setDisplayTitle(displayTitle)
+    }
+ 
     @objc private func showDropdown() {
         guard !options.isEmpty else { return }
         
@@ -329,8 +375,7 @@ class ModernDropdownButton: NSButton {
     
     @objc private func selectOption(_ sender: NSMenuItem) {
         selectedIndex = sender.tag
-        title = options[selectedIndex]
-        titleLabel.stringValue = title
+        setDisplayTitle(options[selectedIndex])
         onSelect?(selectedIndex)
     }
 }

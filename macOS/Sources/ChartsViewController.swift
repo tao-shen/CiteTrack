@@ -168,18 +168,18 @@ class ChartsViewController: NSViewController {
         colorSchemePopup.action = #selector(colorSchemeChanged)
         
         // Checkboxes
-        showTrendLineCheckbox = NSButton(checkboxWithTitle: "Show Trend Line", target: self, action: #selector(showTrendLineChanged))
+        showTrendLineCheckbox = NSButton(checkboxWithTitle: L("show_trend_line"), target: self, action: #selector(showTrendLineChanged))
         showTrendLineCheckbox.state = currentConfiguration.showTrendLine ? .on : .off
         
-        showDataPointsCheckbox = NSButton(checkboxWithTitle: "Show Data Points", target: self, action: #selector(showDataPointsChanged))
+        showDataPointsCheckbox = NSButton(checkboxWithTitle: L("show_data_points"), target: self, action: #selector(showDataPointsChanged))
         showDataPointsCheckbox.state = currentConfiguration.showDataPoints ? .on : .off
         
-        showGridCheckbox = NSButton(checkboxWithTitle: "Show Grid", target: self, action: #selector(showGridChanged))
+        showGridCheckbox = NSButton(checkboxWithTitle: L("show_grid"), target: self, action: #selector(showGridChanged))
         showGridCheckbox.state = currentConfiguration.showGrid ? .on : .off
         
         // Action buttons
-        exportButton = NSButton(title: "Export", target: self, action: #selector(exportData))
-        refreshButton = NSButton(title: "Refresh", target: self, action: #selector(refreshData))
+        exportButton = NSButton(title: L("button_export_data"), target: self, action: #selector(exportData))
+        refreshButton = NSButton(title: L("button_refresh"), target: self, action: #selector(refreshData))
         
         // Setup custom time range controls
         setupCustomTimeRangeControls()
@@ -199,7 +199,7 @@ class ChartsViewController: NSViewController {
         dateStack.translatesAutoresizingMaskIntoConstraints = false
         
         // From label
-        let fromLabel = NSTextField(labelWithString: "From")
+        let fromLabel = NSTextField(labelWithString: L("label_start_date"))
         fromLabel.font = NSFont.systemFont(ofSize: 13)
         fromLabel.textColor = NSColor.labelColor
         
@@ -214,7 +214,7 @@ class ChartsViewController: NSViewController {
         startDatePicker.drawsBackground = true
         
         // To label
-        let toLabel = NSTextField(labelWithString: "to")
+        let toLabel = NSTextField(labelWithString: L("label_end_date"))
         toLabel.font = NSFont.systemFont(ofSize: 13)
         toLabel.textColor = NSColor.labelColor
         
@@ -328,13 +328,13 @@ class ChartsViewController: NSViewController {
         
         // Add controls safely
         if let popup = scholarPopup {
-            controlsStack.addArrangedSubview(createLabeledControl("Scholar:", popup))
+            controlsStack.addArrangedSubview(createLabeledControl(L("label_scholar"), popup))
         }
         if let popup = timeRangePopup {
-            controlsStack.addArrangedSubview(createLabeledControl("Time:", popup))
+            controlsStack.addArrangedSubview(createLabeledControl(L("label_time_range_short"), popup))
         }
         if let popup = chartTypePopup {
-            controlsStack.addArrangedSubview(createLabeledControl("Type:", popup))
+            controlsStack.addArrangedSubview(createLabeledControl(L("label_chart_type"), popup))
         }
         
         // Add spacer
@@ -444,7 +444,7 @@ class ChartsViewController: NSViewController {
         scholarPopup.removeAllItems()
         
         if scholars.isEmpty {
-            scholarPopup.addItem(withTitle: "No scholars available")
+            scholarPopup.addItem(withTitle: L("menu_no_scholars"))
             scholarPopup.isEnabled = false
         } else {
             for scholar in scholars {
@@ -834,7 +834,7 @@ class ChartsViewController: NSViewController {
         }
         
         refreshButton.isEnabled = false
-        refreshButton.title = "Refreshing..."
+        refreshButton.title = L("status_updating")
         
         // Trigger a manual data collection for this scholar
         let googleScholarService = GoogleScholarService()
@@ -848,7 +848,7 @@ class ChartsViewController: NSViewController {
                 
                 // 恢复按钮状态
                 refreshButton.isEnabled = true
-                refreshButton.title = "Refresh"
+                refreshButton.title = L("button_refresh")
                 
                 switch result {
                 case .success:
@@ -1107,7 +1107,7 @@ class StatisticsView: NSView {
         stackView.arrangedSubviews.forEach { stackView.removeArrangedSubview($0); $0.removeFromSuperview() }
         
         guard let stats = statistics else {
-            let noDataLabel = NSTextField(labelWithString: "No statistics available")
+            let noDataLabel = NSTextField(labelWithString: L("no_statistics_available"))
             noDataLabel.alignment = .center
             noDataLabel.textColor = .secondaryLabelColor
             noDataLabel.font = NSFont.systemFont(ofSize: 13)
@@ -1117,10 +1117,10 @@ class StatisticsView: NSView {
         
         // Create statistic cards with better responsive design
         let cards = [
-            createStatCard(title: "Data Points", value: "\(stats.totalDataPoints)", subtitle: "total", color: .systemBlue),
-            createStatCard(title: "Total Change", value: formatChange(stats.totalChange), subtitle: "citations", color: stats.totalChange >= 0 ? .systemGreen : .systemRed),
-            createStatCard(title: "Growth Rate", value: String(format: "%.1f%%", stats.growthRate), subtitle: "overall", color: stats.growthRate >= 0 ? .systemGreen : .systemRed),
-            createStatCard(title: "Trend", value: stats.trend.symbol, subtitle: stats.trend.displayName, color: trendColor(for: stats.trend))
+            createStatCard(title: L("data_points"), value: "\(stats.totalDataPoints)", subtitle: L("label_total"), color: .systemBlue),
+            createStatCard(title: L("total_change"), value: formatChange(stats.totalChange), subtitle: L("citations_label"), color: stats.totalChange >= 0 ? .systemGreen : .systemRed),
+            createStatCard(title: L("growth_rate"), value: String(format: "%.1f%%", stats.growthRate), subtitle: L("overall_label"), color: stats.growthRate >= 0 ? .systemGreen : .systemRed),
+            createStatCard(title: L("trend_label"), value: stats.trend.symbol, subtitle: stats.trend.displayName, color: trendColor(for: stats.trend))
         ]
         
         for card in cards {

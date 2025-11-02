@@ -18,11 +18,11 @@ struct NotificationSettings: Codable {
         var displayName: String {
             switch self {
             case .system:
-                return "System Notification"
+                return L("notification_type_system")
             case .popup:
-                return "Popup Alert"
+                return L("notification_type_popup")
             case .menuBar:
-                return "Menu Bar Badge"
+                return L("notification_type_menu_bar")
             }
         }
     }
@@ -165,7 +165,7 @@ class NotificationManager {
     
     private func sendSystemNotification(for change: CitationChange) {
         let content = UNMutableNotificationContent()
-        content.title = "Citation Update - \(change.scholarName)"
+        content.title = L("notification_title_single", change.scholarName)
         content.body = change.changeDescription
         content.sound = settings.soundEnabled ? .default : nil
         
@@ -191,11 +191,11 @@ class NotificationManager {
     private func sendPopupNotification(for change: CitationChange) {
         DispatchQueue.main.async(qos: .userInitiated) {
             let alert = NSAlert()
-            alert.messageText = "Citation Update"
-            alert.informativeText = "\(change.scholarName): \(change.changeDescription)"
+            alert.messageText = L("notification_popup_title")
+            alert.informativeText = L("notification_popup_body", change.scholarName, change.changeDescription)
             alert.alertStyle = change.change > 0 ? .informational : .warning
-            alert.addButton(withTitle: "OK")
-            alert.addButton(withTitle: "View Charts")
+            alert.addButton(withTitle: L("button_ok"))
+            alert.addButton(withTitle: L("button_open_charts"))
             
             let response = alert.runModal()
             
@@ -236,17 +236,17 @@ class NotificationManager {
         let totalIncrease = changes.filter { $0.change > 0 }.reduce(0) { $0 + $1.change }
         let totalDecrease = changes.filter { $0.change < 0 }.reduce(0) { $0 + abs($1.change) }
         
-        var message = "Multiple citation updates:"
+        var message = L("notification_multiple_updates_header")
         if totalIncrease > 0 {
-            message += " +\(totalIncrease) citations"
+            message += " " + L("notification_multiple_updates_increase", totalIncrease)
         }
         if totalDecrease > 0 {
-            message += " -\(totalDecrease) citations"
+            message += " " + L("notification_multiple_updates_decrease", totalDecrease)
         }
         
         if settings.notificationTypes.contains(.system) {
             let content = UNMutableNotificationContent()
-            content.title = "Citation Updates"
+            content.title = L("notification_title_multiple")
             content.body = message
             content.sound = settings.soundEnabled ? .default : nil
             
@@ -263,11 +263,11 @@ class NotificationManager {
         if settings.notificationTypes.contains(.popup) {
             DispatchQueue.main.async(qos: .userInitiated) {
                 let alert = NSAlert()
-                alert.messageText = "Citation Updates"
-                alert.informativeText = message + "\n\nAffected scholars: \(changes.map { $0.scholarName }.joined(separator: ", "))"
+                alert.messageText = L("notification_title_multiple")
+                alert.informativeText = message + "\n\n" + L("notification_affected_scholars", changes.map { $0.scholarName }.joined(separator: ", "))
                 alert.alertStyle = .informational
-                alert.addButton(withTitle: "OK")
-                alert.addButton(withTitle: "View Charts")
+                alert.addButton(withTitle: L("button_ok"))
+                alert.addButton(withTitle: L("button_open_charts"))
                 
                 let response = alert.runModal()
                 
@@ -379,14 +379,14 @@ class NotificationSettingsViewController: NSViewController {
         stackView.translatesAutoresizingMaskIntoConstraints = false
         
         // Enable notifications
-        enabledCheckbox = NSButton(checkboxWithTitle: "Enable citation change notifications", target: self, action: #selector(settingsChanged))
+        enabledCheckbox = NSButton(checkboxWithTitle: L("notification_enable_checkbox"), target: self, action: #selector(settingsChanged))
         stackView.addArrangedSubview(enabledCheckbox)
         
         // Threshold setting
         let thresholdContainer = NSView()
-        let thresholdLabel = NSTextField(labelWithString: "Notification threshold:")
+        let thresholdLabel = NSTextField(labelWithString: L("notification_threshold_label"))
         thresholdTextField = NSTextField()
-        thresholdTextField.placeholderString = "5"
+        thresholdTextField.placeholderString = L("notification_threshold_placeholder")
         thresholdTextField.target = self
         thresholdTextField.action = #selector(settingsChanged)
         
@@ -408,29 +408,29 @@ class NotificationSettingsViewController: NSViewController {
         stackView.addArrangedSubview(thresholdContainer)
         
         // Notification types
-        let typesLabel = NSTextField(labelWithString: "Notification types:")
+        let typesLabel = NSTextField(labelWithString: L("notification_types_label"))
         typesLabel.font = NSFont.boldSystemFont(ofSize: 13)
         stackView.addArrangedSubview(typesLabel)
         
-        systemNotificationCheckbox = NSButton(checkboxWithTitle: "System notifications", target: self, action: #selector(settingsChanged))
-        popupNotificationCheckbox = NSButton(checkboxWithTitle: "Popup alerts", target: self, action: #selector(settingsChanged))
-        menuBarNotificationCheckbox = NSButton(checkboxWithTitle: "Menu bar indicators", target: self, action: #selector(settingsChanged))
+        systemNotificationCheckbox = NSButton(checkboxWithTitle: L("notification_type_system_checkbox"), target: self, action: #selector(settingsChanged))
+        popupNotificationCheckbox = NSButton(checkboxWithTitle: L("notification_type_popup_checkbox"), target: self, action: #selector(settingsChanged))
+        menuBarNotificationCheckbox = NSButton(checkboxWithTitle: L("notification_type_menu_bar_checkbox"), target: self, action: #selector(settingsChanged))
         
         stackView.addArrangedSubview(systemNotificationCheckbox)
         stackView.addArrangedSubview(popupNotificationCheckbox)
         stackView.addArrangedSubview(menuBarNotificationCheckbox)
         
         // Sound setting
-        soundEnabledCheckbox = NSButton(checkboxWithTitle: "Play notification sound", target: self, action: #selector(settingsChanged))
+        soundEnabledCheckbox = NSButton(checkboxWithTitle: L("notification_sound_checkbox"), target: self, action: #selector(settingsChanged))
         stackView.addArrangedSubview(soundEnabledCheckbox)
         
         // Quiet hours
-        quietHoursCheckbox = NSButton(checkboxWithTitle: "Enable quiet hours", target: self, action: #selector(settingsChanged))
+        quietHoursCheckbox = NSButton(checkboxWithTitle: L("notification_quiet_hours_checkbox"), target: self, action: #selector(settingsChanged))
         stackView.addArrangedSubview(quietHoursCheckbox)
         
         let quietHoursContainer = NSView()
-        let fromLabel = NSTextField(labelWithString: "From:")
-        let toLabel = NSTextField(labelWithString: "To:")
+        let fromLabel = NSTextField(labelWithString: L("notification_quiet_hours_from"))
+        let toLabel = NSTextField(labelWithString: L("notification_quiet_hours_to"))
         
         startHourPopup = NSPopUpButton()
         endHourPopup = NSPopUpButton()

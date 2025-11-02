@@ -28,7 +28,7 @@ public struct Scholar: Codable, Identifiable {
     
     public init(id: String, name: String = "") {
         self.id = id
-        self.name = name.isEmpty ? "学者 \(id.prefix(8))" : name
+        self.name = name.isEmpty ? L("default_scholar_name", String(id.prefix(8))) : name
         self.citations = nil
         self.lastUpdated = nil
     }
@@ -54,13 +54,13 @@ class GoogleScholarService {
         var errorDescription: String? {
             switch self {
             case .invalidURL:
-                return "无效的Google Scholar URL"
+                return L("error_invalid_url")
             case .noData:
-                return "无法获取数据"
+                return L("error_no_data")
             case .parsingError:
-                return "解析数据失败"
+                return L("error_parsing_error")
             case .networkError(let error):
-                return "网络错误: \(error.localizedDescription)"
+                return L("error_network_error", error.localizedDescription)
             }
         }
     }
@@ -164,7 +164,7 @@ class GoogleScholarService {
                 // 检查是否是超时错误
                 if (error as NSError).code == NSURLErrorTimedOut {
                     print("⏰ Google Scholar请求超时: \(scholarId)")
-                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: -1001, userInfo: [NSLocalizedDescriptionKey: "请求超时，请检查网络连接"]))))
+                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: -1001, userInfo: [NSLocalizedDescriptionKey: L("network_timeout_message")]))))
                 } else {
                     completion(.failure(.networkError(error)))
                 }
@@ -175,11 +175,11 @@ class GoogleScholarService {
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 429 {
                     print("🚦 Google Scholar访问频率限制: \(scholarId)")
-                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: 429, userInfo: [NSLocalizedDescriptionKey: "访问过于频繁，请稍后再试"]))))
+                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: 429, userInfo: [NSLocalizedDescriptionKey: L("rate_limit_message")]))))
                     return
                 } else if httpResponse.statusCode >= 400 {
                     print("❌ HTTP错误 \(httpResponse.statusCode): \(scholarId)")
-                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: "服务器错误: \(httpResponse.statusCode)"]))))
+                    completion(.failure(.networkError(NSError(domain: "GoogleScholarService", code: httpResponse.statusCode, userInfo: [NSLocalizedDescriptionKey: L("server_error_message", httpResponse.statusCode)]))))
                     return
                 }
             }
@@ -242,7 +242,7 @@ class GoogleScholarService {
                let range = Range(match.range(at: 1), in: htmlString) {
                 let citationString = String(htmlString[range])
                 if let count = Int(citationString) {
-                    let finalName = scholarName.isEmpty ? "未知学者" : scholarName
+                    let finalName = scholarName.isEmpty ? L("unknown_scholar") : scholarName
                     completion(.success((name: finalName, citations: count)))
                     return
                 }
@@ -411,7 +411,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private let scholarService = GoogleScholarService()
     private var settingsWindowController: SettingsWindowController?
-    private var chartsWindowController: ChartsWindowController?
+    private var chartsWindowController: NSWindowController?
     private var scholars: [Scholar] = []
     private var currentCitations: [String: Int] = [:]
     private let backgroundDataService = BackgroundDataCollectionService.shared
@@ -583,9 +583,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarItem.isVisible = true
         
         if let button = statusBarItem.button {
+            button.image = nil
+            button.imagePosition = .noImage
+            button.toolTip = L("tooltip_citetrack")
             button.title = "∞"
             button.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
-            button.toolTip = "CiteTrack - Google Scholar引用量监控"
         }
     }
     
@@ -610,7 +612,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.removeAllItems()
         
-        let titleItem = NSMenuItem(title: "CiteTrack", action: nil, keyEquivalent: "")
+        let titleItem = NSMenuItem(title: L("app_name"), action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
         
@@ -618,7 +620,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         if isUpdating {
             // 显示更新中状态
-            let updatingItem = NSMenuItem(title: "updating···", action: nil, keyEquivalent: "")
+            let updatingItem = NSMenuItem(title: L("status_updating"), action: nil, keyEquivalent: "")
             updatingItem.isEnabled = false
             menu.addItem(updatingItem)
         } else if scholars.isEmpty {
@@ -639,28 +641,46 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         let refreshItem = NSMenuItem(title: L("menu_manual_update"), action: #selector(refreshCitations), keyEquivalent: "r")
         refreshItem.target = self
+        if #available(macOS 11.0, *) {
+            refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+        }
         menu.addItem(refreshItem)
         
         let settingsItem = NSMenuItem(title: L("menu_preferences"), action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
+        if #available(macOS 11.0, *) {
+            settingsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
+        }
         menu.addItem(settingsItem)
         
         let chartsItem = NSMenuItem(title: L("menu_charts"), action: #selector(showCharts), keyEquivalent: "")
         chartsItem.target = self
+        if #available(macOS 11.0, *) {
+            chartsItem.image = NSImage(systemSymbolName: "rectangle.grid.2x2", accessibilityDescription: nil)
+        }
         menu.addItem(chartsItem)
         
         menu.addItem(NSMenuItem.separator())
         
         let checkForUpdatesItem = NSMenuItem(title: L("menu_check_updates"), action: #selector(checkForUpdates), keyEquivalent: "")
         checkForUpdatesItem.target = self
+        if #available(macOS 11.0, *) {
+            checkForUpdatesItem.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
+        }
         menu.addItem(checkForUpdatesItem)
         
         let aboutItem = NSMenuItem(title: L("menu_about"), action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
+        if #available(macOS 11.0, *) {
+            aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        }
         menu.addItem(aboutItem)
         
         let quitItem = NSMenuItem(title: L("menu_quit"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
+        if #available(macOS 11.0, *) {
+            quitItem.image = NSImage(systemSymbolName: "power", accessibilityDescription: nil)
+        }
         menu.addItem(quitItem)
     }
     
@@ -861,17 +881,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         
-        print("AppDelegate: Creating charts window...")
-        
-        // 创建新的ChartsWindowController实例
-        print("AppDelegate: Creating new ChartsWindowController")
-        chartsWindowController = ChartsWindowController()
-        
+        print("AppDelegate: Attempting to create modern charts window controller")
+
+        if let modernController = instantiateModernChartsWindowController() {
+            chartsWindowController = modernController
+            print("AppDelegate: Modern charts window controller created successfully")
+        } else {
+            print("AppDelegate: Falling back to legacy ChartsWindowController")
+            chartsWindowController = ChartsWindowController()
+        }
+
         guard chartsWindowController != nil else {
-            print("AppDelegate: ERROR - Failed to create ChartsWindowController")
+            print("AppDelegate: ERROR - Failed to create charts window controller")
             let alert = NSAlert()
-            alert.messageText = "Charts Error"
-            alert.informativeText = "Failed to create charts window. Please try again."
+            alert.messageText = L("charts_error_title")
+            alert.informativeText = L("charts_error_message")
             alert.alertStyle = .critical
             alert.runModal()
             return
@@ -879,6 +903,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         print("AppDelegate: Showing charts window...")
         chartsWindowController?.showWindow(self)
+
+        if chartsWindowController is ChartsWindowController {
+            chartsWindowController?.window?.delegate = self
+        }
         print("AppDelegate: Charts window shown successfully")
     }
     
@@ -976,6 +1004,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+}
+
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        if let window = notification.object as? NSWindow,
+           window == chartsWindowController?.window {
+            chartsWindowDidClose()
+        }
+    }
+}
+
+// MARK: - Modern Charts Factory
+private extension AppDelegate {
+    func instantiateModernChartsWindowController() -> NSWindowController? {
+        let moduleName = Bundle.main.infoDictionary?["CFBundleName"] as? String ?? ""
+        let candidates = [
+            "\(moduleName).ModernChartsWindowController",
+            "ModernChartsWindowController"
+        ]
+        for name in candidates {
+            if let modernType = NSClassFromString(name) as? NSWindowController.Type {
+                let controller = modernType.init(window: nil)
+                return controller
+            }
+        }
+        return nil
     }
 }
 

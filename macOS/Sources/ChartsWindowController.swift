@@ -24,7 +24,7 @@ class ChartsWindowController: NSWindowController {
         )
         
         window.center()
-        window.title = "CiteTrack - Citation Charts"
+        window.title = L("charts_window_title")
         window.isReleasedWhenClosed = false
         window.minSize = NSSize(width: 600, height: 400)
         

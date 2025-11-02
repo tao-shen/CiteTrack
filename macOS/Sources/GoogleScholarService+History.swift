@@ -380,7 +380,7 @@ class BackgroundDataCollectionService {
     func performManualCollection(completion: @escaping (Result<[String: Int], Error>) -> Void) {
         let scholars = preferencesManager.scholars
         guard !scholars.isEmpty else {
-            completion(.failure(NSError(domain: "BackgroundDataCollectionService", code: 1, userInfo: [NSLocalizedDescriptionKey: "No scholars to update"])))
+            completion(.failure(NSError(domain: "BackgroundDataCollectionService", code: 1, userInfo: [NSLocalizedDescriptionKey: L("error_no_scholars_to_update")])) )
             return
         }
         

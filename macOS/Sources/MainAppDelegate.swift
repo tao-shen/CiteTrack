@@ -1,6 +1,8 @@
 import Cocoa
 import SwiftUI
+#if !APP_STORE
 import Sparkle
+#endif
 
 // MARK: - 现代化macOS 26风格的主应用代理
 class MainAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
@@ -10,14 +12,20 @@ class MainAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     let iCloudSyncManager = iCloudSyncManager.shared
     let preferencesManager = PreferencesManager.shared
     
-    // Sparkle更新检查器
+    // Sparkle更新检查器（仅非App Store版本）
+    #if !APP_STORE
     private var updaterController: SPUStandardUpdaterController?
+    #endif
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         print("🚀 [CiteTrack] 应用程序启动 - macOS 26优化版本")
         
-        // 初始化Sparkle自动更新
+        // 初始化Sparkle自动更新（仅非App Store版本）
+        #if !APP_STORE
         setupSparkleUpdater()
+        #else
+        print("ℹ️ [CiteTrack] App Store版本 - 自动更新已禁用")
+        #endif
         
         // 设置状态栏图标
         setupStatusBar()
@@ -31,8 +39,9 @@ class MainAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         print("✅ [CiteTrack] 应用程序启动完成")
     }
     
-    // MARK: - Sparkle自动更新设置
+    // MARK: - Sparkle自动更新设置（仅非App Store版本）
     
+    #if !APP_STORE
     private func setupSparkleUpdater() {
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
@@ -41,6 +50,7 @@ class MainAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
         print("✅ [Sparkle] 自动更新已启用")
     }
+    #endif
     
     // MARK: - 状态栏设置
     
@@ -118,7 +128,9 @@ class MainAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // 同步和更新
         menu.addItem(NSMenuItem(title: "同步到iCloud", action: #selector(syncToiCloud), keyEquivalent: ""))
+        #if !APP_STORE
         menu.addItem(NSMenuItem(title: "检查更新...", action: #selector(checkForUpdates), keyEquivalent: ""))
+        #endif
         
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "退出 CiteTrack", action: #selector(quitApp), keyEquivalent: "q"))
@@ -184,10 +196,12 @@ class MainAppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
     
+    #if !APP_STORE
     @objc private func checkForUpdates() {
         print("🔄 [Menu] 检查更新")
         updaterController?.checkForUpdates(nil)
     }
+    #endif
     
     @objc private func showAbout() {
         NSApp.orderFrontStandardAboutPanel(nil)

@@ -66,16 +66,51 @@ class ValidatedTextField: EditableTextField {
 
 // MARK: - Settings Window Controller
 class SettingsWindowController: NSWindowController {
-    private var tabView: NSTabView!
+    // UI Components
+    private var sidebarListView: NSTableView!
+    private var contentContainerView: NSView!
     private var tableView: NSTableView!
+    
+    // Data
     private var scholars: [Scholar] = []
     private let googleScholarService = GoogleScholarService()
+    
+    // Controls
     private var updateIntervalPopup: NSPopUpButton!
     private var showInDockCheckbox: NSButton!
     private var showInMenuBarCheckbox: NSButton!
     private var launchAtLoginCheckbox: NSButton!
     private var languagePopup: NSPopUpButton!
-    // Charts functionality moved to separate window
+    
+    // Sidebar items
+    private enum SidebarItem: CaseIterable {
+        case general
+        case scholars
+        case data
+        
+        var titleKey: String {
+            switch self {
+            case .general: return "sidebar_general"
+            case .scholars: return "sidebar_scholars"
+            case .data: return "sidebar_data"
+            }
+        }
+        
+        var icon: String {
+            switch self {
+            case .general: return "gearshape"
+            case .scholars: return "person.2"
+            case .data: return "externaldrive"
+            }
+        }
+        
+        var localizedTitle: String {
+            return L(titleKey)
+        }
+    }
+    
+    private let sidebarItems: [SidebarItem] = SidebarItem.allCases
+    private var selectedSidebarItem: SidebarItem = .general
     
     override init(window: NSWindow?) {
         super.init(window: window)
@@ -118,16 +153,17 @@ class SettingsWindowController: NSWindowController {
     
     private func setupWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
-            styleMask: [.titled, .closable, .resizable],
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 540),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         
         window.center()
         window.title = L("settings_title")
+        window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 500, height: 400)
+        window.minSize = NSSize(width: 680, height: 480)
         
         self.window = window
     }
@@ -141,408 +177,184 @@ class SettingsWindowController: NSWindowController {
         let contentView = NSView()
         window.contentView = contentView
         
-        // 创建标签视图
-        tabView = NSTabView()
-        tabView.translatesAutoresizingMaskIntoConstraints = false
-        tabView.tabViewType = .topTabsBezelBorder
-        contentView.addSubview(tabView)
+        // 创建主分割视图
+        let splitView = NSSplitView()
+        splitView.isVertical = true
+        splitView.dividerStyle = .thin
+        splitView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(splitView)
         
-        // 设置约束
+        // 创建侧边栏
+        let sidebarContainer = createSidebar()
+        splitView.addArrangedSubview(sidebarContainer)
+        
+        // 创建内容区域
+        contentContainerView = NSView()
+        contentContainerView.translatesAutoresizingMaskIntoConstraints = false
+        splitView.addArrangedSubview(contentContainerView)
+        
+        // 设置分割视图约束
         NSLayoutConstraint.activate([
-            tabView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
-            tabView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            tabView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            tabView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20)
+            splitView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            splitView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            splitView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            splitView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            
+            // 侧边栏宽度
+            sidebarContainer.widthAnchor.constraint(equalToConstant: 200)
         ])
         
-        setupGeneralTab()
-        setupScholarTab()
-        setupDataManagementTab()
-        // Charts tab removed - now available as separate window from main menu
+        // 设置分割视图的优先级，防止侧边栏被压缩
+        splitView.setHoldingPriority(.defaultHigh, forSubviewAt: 0)
+        splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
+        
+        // 所有UI创建完成后，显示默认内容并选择侧边栏第一项
+        showContent(for: .general)
+        // 使用 DispatchQueue 延迟选择，避免在初始化时触发通知
+        DispatchQueue.main.async { [weak self] in
+            self?.sidebarListView.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        }
     }
     
-    private func setupGeneralTab() {
-        let generalTabItem = NSTabViewItem()
-        generalTabItem.label = L("tab_general")
+    // MARK: - Sidebar
+    
+    private func createSidebar() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
         
-        let generalView = NSView()
-        generalTabItem.view = generalView
+        // 创建滚动视图
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        container.addSubview(scrollView)
         
-        setupGeneralSettings(in: generalView)
+        // 创建表格视图
+        sidebarListView = NSTableView()
+        sidebarListView.style = .sourceList
+        sidebarListView.dataSource = self
+        sidebarListView.delegate = self
+        sidebarListView.headerView = nil
+        sidebarListView.backgroundColor = .clear
+        sidebarListView.selectionHighlightStyle = .sourceList
+        sidebarListView.allowsEmptySelection = false
+        sidebarListView.allowsMultipleSelection = false
         
-        tabView.addTabViewItem(generalTabItem)
+        // 添加单列
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("SidebarColumn"))
+        column.width = 200
+        sidebarListView.addTableColumn(column)
+        
+        scrollView.documentView = sidebarListView
+        
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor, constant: 52), // 为标题栏留空间
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        
+        // 不在这里选择，等待 setupUI 完成后再选择
+        
+        return container
     }
     
-    private func setupScholarTab() {
-        let scholarTabItem = NSTabViewItem()
-        scholarTabItem.label = L("tab_scholars")
+    private func showContent(for item: SidebarItem) {
+        selectedSidebarItem = item
         
-        let scholarView = NSView()
-        scholarTabItem.view = scholarView
+        // 确保 contentContainerView 已经创建
+        guard let containerView = contentContainerView else { return }
         
-        setupScholarManagement(in: scholarView)
+        // 清除当前内容
+        containerView.subviews.forEach { $0.removeFromSuperview() }
         
-        tabView.addTabViewItem(scholarTabItem)
+        // 创建滚动视图
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        containerView.addSubview(scrollView)
+        
+        // 创建内容视图
+        let contentView = NSView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = contentView
+        
+        NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 52), // 为标题栏留空间
+            scrollView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+            
+            contentView.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            contentView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+            contentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+            contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor)
+        ])
+        
+        // 根据选择的项目显示内容
+        switch item {
+        case .general:
+            setupGeneralSettings(in: contentView)
+        case .scholars:
+            setupScholarManagement(in: contentView)
+        case .data:
+            setupDataManagementSection(in: contentView)
+        }
     }
-    
-    private func setupDataManagementTab() {
-        let dataTabItem = NSTabViewItem()
-        dataTabItem.label = "Data"  // Will be localized
-        
-        let dataView = NSView()
-        dataTabItem.view = dataView
-        
-        setupDataManagementSection(in: dataView)
-        
-        tabView.addTabViewItem(dataTabItem)
-    }
-    
-    // Charts tab functionality moved to separate ChartsWindowController
-    // Access via main menu > Charts
     
     private func setupDataManagementSection(in parentView: NSView) {
         // 创建主容器
-        let mainContainer = NSStackView()
-        mainContainer.orientation = .vertical
-        mainContainer.spacing = 20
-        mainContainer.alignment = .leading
-        mainContainer.translatesAutoresizingMaskIntoConstraints = false
-        parentView.addSubview(mainContainer)
+        let mainStack = NSStackView()
+        mainStack.orientation = .vertical
+        mainStack.spacing = 32
+        mainStack.alignment = .leading
+        mainStack.translatesAutoresizingMaskIntoConstraints = false
+        parentView.addSubview(mainStack)
         
-        // 标题区域
-        let titleContainer = createDataTitleContainer()
-        mainContainer.addArrangedSubview(titleContainer)
+        // 导出数据
+        let exportSection = createSimpleSection(title: L("section_data_export"), content: [
+            createButtonRowModern(
+                label: L("label_export_citation_data"),
+                button: {
+                    let button = NSButton(title: L("button_export_data") + "...", target: self, action: #selector(exportData))
+                    button.bezelStyle = .rounded
+                    button.font = NSFont.systemFont(ofSize: 13)
+                    return button
+                }()
+            )
+        ])
+        mainStack.addArrangedSubview(exportSection)
         
-        // 数据概览区域
-        let overviewContainer = createDataOverviewContainer()
-        mainContainer.addArrangedSubview(overviewContainer)
-        
-        // 操作按钮区域
-        let actionsContainer = createDataActionsContainer()
-        mainContainer.addArrangedSubview(actionsContainer)
+        // 导入数据
+        let importSection = createSimpleSection(title: L("section_data_import"), content: [
+            createButtonRowModern(
+                label: L("label_import_citation_data"),
+                button: {
+                    let button = NSButton(title: L("button_import") + "...", target: self, action: #selector(importData))
+                    button.bezelStyle = .rounded
+                    button.font = NSFont.systemFont(ofSize: 13)
+                    return button
+                }()
+            )
+        ])
+        mainStack.addArrangedSubview(importSection)
         
         // 设置约束
         NSLayoutConstraint.activate([
-            mainContainer.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 16),
-            mainContainer.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 16),
-            mainContainer.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -16),
-            mainContainer.bottomAnchor.constraint(equalTo: parentView.bottomAnchor, constant: -16)
+            mainStack.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 20),
+            mainStack.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 40),
+            mainStack.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -40),
+            mainStack.bottomAnchor.constraint(lessThanOrEqualTo: parentView.bottomAnchor, constant: -20)
         ])
     }
     
-    private func createDataTitleContainer() -> NSView {
-        let titleView = NSView()
-        titleView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let titleLabel = NSTextField(labelWithString: "数据管理")
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 20)
-        titleLabel.textColor = .labelColor
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleView.addSubview(titleLabel)
-        
-        let subtitleLabel = NSTextField(labelWithString: "管理您的引用数据，包括导出、导入和同步功能")
-        subtitleLabel.font = NSFont.systemFont(ofSize: 14)
-        subtitleLabel.textColor = .secondaryLabelColor
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleView.addSubview(subtitleLabel)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: titleView.topAnchor),
-            titleLabel.leadingAnchor.constraint(equalTo: titleView.leadingAnchor),
-            titleLabel.trailingAnchor.constraint(equalTo: titleView.trailingAnchor),
-            
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
-            subtitleLabel.leadingAnchor.constraint(equalTo: titleView.leadingAnchor),
-            subtitleLabel.trailingAnchor.constraint(equalTo: titleView.trailingAnchor),
-            subtitleLabel.bottomAnchor.constraint(equalTo: titleView.bottomAnchor),
-            
-            titleView.heightAnchor.constraint(equalToConstant: 60)
-        ])
-        
-        return titleView
-    }
-    
-    private func createDataOverviewContainer() -> NSView {
-        let overviewView = NSView()
-        overviewView.wantsLayer = true
-        overviewView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        overviewView.layer?.cornerRadius = 12
-        overviewView.layer?.borderWidth = 1
-        overviewView.layer?.borderColor = NSColor.separatorColor.cgColor
-        overviewView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let overviewStack = NSStackView()
-        overviewStack.orientation = .vertical
-        overviewStack.spacing = 16
-        overviewStack.alignment = .leading
-        overviewStack.translatesAutoresizingMaskIntoConstraints = false
-        overviewView.addSubview(overviewStack)
-        
-        // 概览标题
-        let overviewTitle = NSTextField(labelWithString: "数据概览")
-        overviewTitle.font = NSFont.boldSystemFont(ofSize: 16)
-        overviewTitle.textColor = .labelColor
-        overviewStack.addArrangedSubview(overviewTitle)
-        
-        // 数据统计网格
-        let statsGrid = createDataStatsGrid()
-        overviewStack.addArrangedSubview(statsGrid)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            overviewStack.topAnchor.constraint(equalTo: overviewView.topAnchor, constant: 16),
-            overviewStack.leadingAnchor.constraint(equalTo: overviewView.leadingAnchor, constant: 16),
-            overviewStack.trailingAnchor.constraint(equalTo: overviewView.trailingAnchor, constant: -16),
-            overviewStack.bottomAnchor.constraint(equalTo: overviewView.bottomAnchor, constant: -16)
-        ])
-        
-        return overviewView
-    }
-    
-    private func createDataStatsGrid() -> NSView {
-        let gridView = NSView()
-        gridView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let gridStack = NSStackView()
-        gridStack.orientation = .horizontal
-        gridStack.spacing = 20
-        gridStack.distribution = .fillEqually
-        gridStack.translatesAutoresizingMaskIntoConstraints = false
-        gridView.addSubview(gridStack)
-        
-        // 学者数量统计
-        let scholarsCount = scholars.count
-        let scholarsStat = createDataStatItem(
-            title: "学者数量",
-            value: "\(scholarsCount)",
-            icon: "person.3",
-            color: .systemBlue
-        )
-        gridStack.addArrangedSubview(scholarsStat)
-        
-        // 历史记录数量统计
-        let historyCount = getHistoryRecordCount()
-        let historyStat = createDataStatItem(
-            title: "历史记录",
-            value: "\(historyCount)",
-            icon: "clock.arrow.circlepath",
-            color: .systemGreen
-        )
-        gridStack.addArrangedSubview(historyStat)
-        
-        // 数据大小统计
-        let dataSize = getDataSize()
-        let sizeStat = createDataStatItem(
-            title: "数据大小",
-            value: dataSize,
-            icon: "externaldrive",
-            color: .systemOrange
-        )
-        gridStack.addArrangedSubview(sizeStat)
-        
-        // 最后备份时间
-        let lastBackup = getLastBackupTime()
-        let backupStat = createDataStatItem(
-            title: "最后备份",
-            value: lastBackup,
-            icon: "icloud.and.arrow.up",
-            color: .systemPurple
-        )
-        gridStack.addArrangedSubview(backupStat)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            gridStack.topAnchor.constraint(equalTo: gridView.topAnchor),
-            gridStack.leadingAnchor.constraint(equalTo: gridView.leadingAnchor),
-            gridStack.trailingAnchor.constraint(equalTo: gridView.trailingAnchor),
-            gridStack.bottomAnchor.constraint(equalTo: gridView.bottomAnchor)
-        ])
-        
-        return gridView
-    }
-    
-    private func createDataStatItem(title: String, value: String, icon: String, color: NSColor) -> NSView {
-        let itemView = NSView()
-        itemView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let itemStack = NSStackView()
-        itemStack.orientation = .vertical
-        itemStack.spacing = 8
-        itemStack.alignment = .centerX
-        itemStack.translatesAutoresizingMaskIntoConstraints = false
-        itemView.addSubview(itemStack)
-        
-        // 图标
-        let iconView = NSImageView()
-        iconView.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
-        // 图标颜色设置（暂时禁用，因为API兼容性问题）
-        itemStack.addArrangedSubview(iconView)
-        
-        // 数值
-        let valueLabel = NSTextField(labelWithString: value)
-        valueLabel.font = NSFont.boldSystemFont(ofSize: 18)
-        valueLabel.textColor = .labelColor
-        valueLabel.alignment = .center
-        itemStack.addArrangedSubview(valueLabel)
-        
-        // 标题
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = NSFont.systemFont(ofSize: 12)
-        titleLabel.textColor = .secondaryLabelColor
-        titleLabel.alignment = .center
-        itemStack.addArrangedSubview(titleLabel)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            itemStack.centerXAnchor.constraint(equalTo: itemView.centerXAnchor),
-            itemStack.centerYAnchor.constraint(equalTo: itemView.centerYAnchor),
-            itemStack.leadingAnchor.constraint(greaterThanOrEqualTo: itemView.leadingAnchor, constant: 8),
-            itemStack.trailingAnchor.constraint(lessThanOrEqualTo: itemView.trailingAnchor, constant: -8)
-        ])
-        
-        return itemView
-    }
-    
-    private func createDataActionsContainer() -> NSView {
-        let actionsView = NSView()
-        actionsView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let actionsStack = NSStackView()
-        actionsStack.orientation = .vertical
-        actionsStack.spacing = 16
-        actionsStack.alignment = .leading
-        actionsStack.translatesAutoresizingMaskIntoConstraints = false
-        actionsView.addSubview(actionsStack)
-        
-        // 导出数据部分
-        let exportSection = createActionSection(
-            title: "导出数据",
-            description: "将您的引用数据导出为CSV或JSON格式",
-            buttonTitle: "导出数据...",
-            buttonAction: #selector(exportData),
-            icon: "square.and.arrow.up"
-        )
-        actionsStack.addArrangedSubview(exportSection)
-        
-        // 导入数据部分
-        let importSection = createActionSection(
-            title: "导入数据",
-            description: "从备份文件或iOS设备导入数据",
-            buttonTitle: "导入数据...",
-            buttonAction: #selector(importData),
-            icon: "square.and.arrow.down"
-        )
-        actionsStack.addArrangedSubview(importSection)
-        
-        // iCloud同步部分
-        let syncSection = createActionSection(
-            title: "iCloud同步",
-            description: "与iCloud同步您的数据，实现跨设备访问",
-            buttonTitle: "管理iCloud同步",
-            buttonAction: #selector(manageiCloudSync),
-            icon: "icloud.and.arrow.up"
-        )
-        actionsStack.addArrangedSubview(syncSection)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            actionsStack.topAnchor.constraint(equalTo: actionsView.topAnchor),
-            actionsStack.leadingAnchor.constraint(equalTo: actionsView.leadingAnchor),
-            actionsStack.trailingAnchor.constraint(equalTo: actionsView.trailingAnchor),
-            actionsStack.bottomAnchor.constraint(equalTo: actionsView.bottomAnchor)
-        ])
-        
-        return actionsView
-    }
-    
-    private func createActionSection(title: String, description: String, buttonTitle: String, buttonAction: Selector, icon: String) -> NSView {
-        let sectionView = NSView()
-        sectionView.wantsLayer = true
-        sectionView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        sectionView.layer?.cornerRadius = 8
-        sectionView.layer?.borderWidth = 1
-        sectionView.layer?.borderColor = NSColor.separatorColor.cgColor
-        sectionView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let sectionStack = NSStackView()
-        sectionStack.orientation = .horizontal
-        sectionStack.spacing = 16
-        sectionStack.alignment = .centerY
-        sectionStack.translatesAutoresizingMaskIntoConstraints = false
-        sectionView.addSubview(sectionStack)
-        
-        // 图标
-        let iconView = NSImageView()
-        iconView.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
-        // 图标颜色设置（暂时禁用，因为API兼容性问题）
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        sectionStack.addArrangedSubview(iconView)
-        
-        // 文本信息
-        let textStack = NSStackView()
-        textStack.orientation = .vertical
-        textStack.spacing = 4
-        textStack.alignment = .leading
-        textStack.translatesAutoresizingMaskIntoConstraints = false
-        sectionStack.addArrangedSubview(textStack)
-        
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 14)
-        titleLabel.textColor = .labelColor
-        textStack.addArrangedSubview(titleLabel)
-        
-        let descLabel = NSTextField(labelWithString: description)
-        descLabel.font = NSFont.systemFont(ofSize: 12)
-        descLabel.textColor = .secondaryLabelColor
-        textStack.addArrangedSubview(descLabel)
-        
-        // 弹性空间
-        let spacer = NSView()
-        spacer.translatesAutoresizingMaskIntoConstraints = false
-        sectionStack.addArrangedSubview(spacer)
-        
-        // 按钮
-        let actionButton = NSButton(title: buttonTitle, target: self, action: buttonAction)
-        actionButton.bezelStyle = .rounded
-        sectionStack.addArrangedSubview(actionButton)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            sectionStack.topAnchor.constraint(equalTo: sectionView.topAnchor, constant: 16),
-            sectionStack.leadingAnchor.constraint(equalTo: sectionView.leadingAnchor, constant: 16),
-            sectionStack.trailingAnchor.constraint(equalTo: sectionView.trailingAnchor, constant: -16),
-            sectionStack.bottomAnchor.constraint(equalTo: sectionView.bottomAnchor, constant: -16),
-            
-            sectionView.heightAnchor.constraint(equalToConstant: 80)
-        ])
-        
-        return sectionView
-    }
-    
-    // MARK: - Data Management Helper Methods
-    private func getHistoryRecordCount() -> Int {
-        // 获取历史记录数量的逻辑
-        return 0 // 临时返回0，实际应该从Core Data获取
-    }
-    
-    private func getDataSize() -> String {
-        // 获取数据大小的逻辑
-        return "0 KB" // 临时返回，实际应该计算数据大小
-    }
-    
-    private func getLastBackupTime() -> String {
-        // 获取最后备份时间的逻辑
-        return "从未备份" // 临时返回，实际应该从用户偏好设置获取
-    }
-    
-    @objc private func manageiCloudSync() {
-        // 管理iCloud同步的逻辑
-        let alert = NSAlert()
-        alert.messageText = "iCloud同步管理"
-        alert.informativeText = "这里可以管理iCloud同步设置"
-        alert.runModal()
-    }
     
     @objc private func exportData() {
         let savePanel = NSSavePanel()
@@ -564,12 +376,15 @@ class SettingsWindowController: NSWindowController {
                     case .success(let data):
                         do {
                             try data.write(to: url)
-                            self.showAlert(title: "Export Successful", message: "Data exported to \(url.lastPathComponent)")
+                            self.showAlert(
+                                title: L("export_successful"),
+                                message: L("export_successful_message", url.lastPathComponent, data.count)
+                            )
                         } catch {
-                            self.showAlert(title: "Export Failed", message: error.localizedDescription)
+                            self.showAlert(title: L("export_failed"), message: error.localizedDescription)
                         }
                     case .failure(let error):
-                        self.showAlert(title: "Export Failed", message: error.localizedDescription)
+                        self.showAlert(title: L("export_failed"), message: error.localizedDescription)
                     }
                 }
             }
@@ -584,7 +399,7 @@ class SettingsWindowController: NSWindowController {
             openPanel.allowedFileTypes = ["json"]
         }
         openPanel.allowsMultipleSelection = false
-        openPanel.message = "选择从iOS导出的数据文件（citation_data.json 或 ios_data.json）"
+        openPanel.message = L("import_file_panel_message")
         
         openPanel.begin { response in
             guard response == .OK, let url = openPanel.urls.first else { return }
@@ -595,14 +410,14 @@ class SettingsWindowController: NSWindowController {
                 
                 DispatchQueue.main.async(qos: .userInitiated) {
                     self.showAlert(
-                        title: "导入成功",
-                        message: "成功导入 \(result.importedScholars) 位学者和 \(result.importedHistory) 条历史记录"
+                        title: L("import_success_title"),
+                        message: L("import_success_message", result.importedScholars, result.importedHistory)
                     )
                     self.loadData()
                 }
             } catch {
                 DispatchQueue.main.async(qos: .userInitiated) {
-                    self.showAlert(title: "导入失败", message: error.localizedDescription)
+                    self.showAlert(title: L("import_failed_title"), message: error.localizedDescription)
                 }
             }
         }
@@ -613,9 +428,9 @@ class SettingsWindowController: NSWindowController {
             DispatchQueue.main.async(qos: .userInitiated) {
                 switch result {
                 case .success:
-                    self.showAlert(title: "Sync Successful", message: "Data exported to iCloud successfully")
+                    self.showAlert(title: L("sync_success_title"), message: L("sync_export_success_message"))
                 case .failure(let error):
-                    self.showAlert(title: "Sync Failed", message: error.localizedDescription)
+                    self.showAlert(title: L("sync_failed_title"), message: error.localizedDescription)
                 }
             }
         }
@@ -626,10 +441,10 @@ class SettingsWindowController: NSWindowController {
             DispatchQueue.main.async(qos: .userInitiated) {
                 switch result {
                 case .success:
-                    self.showAlert(title: "Sync Successful", message: "Data imported from iCloud successfully")
+                    self.showAlert(title: L("sync_success_title"), message: L("sync_import_success_message"))
                     self.loadData()
                 case .failure(let error):
-                    self.showAlert(title: "Sync Failed", message: error.localizedDescription)
+                    self.showAlert(title: L("sync_failed_title"), message: error.localizedDescription)
                 }
             }
         }
@@ -640,7 +455,7 @@ class SettingsWindowController: NSWindowController {
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: L("button_ok"))
         if let window = window {
             alert.beginSheetModal(for: window)
         } else {
@@ -649,354 +464,215 @@ class SettingsWindowController: NSWindowController {
     }
     
     private func setupGeneralSettings(in parentView: NSView) {
-        // 创建主滚动视图以支持内容过多时的滚动
-        let scrollView = NSScrollView()
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-        parentView.addSubview(scrollView)
+        // 创建主容器
+        let mainStack = NSStackView()
+        mainStack.orientation = .vertical
+        mainStack.spacing = 32
+        mainStack.alignment = .leading
+        mainStack.translatesAutoresizingMaskIntoConstraints = false
+        parentView.addSubview(mainStack)
         
-        // 创建内容视图
-        let contentView = NSView()
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.documentView = contentView
+        // 应用设置
+        let appSection = createSimpleSection(title: L("section_app_settings"), content: [
+            createSettingRowModern(
+                label: L("setting_update_interval"),
+                control: {
+                    updateIntervalPopup = NSPopUpButton()
+                    updateIntervalPopup.addItem(withTitle: L("interval_30min"))
+                    updateIntervalPopup.addItem(withTitle: L("interval_1hour"))
+                    updateIntervalPopup.addItem(withTitle: L("interval_2hours"))
+                    updateIntervalPopup.addItem(withTitle: L("interval_6hours"))
+                    updateIntervalPopup.addItem(withTitle: L("interval_12hours"))
+                    updateIntervalPopup.addItem(withTitle: L("interval_1day"))
+                    updateIntervalPopup.addItem(withTitle: L("interval_3days"))
+                    updateIntervalPopup.addItem(withTitle: L("interval_1week"))
+                    updateIntervalPopup.font = NSFont.systemFont(ofSize: 13)
+                    let currentInterval = PreferencesManager.shared.updateInterval
+                    let index = intervalToIndex(currentInterval)
+                    updateIntervalPopup.selectItem(at: index)
+                    updateIntervalPopup.target = self
+                    updateIntervalPopup.action = #selector(updateIntervalChanged)
+                    return updateIntervalPopup
+                }()
+            ),
+            createSettingRowModern(
+                label: L("setting_language"),
+                control: {
+                    languagePopup = NSPopUpButton()
+                    languagePopup.font = NSFont.systemFont(ofSize: 13)
+                    setupLanguagePopup()
+                    return languagePopup
+                }()
+            )
+        ])
+        mainStack.addArrangedSubview(appSection)
         
-        // 创建主布局容器 - 使用水平布局分为两列
-        let mainContainer = NSStackView()
-        mainContainer.orientation = .horizontal
-        mainContainer.spacing = 32
-        mainContainer.alignment = .top
-        mainContainer.distribution = .fillEqually
-        mainContainer.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(mainContainer)
+        // 外观
+        let appearanceSection = createSimpleSection(title: L("section_display_options"), content: [
+            createCheckboxRowModern(
+                label: L("setting_show_in_dock"),
+                checkbox: {
+                    showInDockCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInDockChanged))
+                    showInDockCheckbox.state = PreferencesManager.shared.showInDock ? .on : .off
+                    return showInDockCheckbox
+                }()
+            ),
+            createCheckboxRowModern(
+                label: L("setting_show_in_menubar"),
+                checkbox: {
+                    showInMenuBarCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInMenuBarChanged))
+                    showInMenuBarCheckbox.state = PreferencesManager.shared.showInMenuBar ? .on : .off
+                    return showInMenuBarCheckbox
+                }()
+            )
+        ])
+        mainStack.addArrangedSubview(appearanceSection)
         
-        // 左列：应用设置和启动选项
-        let leftColumn = createLeftColumn()
-        mainContainer.addArrangedSubview(leftColumn)
+        // 启动
+        let startupSection = createSimpleSection(title: L("section_startup_options"), content: [
+            createCheckboxRowModern(
+                label: L("setting_launch_at_login"),
+                checkbox: {
+                    launchAtLoginCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(launchAtLoginChanged))
+                    launchAtLoginCheckbox.state = PreferencesManager.shared.launchAtLogin ? .on : .off
+                    return launchAtLoginCheckbox
+                }()
+            )
+        ])
+        mainStack.addArrangedSubview(startupSection)
         
-        // 右列：显示选项和iCloud同步
-        let rightColumn = createRightColumn()
-        mainContainer.addArrangedSubview(rightColumn)
+        // iCloud 同步
+        let iCloudSection = createSimpleSection(title: L("section_icloud_sync"), content: [
+            createCheckboxRowModern(
+                label: L("setting_icloud_sync_enabled"),
+                checkbox: {
+                    let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(iCloudSyncToggled))
+                    checkbox.state = PreferencesManager.shared.iCloudSyncEnabled ? .on : .off
+                    return checkbox
+                }()
+            ),
+            createButtonRowModern(
+                label: L("setting_open_icloud_folder"),
+                button: {
+                    let button = NSButton(title: L("button_open_folder"), target: self, action: #selector(openiCloudFolder))
+                    button.bezelStyle = .rounded
+                    button.font = NSFont.systemFont(ofSize: 13)
+                    objc_setAssociatedObject(self, "iCloudFolderButton", button, .OBJC_ASSOCIATION_RETAIN)
+                    return button
+                }()
+            )
+        ])
+        mainStack.addArrangedSubview(iCloudSection)
         
         // 设置约束
         NSLayoutConstraint.activate([
-            // 滚动视图约束
-            scrollView.topAnchor.constraint(equalTo: parentView.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: parentView.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: parentView.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: parentView.bottomAnchor),
-            
-            // 内容视图约束
-            contentView.topAnchor.constraint(equalTo: scrollView.topAnchor),
-            contentView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
-            contentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
-            contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
-            
-            // 主容器约束
-            mainContainer.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 24),
-            mainContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 24),
-            mainContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -24),
-            mainContainer.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -24)
-        ])
-    }
-    
-    private func createLeftColumn() -> NSView {
-        let columnView = NSView()
-        columnView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let columnStack = NSStackView()
-        columnStack.orientation = .vertical
-        columnStack.spacing = 24
-        columnStack.alignment = .leading
-        columnStack.translatesAutoresizingMaskIntoConstraints = false
-        columnView.addSubview(columnStack)
-        
-        // 应用设置部分
-        setupAppSettingsSection(in: columnStack)
-        columnStack.addArrangedSubview(createSeparator())
-        
-        // 启动选项部分
-        setupStartupSection(in: columnStack)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            columnStack.topAnchor.constraint(equalTo: columnView.topAnchor),
-            columnStack.leadingAnchor.constraint(equalTo: columnView.leadingAnchor),
-            columnStack.trailingAnchor.constraint(equalTo: columnView.trailingAnchor),
-            columnStack.bottomAnchor.constraint(lessThanOrEqualTo: columnView.bottomAnchor)
+            mainStack.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 20),
+            mainStack.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 40),
+            mainStack.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -40),
+            mainStack.bottomAnchor.constraint(lessThanOrEqualTo: parentView.bottomAnchor, constant: -20)
         ])
         
-        return columnView
-    }
-    
-    private func createRightColumn() -> NSView {
-        let columnView = NSView()
-        columnView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let columnStack = NSStackView()
-        columnStack.orientation = .vertical
-        columnStack.spacing = 24
-        columnStack.alignment = .leading
-        columnStack.translatesAutoresizingMaskIntoConstraints = false
-        columnView.addSubview(columnStack)
-        
-        // 显示选项部分
-        setupDisplaySection(in: columnStack)
-        columnStack.addArrangedSubview(createSeparator())
-        
-        // iCloud同步部分
-        setupiCloudSyncSection(in: columnStack)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            columnStack.topAnchor.constraint(equalTo: columnView.topAnchor),
-            columnStack.leadingAnchor.constraint(equalTo: columnView.leadingAnchor),
-            columnStack.trailingAnchor.constraint(equalTo: columnView.trailingAnchor),
-            columnStack.bottomAnchor.constraint(lessThanOrEqualTo: columnView.bottomAnchor)
-        ])
-        
-        return columnView
-    }
-    
-    private func setupStartupSection(in stackView: NSStackView) {
-        let sectionContainer = createSectionContainer()
-        
-        let titleLabel = createSectionTitle(L("section_startup_options"))
-        sectionContainer.addArrangedSubview(titleLabel)
-        
-        let launchContainer = createImprovedSettingRow(
-            label: L("setting_launch_at_login"),
-            description: "Automatically start CiteTrack when you log in",
-            control: {
-                launchAtLoginCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(launchAtLoginChanged))
-                launchAtLoginCheckbox.state = PreferencesManager.shared.launchAtLogin ? .on : .off
-                return launchAtLoginCheckbox
-            }()
-        )
-        sectionContainer.addArrangedSubview(launchContainer)
-        
-        stackView.addArrangedSubview(sectionContainer)
-    }
-    
-    private func setupAppSettingsSection(in stackView: NSStackView) {
-        let sectionContainer = createSectionContainer()
-        
-        let titleLabel = createSectionTitle(L("section_app_settings"))
-        sectionContainer.addArrangedSubview(titleLabel)
-        
-        let updateIntervalContainer = createImprovedSettingRow(
-            label: L("setting_update_interval"),
-            description: "How often to automatically check for citation updates",
-            control: {
-                updateIntervalPopup = NSPopUpButton()
-                updateIntervalPopup.addItem(withTitle: L("interval_30min"))
-                updateIntervalPopup.addItem(withTitle: L("interval_1hour"))
-                updateIntervalPopup.addItem(withTitle: L("interval_2hours"))
-                updateIntervalPopup.addItem(withTitle: L("interval_6hours"))
-                updateIntervalPopup.addItem(withTitle: L("interval_12hours"))
-                updateIntervalPopup.addItem(withTitle: L("interval_1day"))
-                updateIntervalPopup.addItem(withTitle: L("interval_3days"))
-                updateIntervalPopup.addItem(withTitle: L("interval_1week"))
-                
-                let currentInterval = PreferencesManager.shared.updateInterval
-                let index = intervalToIndex(currentInterval)
-                updateIntervalPopup.selectItem(at: index)
-                updateIntervalPopup.target = self
-                updateIntervalPopup.action = #selector(updateIntervalChanged)
-                return updateIntervalPopup
-            }()
-        )
-        sectionContainer.addArrangedSubview(updateIntervalContainer)
-        
-        let languageContainer = createImprovedSettingRow(
-            label: L("setting_language"),
-            description: "Choose your preferred language for the interface",
-            control: {
-                languagePopup = NSPopUpButton()
-                setupLanguagePopup()
-                return languagePopup
-            }()
-        )
-        sectionContainer.addArrangedSubview(languageContainer)
-        
-        stackView.addArrangedSubview(sectionContainer)
-    }
-    
-    private func setupDisplaySection(in stackView: NSStackView) {
-        let sectionContainer = createSectionContainer()
-        
-        let titleLabel = createSectionTitle(L("section_display_options"))
-        sectionContainer.addArrangedSubview(titleLabel)
-        
-        let dockContainer = createImprovedSettingRow(
-            label: L("setting_show_in_dock"),
-            description: "Show CiteTrack icon in the Dock",
-            control: {
-                showInDockCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInDockChanged))
-                showInDockCheckbox.state = PreferencesManager.shared.showInDock ? .on : .off
-                return showInDockCheckbox
-            }()
-        )
-        sectionContainer.addArrangedSubview(dockContainer)
-        
-        let menuBarContainer = createImprovedSettingRow(
-            label: L("setting_show_in_menubar"),
-            description: "Show CiteTrack icon in the menu bar",
-            control: {
-                showInMenuBarCheckbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(showInMenuBarChanged))
-                showInMenuBarCheckbox.state = PreferencesManager.shared.showInMenuBar ? .on : .off
-                return showInMenuBarCheckbox
-            }()
-        )
-        sectionContainer.addArrangedSubview(menuBarContainer)
-        
-        // Add Open Charts button
-        let chartsContainer = createImprovedSettingRow(
-            label: L("setting_open_charts"),
-            description: "Open the charts window to view citation trends and statistics",
-            control: {
-                let openChartsButton = NSButton(title: L("button_open_charts"), target: self, action: #selector(openChartsWindow))
-                openChartsButton.bezelStyle = .rounded
-                return openChartsButton
-            }()
-        )
-        sectionContainer.addArrangedSubview(chartsContainer)
-        
-        stackView.addArrangedSubview(sectionContainer)
-    }
-    
-    private func setupiCloudSyncSection(in stackView: NSStackView) {
-        let sectionContainer = createSectionContainer()
-        
-        let titleLabel = createSectionTitle(L("section_icloud_sync"))
-        sectionContainer.addArrangedSubview(titleLabel)
-        
-        // iCloud sync checkbox
-        let syncContainer = createImprovedSettingRow(
-            label: L("setting_icloud_sync_enabled"),
-            description: L("setting_icloud_sync_description"),
-            control: {
-                let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(iCloudSyncToggled))
-                checkbox.state = PreferencesManager.shared.iCloudSyncEnabled ? .on : .off
-                return checkbox
-            }()
-        )
-        sectionContainer.addArrangedSubview(syncContainer)
-        
-        // iCloud status display
-        let statusContainer = createiCloudStatusRow()
-        sectionContainer.addArrangedSubview(statusContainer)
-        
-        // Open folder in Finder (enabled when iCloud is available)
-        let folderContainer = createImprovedSettingRow(
-            label: L("setting_open_icloud_folder"),
-            description: L("setting_open_icloud_folder_description"),
-            control: {
-                let folderButton = NSButton(title: L("button_open_folder"), target: self, action: #selector(openiCloudFolder))
-                folderButton.bezelStyle = .rounded
-                
-                // Store reference for later updates
-                objc_setAssociatedObject(self, "iCloudFolderButton", folderButton, .OBJC_ASSOCIATION_RETAIN)
-                
-                return folderButton
-            }()
-        )
-        sectionContainer.addArrangedSubview(folderContainer)
-        
-        stackView.addArrangedSubview(sectionContainer)
-    }
-    
-    private func createiCloudStatusRow() -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        
-        let statusLabel = NSTextField(labelWithString: L("setting_icloud_status"))
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        statusLabel.textColor = .labelColor
-        
-        let statusValue = NSTextField(labelWithString: "Checking...")
-        statusValue.translatesAutoresizingMaskIntoConstraints = false
-        statusValue.font = NSFont.systemFont(ofSize: 11)
-        statusValue.textColor = .secondaryLabelColor
-        statusValue.lineBreakMode = .byWordWrapping
-        statusValue.maximumNumberOfLines = 3
-        statusValue.preferredMaxLayoutWidth = 300
-        
-        // Store reference for updates
-        objc_setAssociatedObject(self, "iCloudStatusLabel", statusValue, .OBJC_ASSOCIATION_RETAIN)
-        
-        container.addSubview(statusLabel)
-        container.addSubview(statusValue)
-        
-        NSLayoutConstraint.activate([
-            statusLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            statusLabel.topAnchor.constraint(equalTo: container.topAnchor),
-            statusLabel.widthAnchor.constraint(equalToConstant: 120),
-            
-            statusValue.leadingAnchor.constraint(equalTo: statusLabel.trailingAnchor, constant: 16),
-            statusValue.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            statusValue.topAnchor.constraint(equalTo: container.topAnchor),
-            statusValue.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            
-            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 40)
-        ])
-        
-        // Update status immediately
+        // 更新 iCloud 状态
         updateiCloudStatus()
-        
-        return container
     }
     
-    private func createSectionContainer() -> NSStackView {
+    // MARK: - Modern UI Helpers
+    
+    private func createSimpleSection(title: String, content: [NSView]) -> NSView {
         let container = NSStackView()
         container.orientation = .vertical
-        container.spacing = 16
+        container.spacing = 12
         container.alignment = .leading
         container.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 标题
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = .secondaryLabelColor
+        container.addArrangedSubview(titleLabel)
+        
+        // 内容
+        for view in content {
+            container.addArrangedSubview(view)
+        }
+        
         return container
     }
     
-    private func createImprovedSettingRow(label: String, description: String, control: NSView) -> NSView {
+    private func createSettingRowModern(label: String, control: NSView) -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
         
         let labelView = NSTextField(labelWithString: label)
         labelView.translatesAutoresizingMaskIntoConstraints = false
-        labelView.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        labelView.font = NSFont.systemFont(ofSize: 13)
         labelView.textColor = .labelColor
-        
-        let descriptionView = NSTextField(labelWithString: description)
-        descriptionView.translatesAutoresizingMaskIntoConstraints = false
-        descriptionView.font = NSFont.systemFont(ofSize: 11)
-        descriptionView.textColor = .secondaryLabelColor
-        descriptionView.lineBreakMode = .byWordWrapping
-        descriptionView.maximumNumberOfLines = 2
+        labelView.alignment = .left
         
         control.translatesAutoresizingMaskIntoConstraints = false
         
         container.addSubview(labelView)
-        container.addSubview(descriptionView)
         container.addSubview(control)
         
         NSLayoutConstraint.activate([
-            container.heightAnchor.constraint(greaterThanOrEqualToConstant: 50),
+            container.heightAnchor.constraint(equalToConstant: 26),
             
-            labelView.topAnchor.constraint(equalTo: container.topAnchor),
             labelView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            labelView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
             labelView.widthAnchor.constraint(equalToConstant: 200),
             
-            descriptionView.topAnchor.constraint(equalTo: labelView.bottomAnchor, constant: 4),
-            descriptionView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            descriptionView.widthAnchor.constraint(equalToConstant: 200),
-            descriptionView.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor),
-            
+            control.leadingAnchor.constraint(equalTo: labelView.trailingAnchor, constant: 16),
             control.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            control.leadingAnchor.constraint(equalTo: labelView.trailingAnchor, constant: 24),
-            control.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+            control.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor)
+        ])
+        
+        return container
+    }
+    
+    private func createCheckboxRowModern(label: String, checkbox: NSButton) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        
+        checkbox.translatesAutoresizingMaskIntoConstraints = false
+        checkbox.title = label
+        checkbox.font = NSFont.systemFont(ofSize: 13)
+        
+        container.addSubview(checkbox)
+        
+        NSLayoutConstraint.activate([
+            container.heightAnchor.constraint(equalToConstant: 20),
+            
+            checkbox.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            checkbox.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            checkbox.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor)
+        ])
+        
+        return container
+    }
+    
+    private func createButtonRowModern(label: String, button: NSButton) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        
+        let labelView = NSTextField(labelWithString: label)
+        labelView.translatesAutoresizingMaskIntoConstraints = false
+        labelView.font = NSFont.systemFont(ofSize: 13)
+        labelView.textColor = .labelColor
+        
+        button.translatesAutoresizingMaskIntoConstraints = false
+        
+        container.addSubview(labelView)
+        container.addSubview(button)
+        
+        NSLayoutConstraint.activate([
+            container.heightAnchor.constraint(equalToConstant: 28),
+            
+            labelView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            labelView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            labelView.widthAnchor.constraint(equalToConstant: 200),
+            
+            button.leadingAnchor.constraint(equalTo: labelView.trailingAnchor, constant: 16),
+            button.centerYAnchor.constraint(equalTo: container.centerYAnchor)
         ])
         
         return container
@@ -1006,230 +682,123 @@ class SettingsWindowController: NSWindowController {
         // 创建主容器
         let mainContainer = NSStackView()
         mainContainer.orientation = .vertical
-        mainContainer.spacing = 16
+        mainContainer.spacing = 12
         mainContainer.alignment = .leading
         mainContainer.translatesAutoresizingMaskIntoConstraints = false
         parentView.addSubview(mainContainer)
         
         // 顶部工具栏
-        let toolbarContainer = createScholarToolbar()
-        mainContainer.addArrangedSubview(toolbarContainer)
-        
-        // 统计信息卡片区域
-        let statsContainer = createScholarStatsContainer()
-        mainContainer.addArrangedSubview(statsContainer)
+        let toolbar = createScholarToolbarModern()
+        mainContainer.addArrangedSubview(toolbar)
         
         // 学者列表区域
-        let listContainer = createScholarListContainer()
+        let listContainer = createScholarListModern()
         mainContainer.addArrangedSubview(listContainer)
         
         // 设置约束
         NSLayoutConstraint.activate([
-            mainContainer.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 16),
-            mainContainer.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 16),
-            mainContainer.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -16),
-            mainContainer.bottomAnchor.constraint(equalTo: parentView.bottomAnchor, constant: -16)
+            mainContainer.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 20),
+            mainContainer.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 40),
+            mainContainer.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -40),
+            mainContainer.bottomAnchor.constraint(equalTo: parentView.bottomAnchor, constant: -20)
         ])
     }
     
-    private func createScholarToolbar() -> NSView {
-        let toolbarView = NSView()
-        toolbarView.translatesAutoresizingMaskIntoConstraints = false
+    private func createScholarToolbarModern() -> NSView {
+        let toolbar = NSView()
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
         
-        let toolbarStack = NSStackView()
-        toolbarStack.orientation = .horizontal
-        toolbarStack.spacing = 12
-        toolbarStack.alignment = .centerY
-        toolbarStack.translatesAutoresizingMaskIntoConstraints = false
-        toolbarView.addSubview(toolbarStack)
-        
-        // 标题
-        let titleLabel = NSTextField(labelWithString: L("section_scholar_management"))
-        titleLabel.font = NSFont.boldSystemFont(ofSize: 18)
-        titleLabel.textColor = .labelColor
-        toolbarStack.addArrangedSubview(titleLabel)
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.spacing = 8
+        stack.alignment = .centerY
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        toolbar.addSubview(stack)
         
         // 弹性空间
         let spacer = NSView()
         spacer.translatesAutoresizingMaskIntoConstraints = false
-        toolbarStack.addArrangedSubview(spacer)
+        stack.addArrangedSubview(spacer)
         
-        // 添加学者按钮
-        let addButton = NSButton(title: L("button_add_scholar"), target: self, action: #selector(addScholar))
-        addButton.bezelStyle = .rounded
-        addButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add Scholar")
-        toolbarStack.addArrangedSubview(addButton)
+        // 添加按钮
+        let addButton = NSButton(image: NSImage(systemSymbolName: "plus", accessibilityDescription: L("button_add"))!, target: self, action: #selector(addScholar))
+        addButton.bezelStyle = .texturedRounded
+        addButton.isBordered = true
+        stack.addArrangedSubview(addButton)
         
-        // 刷新按钮
-        let refreshButton = NSButton(title: L("button_refresh"), target: self, action: #selector(refreshAllScholars))
-        refreshButton.bezelStyle = .rounded
-        refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh")
-        toolbarStack.addArrangedSubview(refreshButton)
+        // 删除按钮
+        let removeButton = NSButton(image: NSImage(systemSymbolName: "minus", accessibilityDescription: L("button_remove"))!, target: self, action: #selector(removeScholar))
+        removeButton.bezelStyle = .texturedRounded
+        removeButton.isBordered = true
+        stack.addArrangedSubview(removeButton)
         
-        // 设置约束
         NSLayoutConstraint.activate([
-            toolbarStack.topAnchor.constraint(equalTo: toolbarView.topAnchor),
-            toolbarStack.leadingAnchor.constraint(equalTo: toolbarView.leadingAnchor),
-            toolbarStack.trailingAnchor.constraint(equalTo: toolbarView.trailingAnchor),
-            toolbarStack.bottomAnchor.constraint(equalTo: toolbarView.bottomAnchor),
-            toolbarView.heightAnchor.constraint(equalToConstant: 44)
+            stack.topAnchor.constraint(equalTo: toolbar.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: toolbar.bottomAnchor),
+            toolbar.heightAnchor.constraint(equalToConstant: 28)
         ])
         
-        return toolbarView
+        return toolbar
     }
     
-    private func createScholarStatsContainer() -> NSView {
-        let statsView = NSView()
-        statsView.translatesAutoresizingMaskIntoConstraints = false
+    private func createScholarListModern() -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
         
-        let statsStack = NSStackView()
-        statsStack.orientation = .horizontal
-        statsStack.spacing = 16
-        statsStack.distribution = .fillEqually
-        statsStack.translatesAutoresizingMaskIntoConstraints = false
-        statsView.addSubview(statsStack)
-        
-        // 总学者数卡片
-        let totalCard = createStatCard(title: "总学者数", value: "\(scholars.count)", icon: "person.3")
-        statsStack.addArrangedSubview(totalCard)
-        
-        // 总引用数卡片
-        let totalCitations = scholars.compactMap { $0.citations }.reduce(0, +)
-        let citationsCard = createStatCard(title: "总引用数", value: "\(totalCitations)", icon: "chart.bar")
-        statsStack.addArrangedSubview(citationsCard)
-        
-        // 最后更新卡片
-        let lastUpdate = scholars.compactMap { $0.lastUpdated }.max()
-        let lastUpdateText: String
-        if #available(macOS 12.0, *) {
-            lastUpdateText = lastUpdate?.formatted(date: .abbreviated, time: .shortened) ?? "从未更新"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .short
-            formatter.timeStyle = .short
-            lastUpdateText = lastUpdate.map { formatter.string(from: $0) } ?? "从未更新"
-        }
-        let updateCard = createStatCard(title: "最后更新", value: lastUpdateText, icon: "clock")
-        statsStack.addArrangedSubview(updateCard)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            statsStack.topAnchor.constraint(equalTo: statsView.topAnchor),
-            statsStack.leadingAnchor.constraint(equalTo: statsView.leadingAnchor),
-            statsStack.trailingAnchor.constraint(equalTo: statsView.trailingAnchor),
-            statsStack.bottomAnchor.constraint(equalTo: statsView.bottomAnchor),
-            statsView.heightAnchor.constraint(equalToConstant: 80)
-        ])
-        
-        return statsView
-    }
-    
-    private func createStatCard(title: String, value: String, icon: String) -> NSView {
-        let cardView = NSView()
-        cardView.wantsLayer = true
-        cardView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        cardView.layer?.cornerRadius = 8
-        cardView.layer?.borderWidth = 1
-        cardView.layer?.borderColor = NSColor.separatorColor.cgColor
-        cardView.translatesAutoresizingMaskIntoConstraints = false
-        
-        let cardStack = NSStackView()
-        cardStack.orientation = .vertical
-        cardStack.spacing = 4
-        cardStack.alignment = .centerX
-        cardStack.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(cardStack)
-        
-        // 图标
-        let iconView = NSImageView()
-        iconView.image = NSImage(systemSymbolName: icon, accessibilityDescription: title)
-        // 图标颜色设置（暂时禁用，因为API兼容性问题）
-        cardStack.addArrangedSubview(iconView)
-        
-        // 数值
-        let valueLabel = NSTextField(labelWithString: value)
-        valueLabel.font = NSFont.boldSystemFont(ofSize: 16)
-        valueLabel.textColor = .labelColor
-        valueLabel.alignment = .center
-        cardStack.addArrangedSubview(valueLabel)
-        
-        // 标题
-        let titleLabel = NSTextField(labelWithString: title)
-        titleLabel.font = NSFont.systemFont(ofSize: 12)
-        titleLabel.textColor = .secondaryLabelColor
-        titleLabel.alignment = .center
-        cardStack.addArrangedSubview(titleLabel)
-        
-        // 设置约束
-        NSLayoutConstraint.activate([
-            cardStack.centerXAnchor.constraint(equalTo: cardView.centerXAnchor),
-            cardStack.centerYAnchor.constraint(equalTo: cardView.centerYAnchor),
-            cardStack.leadingAnchor.constraint(greaterThanOrEqualTo: cardView.leadingAnchor, constant: 8),
-            cardStack.trailingAnchor.constraint(lessThanOrEqualTo: cardView.trailingAnchor, constant: -8)
-        ])
-        
-        return cardView
-    }
-    
-    private func createScholarListContainer() -> NSView {
-        let listView = NSView()
-        listView.translatesAutoresizingMaskIntoConstraints = false
-        
-        // 创建表格视图
-        let tableScrollView = NSScrollView()
-        tableScrollView.translatesAutoresizingMaskIntoConstraints = false
-        tableScrollView.hasVerticalScroller = true
-        tableScrollView.hasHorizontalScroller = false
-        tableScrollView.borderType = .bezelBorder
+        let scrollView = NSScrollView()
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = false
+        scrollView.borderType = .lineBorder
+        scrollView.autohidesScrollers = true
         
         tableView = NSTableView()
         tableView.dataSource = self
         tableView.delegate = self
         tableView.allowsMultipleSelection = false
-        tableView.rowSizeStyle = .medium
-        tableView.intercellSpacing = NSSize(width: 8, height: 4)
-        
-        // 启用拖拽排序
-        tableView.registerForDraggedTypes([.string])
-        tableView.setDraggingSourceOperationMask(.move, forLocal: true)
+        tableView.style = .inset
+        tableView.rowSizeStyle = .default
+        tableView.usesAlternatingRowBackgroundColors = false
+        tableView.intercellSpacing = NSSize(width: 10, height: 4)
         
         // 添加列
         let nameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("name"))
         nameColumn.title = L("scholar_name")
-        nameColumn.width = 180
-        nameColumn.minWidth = 120
+        nameColumn.width = 160
+        nameColumn.resizingMask = .autoresizingMask
         tableView.addTableColumn(nameColumn)
         
         let idColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("id"))
         idColumn.title = L("scholar_id")
-        idColumn.width = 200
-        idColumn.minWidth = 150
+        idColumn.width = 180
+        idColumn.resizingMask = .autoresizingMask
         tableView.addTableColumn(idColumn)
         
         let citationsColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("citations"))
         citationsColumn.title = L("scholar_citations")
         citationsColumn.width = 100
-        citationsColumn.minWidth = 80
+        citationsColumn.resizingMask = .autoresizingMask
         tableView.addTableColumn(citationsColumn)
         
         let lastUpdatedColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("lastUpdated"))
         lastUpdatedColumn.title = L("scholar_last_updated")
-        lastUpdatedColumn.width = 140
-        lastUpdatedColumn.minWidth = 120
+        lastUpdatedColumn.width = 120
+        lastUpdatedColumn.resizingMask = .autoresizingMask
         tableView.addTableColumn(lastUpdatedColumn)
         
-        tableScrollView.documentView = tableView
-        listView.addSubview(tableScrollView)
+        scrollView.documentView = tableView
+        container.addSubview(scrollView)
         
-        // 设置约束
         NSLayoutConstraint.activate([
-            tableScrollView.topAnchor.constraint(equalTo: listView.topAnchor),
-            tableScrollView.leadingAnchor.constraint(equalTo: listView.leadingAnchor),
-            tableScrollView.trailingAnchor.constraint(equalTo: listView.trailingAnchor),
-            tableScrollView.bottomAnchor.constraint(equalTo: listView.bottomAnchor)
+            scrollView.topAnchor.constraint(equalTo: container.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
         
-        return listView
+        return container
     }
     
     // MARK: - Scholar Management Actions
@@ -1257,72 +826,6 @@ class SettingsWindowController: NSWindowController {
         }
     }
     
-    @objc private func refreshAllScholars() {
-        // 实现刷新所有学者的逻辑
-        // 这里可以调用现有的刷新逻辑
-        NotificationCenter.default.post(name: NSNotification.Name("ScholarsUpdated"), object: nil)
-    }
-    
-    private func createSettingRow(label: String, control: NSView) -> NSView {
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        
-        let labelView = NSTextField(labelWithString: label)
-        labelView.translatesAutoresizingMaskIntoConstraints = false
-        labelView.alignment = .right
-        labelView.font = NSFont.systemFont(ofSize: 13)
-        
-        control.translatesAutoresizingMaskIntoConstraints = false
-        
-        container.addSubview(labelView)
-        container.addSubview(control)
-        
-        NSLayoutConstraint.activate([
-            container.heightAnchor.constraint(equalToConstant: 30),
-            container.widthAnchor.constraint(greaterThanOrEqualToConstant: 400),
-            
-            labelView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            labelView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            labelView.widthAnchor.constraint(equalToConstant: 180),
-            
-            control.leadingAnchor.constraint(equalTo: labelView.trailingAnchor, constant: 15),
-            control.centerYAnchor.constraint(equalTo: container.centerYAnchor),
-            control.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor)
-        ])
-        
-        return container
-    }
-    
-    private func createSectionTitle(_ title: String) -> NSView {
-        let label = NSTextField(labelWithString: title)
-        label.font = NSFont.boldSystemFont(ofSize: 14)
-        label.textColor = .labelColor
-        label.translatesAutoresizingMaskIntoConstraints = false
-        
-        let container = NSView()
-        container.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(label)
-        
-        NSLayoutConstraint.activate([
-            container.heightAnchor.constraint(equalToConstant: 25),
-            label.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            label.centerYAnchor.constraint(equalTo: container.centerYAnchor)
-        ])
-        
-        return container
-    }
-    
-    private func createSeparator() -> NSView {
-        let separator = NSBox()
-        separator.boxType = .separator
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        
-        NSLayoutConstraint.activate([
-            separator.heightAnchor.constraint(equalToConstant: 1)
-        ])
-        
-        return separator
-    }
     
     private func intervalToIndex(_ interval: TimeInterval) -> Int {
         switch interval {
@@ -1402,10 +905,10 @@ class SettingsWindowController: NSWindowController {
             
             // 显示错误提示
             let alert = NSAlert()
-            alert.messageText = "语言切换失败"
-            alert.informativeText = "无法切换到所选语言，已恢复到之前的设置。"
+            alert.messageText = L("language_change_failed_title")
+            alert.informativeText = L("language_change_failed_message")
             alert.alertStyle = .warning
-            alert.addButton(withTitle: "确定")
+            alert.addButton(withTitle: L("button_ok"))
             alert.runModal()
         }
     }
@@ -1673,57 +1176,57 @@ class SettingsWindowController: NSWindowController {
 // MARK: - Table View Data Source & Delegate
 extension SettingsWindowController: NSTableViewDataSource, NSTableViewDelegate {
     func numberOfRows(in tableView: NSTableView) -> Int {
-        return scholars.count
-    }
-    
-    // MARK: - Drag and Drop Support
-    func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
-        let item = NSPasteboardItem()
-        item.setString(String(row), forType: .string)
-        return item
-    }
-    
-    func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
-        if dropOperation == .above {
-            return .move
+        // 区分侧边栏和内容表格
+        if tableView == sidebarListView {
+            return sidebarItems.count
+        } else {
+            return scholars.count
         }
-        return []
-    }
-    
-    func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
-        var oldIndexes = [Int]()
-        info.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self], searchOptions: [:]) { draggingItem, _, _ in
-            if let str = (draggingItem.item as! NSPasteboardItem).string(forType: .string), let index = Int(str) {
-                oldIndexes.append(index)
-            }
-        }
-        
-        var oldIndexOffset = 0
-        var newIndexOffset = 0
-        
-        // 移动学者数组中的项目
-        for oldIndex in oldIndexes {
-            if oldIndex < row {
-                let scholar = scholars.remove(at: oldIndex + oldIndexOffset)
-                scholars.insert(scholar, at: row - 1)
-                oldIndexOffset -= 1
-            } else {
-                let scholar = scholars.remove(at: oldIndex)
-                scholars.insert(scholar, at: row + newIndexOffset)
-                newIndexOffset += 1
-            }
-        }
-        
-        // 保存更新后的学者列表
-        PreferencesManager.shared.scholars = scholars
-        
-        // 重新加载表格
-        tableView.reloadData()
-        
-        return true
     }
     
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        // 侧边栏
+        if tableView == sidebarListView {
+            let cellView = NSTableCellView()
+            cellView.translatesAutoresizingMaskIntoConstraints = false
+            
+            let stack = NSStackView()
+            stack.orientation = .horizontal
+            stack.spacing = 8
+            stack.alignment = .centerY
+            stack.translatesAutoresizingMaskIntoConstraints = false
+            cellView.addSubview(stack)
+            
+            let item = sidebarItems[row]
+            let localizedTitle = item.localizedTitle
+            
+            // 图标
+            let iconView = NSImageView()
+            iconView.image = NSImage(systemSymbolName: item.icon, accessibilityDescription: localizedTitle)
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            iconView.contentTintColor = .secondaryLabelColor
+            stack.addArrangedSubview(iconView)
+            
+            // 文本
+            let textField = NSTextField(labelWithString: localizedTitle)
+            textField.font = NSFont.systemFont(ofSize: 13)
+            textField.translatesAutoresizingMaskIntoConstraints = false
+            stack.addArrangedSubview(textField)
+            
+            NSLayoutConstraint.activate([
+                stack.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 8),
+                stack.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -8),
+                stack.topAnchor.constraint(equalTo: cellView.topAnchor),
+                stack.bottomAnchor.constraint(equalTo: cellView.bottomAnchor),
+                
+                iconView.widthAnchor.constraint(equalToConstant: 20),
+                iconView.heightAnchor.constraint(equalToConstant: 20)
+            ])
+            
+            return cellView
+        }
+        
+        // 学者列表
         let scholar = scholars[row]
         let cellView = NSTableCellView()
         
@@ -1732,7 +1235,7 @@ extension SettingsWindowController: NSTableViewDataSource, NSTableViewDelegate {
         textField.isEditable = false
         textField.backgroundColor = .clear
         textField.translatesAutoresizingMaskIntoConstraints = false
-        textField.font = NSFont.systemFont(ofSize: 12)
+        textField.font = NSFont.systemFont(ofSize: 13)
         
         cellView.addSubview(textField)
         NSLayoutConstraint.activate([
@@ -1766,5 +1269,25 @@ extension SettingsWindowController: NSTableViewDataSource, NSTableViewDelegate {
         }
         
         return cellView
+    }
+    
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        if tableView == sidebarListView {
+            return 28
+        }
+        return 24
+    }
+    
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let tableView = notification.object as? NSTableView else { return }
+        
+        // 侧边栏选择变化
+        if tableView == sidebarListView {
+            let selectedRow = tableView.selectedRow
+            guard selectedRow >= 0 && selectedRow < sidebarItems.count else { return }
+            
+            let selectedItem = sidebarItems[selectedRow]
+            showContent(for: selectedItem)
+        }
     }
 } 

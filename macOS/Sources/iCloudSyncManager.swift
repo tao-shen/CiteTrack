@@ -43,7 +43,7 @@ class iCloudSyncManager {
     func importUsingCloudKit(completion: @escaping (Result<Void, Error>) -> Void) {
         // Fallback to file-based import - not fully implemented yet
         completion(.failure(NSError(domain: "iCloudSyncManager", code: -1, 
-            userInfo: [NSLocalizedDescriptionKey: "CloudKit import not available, please use iCloud Drive sync"])))
+            userInfo: [NSLocalizedDescriptionKey: L("icloud_cloudkit_unavailable")])) )
     }
     
     // MARK: - iCloud Detection
@@ -547,7 +547,7 @@ class iCloudSyncManager {
         var exportEntries: [[String: Any]] = []
 
         for (scholarId, histories) in historyByScholar {
-            let scholarName = scholarNameById[scholarId] ?? "Scholar \(scholarId.prefix(8))"
+            let scholarName = scholarNameById[scholarId] ?? L("default_scholar_name", String(scholarId.prefix(8)))
             for h in histories.sorted(by: { $0.timestamp < $1.timestamp }) {
                 exportEntries.append([
                     "scholarId": scholarId,
@@ -604,7 +604,7 @@ class iCloudSyncManager {
             let groupedByScholar = Dictionary(grouping: citationHistory) { $0["scholarId"] as? String ?? "" }
             for (scholarId, entries) in groupedByScholar {
                 guard !scholarId.isEmpty else { continue }
-                let name = (entries.last? ["scholarName"]) as? String ?? "Scholar \(scholarId.prefix(8))"
+                let name = (entries.last? ["scholarName"]) as? String ?? L("default_scholar_name", String(scholarId.prefix(8)))
                 if !existingIds.contains(scholarId) {
                     var s = Scholar(id: scholarId, name: name)
                     if let last = entries.last,
@@ -652,7 +652,7 @@ class iCloudSyncManager {
         let grouped = Dictionary(grouping: array) { $0["scholarId"] as? String ?? "" }
         for (scholarId, entries) in grouped {
             guard !scholarId.isEmpty else { continue }
-            let name = (entries.last? ["scholarName"]) as? String ?? "Scholar \(scholarId.prefix(8))"
+            let name = (entries.last? ["scholarName"]) as? String ?? L("default_scholar_name", String(scholarId.prefix(8)))
             if !existingIds.contains(scholarId) {
                 var s = Scholar(id: scholarId, name: name)
                 if let last = entries.last,
@@ -695,7 +695,7 @@ struct iCloudFileStatus {
     
     var description: String {
         guard iCloudAvailable else {
-            return "iCloud Drive not available"
+            return L("icloud_status_not_available")
         }
         
         if !isSyncEnabled {
@@ -705,12 +705,12 @@ struct iCloudFileStatus {
                     let formatter = DateFormatter()
                     formatter.dateStyle = .medium
                     formatter.timeStyle = .short
-                    return "Found previous backup - \(formatter.string(from: lastSync))"
+                    return L("icloud_status_found_backup_with_date", formatter.string(from: lastSync))
                 } else {
-                    return "Found previous backup - Unknown date"
+                    return L("icloud_status_found_backup_unknown")
                 }
             } else {
-                return "iCloud Drive available - Ready to sync"
+                return L("icloud_status_ready_to_sync")
             }
         } else {
             // Syncing is enabled
@@ -719,12 +719,12 @@ struct iCloudFileStatus {
                     let formatter = DateFormatter()
                     formatter.dateStyle = .none
                     formatter.timeStyle = .short
-                    return "Syncing enabled - Last sync: \(formatter.string(from: lastSync))"
+                    return L("icloud_status_enabled_last_sync", formatter.string(from: lastSync))
                 } else {
-                    return "Syncing enabled - Ready"
+                    return L("icloud_status_enabled_ready")
                 }
             } else {
-                return "Syncing enabled - Setting up..."
+                return L("icloud_status_enabled_setting_up")
             }
         }
     }
@@ -747,17 +747,17 @@ enum iCloudError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .iCloudNotAvailable:
-            return "iCloud Drive is not available. Please check your iCloud settings."
+            return L("icloud_error_not_available")
         case .invalidURL:
-            return "Invalid iCloud URL"
+            return L("icloud_error_invalid_url")
         case .invalidFileFormat:
-            return "Invalid file format"
+            return L("icloud_error_invalid_file_format")
         case .folderCreationFailed:
-            return "Failed to create CiteTrack folder in iCloud"
+            return L("icloud_error_folder_creation_failed")
         case .exportFailed(let message):
-            return "Export failed: \(message)"
+            return L("icloud_error_export_failed", message)
         case .importFailed(let message):
-            return "Import failed: \(message)"
+            return L("icloud_error_import_failed", message)
         }
     }
 }

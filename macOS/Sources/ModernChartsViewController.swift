@@ -15,6 +15,9 @@ class ModernChartsViewController: NSViewController {
     private var currentTimeRange: TimeRange = .lastMonth
     private var currentChartType: ChartType = .line
     private var currentTheme: ChartTheme = .academic
+    private var customStartDate: Date?
+    private var customEndDate: Date?
+    private var previousTimeRange: TimeRange?
     
     // Services
     private let chartDataService = ChartDataService()
@@ -189,6 +192,9 @@ class ModernChartsViewController: NSViewController {
     
     private func updateToolbarData() {
         modernToolbar.updateScholarList(scholars, selectedScholar: currentScholar)
+        modernToolbar.updateTimeRangeSelection(selectedRange: currentTimeRange, customLabel: customRangeDescription())
+        modernToolbar.updateChartTypeSelection(currentChartType)
+        modernToolbar.updateThemeSelection(currentTheme)
         modernToolbar.setRealTimeStatus(true) // Configure based on settings
     }
     
@@ -201,32 +207,35 @@ class ModernChartsViewController: NSViewController {
         isDataLoading = true
         modernToolbar.showRefreshProgress()
         
-        historyManager.getHistory(for: scholar.id, in: currentTimeRange) { [weak self] result in
+        let completion: (Result<[CitationHistory], Error>) -> Void = { [weak self] result in
             DispatchQueue.main.async {
                 guard let self = self, !self.isCleanedUp else { return }
-                
+
                 self.isDataLoading = false
                 self.modernToolbar.hideRefreshProgress()
-                
+
                 switch result {
                 case .success(let history):
                     self.processChartData(history, for: scholar)
                 case .failure(let error):
-                    print("Failed to load chart data: \\(error)")
+                    print("Failed to load chart data: \(error)")
                     self.showError("data_load_failed".localized, error.localizedDescription)
                 }
             }
+        }
+
+        if currentTimeRange == .custom, let start = customStartDate, let end = customEndDate {
+            let normalized = normalizedCustomRange(start: start, end: end)
+            historyManager.getHistory(for: scholar.id, from: normalized.start, to: normalized.end, completion: completion)
+        } else {
+            historyManager.getHistory(for: scholar.id, in: currentTimeRange, completion: completion)
         }
     }
     
     private func processChartData(_ history: [CitationHistory], for scholar: Scholar) {
         let chartData = chartDataService.prepareChartData(
             from: history,
-            configuration: ChartConfiguration(
-                timeRange: currentTimeRange,
-                chartType: currentChartType,
-                theme: currentTheme
-            ),
+            configuration: makeChartConfiguration(),
             scholarName: scholar.name
         )
         
@@ -250,6 +259,7 @@ class ModernChartsViewController: NSViewController {
         guard scholar.id != currentScholar?.id else { return }
         
         currentScholar = scholar
+        modernToolbar.updateScholarList(scholars, selectedScholar: scholar)
         loadChartData()
         
         // Update UI with selection feedback
@@ -257,20 +267,30 @@ class ModernChartsViewController: NSViewController {
     }
     
     private func selectTimeRange(_ timeRange: TimeRange) {
+        if timeRange == .custom {
+            previousTimeRange = currentTimeRange
+            presentCustomRangePicker()
+            return
+        }
+
         guard timeRange != currentTimeRange else { return }
-        
+
         currentTimeRange = timeRange
+        customStartDate = nil
+        customEndDate = nil
+        modernToolbar.updateTimeRangeSelection(selectedRange: currentTimeRange)
         loadChartData()
-        
+
         provideHapticFeedback()
     }
     
     private func selectChartType(_ chartType: ChartType) {
         guard chartType != currentChartType else { return }
-        
+
         currentChartType = chartType
         modernChartView.chartType = chartType
-        
+        modernToolbar.updateChartTypeSelection(chartType)
+
         provideHapticFeedback()
     }
     
@@ -281,6 +301,7 @@ class ModernChartsViewController: NSViewController {
         
         // Apply theme to all components
         modernToolbar.theme = theme
+        modernToolbar.updateThemeSelection(theme)
         modernChartView.theme = theme
         dashboardView.theme = theme
         insightPanel.theme = theme
@@ -307,7 +328,7 @@ class ModernChartsViewController: NSViewController {
         
         let savePanel = NSSavePanel()
         savePanel.allowedContentTypes = [.commaSeparatedText, .json]
-        savePanel.nameFieldStringValue = "citations-\\(scholar.id)-\\(Date().formatted())"
+        savePanel.nameFieldStringValue = "citations-\(scholar.id)-\(Date().formatted())"
         
         savePanel.begin { response in
             guard response == .OK, let url = savePanel.url else { return }
@@ -318,7 +339,7 @@ class ModernChartsViewController: NSViewController {
     
     private func performExport(to url: URL, scholar: Scholar) {
         // Implementation for data export
-        historyManager.getHistory(for: scholar.id, in: currentTimeRange) { result in
+        let completion: (Result<[CitationHistory], Error>) -> Void = { result in
             switch result {
             case .success(let history):
                 self.exportHistory(history, to: url, scholar: scholar)
@@ -327,6 +348,13 @@ class ModernChartsViewController: NSViewController {
                     self.showError("export_failed".localized, error.localizedDescription)
                 }
             }
+        }
+
+        if currentTimeRange == .custom, let start = customStartDate, let end = customEndDate {
+            let normalized = normalizedCustomRange(start: start, end: end)
+            historyManager.getHistory(for: scholar.id, from: normalized.start, to: normalized.end, completion: completion)
+        } else {
+            historyManager.getHistory(for: scholar.id, in: currentTimeRange, completion: completion)
         }
     }
     
@@ -338,9 +366,9 @@ class ModernChartsViewController: NSViewController {
                 data = try JSONEncoder().encode(history)
             } else {
                 // CSV format
-                var csvContent = "Date,Citations,Scholar\\n"
+                var csvContent = "Date,Citations,Scholar\n"
                 for entry in history {
-                    csvContent += "\\(entry.date),\\(entry.citationCount),\\(scholar.name)\\n"
+                    csvContent += "\(entry.date),\(entry.citationCount),\(scholar.name)\n"
                 }
                 data = csvContent.data(using: .utf8) ?? Data()
             }
@@ -375,6 +403,159 @@ class ModernChartsViewController: NSViewController {
         window.isReleasedWhenClosed = false
         
         window.makeKeyAndOrderFront(nil)
+    }
+
+    // MARK: - Custom Time Range Handling
+
+    private func presentCustomRangePicker() {
+        let alert = NSAlert()
+        alert.messageText = L("time_range_custom_title")
+        alert.informativeText = L("time_range_custom_message")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("button_apply"))
+        alert.addButton(withTitle: L("button_cancel"))
+
+        let defaults = defaultCustomRange()
+        let startPicker = makeDatePicker(initial: customStartDate ?? defaults.start)
+        let endPicker = makeDatePicker(initial: customEndDate ?? defaults.end)
+
+        let stack = NSStackView()
+        stack.orientation = .horizontal
+        stack.spacing = 12
+        stack.alignment = .centerY
+
+        let startLabel = NSTextField(labelWithString: L("label_start_date"))
+        startLabel.font = NSFont.systemFont(ofSize: 13)
+        let endLabel = NSTextField(labelWithString: L("label_end_date"))
+        endLabel.font = NSFont.systemFont(ofSize: 13)
+
+        stack.addArrangedSubview(startLabel)
+        stack.addArrangedSubview(startPicker)
+        stack.addArrangedSubview(endLabel)
+        stack.addArrangedSubview(endPicker)
+
+        alert.accessoryView = stack
+
+        let response = alert.runModal()
+
+        if response == .alertFirstButtonReturn {
+            var startDate = startPicker.dateValue
+            var endDate = endPicker.dateValue
+
+            if startDate > endDate {
+                swap(&startDate, &endDate)
+            }
+
+            customStartDate = startDate
+            customEndDate = endDate
+            currentTimeRange = .custom
+
+            modernToolbar.updateTimeRangeSelection(
+                selectedRange: .custom,
+                customLabel: customRangeDescription(start: startDate, end: endDate)
+            )
+
+            loadChartData()
+            provideHapticFeedback()
+        } else if let previous = previousTimeRange {
+            currentTimeRange = previous
+            modernToolbar.updateTimeRangeSelection(selectedRange: previous, customLabel: customRangeDescription())
+        }
+        previousTimeRange = nil
+    }
+
+    private func makeDatePicker(initial: Date) -> NSDatePicker {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textField
+        picker.datePickerElements = [.yearMonthDay]
+        picker.dateValue = initial
+        picker.translatesAutoresizingMaskIntoConstraints = false
+        picker.widthAnchor.constraint(equalToConstant: 140).isActive = true
+        return picker
+    }
+
+    private func defaultCustomRange() -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let end = Date()
+        let start = calendar.date(byAdding: .month, value: -1, to: end) ?? end
+        return (start, end)
+    }
+
+    private func customRangeDescription(start: Date? = nil, end: Date? = nil) -> String? {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+
+        guard let startValue = start ?? customStartDate,
+              let endValue = end ?? customEndDate else {
+            return nil
+        }
+
+        return "\(formatter.string(from: startValue)) – \(formatter.string(from: endValue))"
+    }
+
+    private func normalizedCustomRange(start: Date, end: Date) -> (start: Date, end: Date) {
+        let calendar = Calendar.current
+        let normalizedStart = calendar.startOfDay(for: start)
+        guard let normalizedEnd = calendar.date(byAdding: DateComponents(day: 1, second: -1), to: calendar.startOfDay(for: end)) else {
+            return (normalizedStart, end)
+        }
+        return (normalizedStart, normalizedEnd)
+    }
+
+    // MARK: - Chart Configuration Helpers
+
+    private func makeChartConfiguration() -> ChartConfiguration {
+        ChartConfiguration(
+            timeRange: currentTimeRange,
+            chartType: mappedChartType(for: currentChartType),
+            showTrendLine: shouldShowTrendLine(for: currentChartType),
+            showDataPoints: shouldShowDataPoints(for: currentChartType),
+            showGrid: true,
+            smoothLines: currentChartType == .smoothLine,
+            colorScheme: colorScheme(for: currentTheme)
+        )
+    }
+
+    private func mappedChartType(for chartType: ChartType) -> ChartConfiguration.ChartType {
+        switch chartType {
+        case .bar:
+            return .bar
+        case .area:
+            return .area
+        default:
+            return .line
+        }
+    }
+
+    private func shouldShowTrendLine(for chartType: ChartType) -> Bool {
+        switch chartType {
+        case .bar, .scatter:
+            return false
+        default:
+            return true
+        }
+    }
+
+    private func shouldShowDataPoints(for chartType: ChartType) -> Bool {
+        switch chartType {
+        case .area:
+            return false
+        default:
+            return true
+        }
+    }
+
+    private func colorScheme(for theme: ChartTheme) -> ChartConfiguration.ColorScheme {
+        switch theme {
+        case .academic:
+            return .blue
+        case .nature:
+            return .green
+        case .warm:
+            return .orange
+        case .mono, .auto:
+            return .system
+        }
     }
     
     // MARK: - Animations
@@ -481,7 +662,7 @@ class ModernChartsViewController: NSViewController {
     private func showExportSuccessMessage(url: URL) {
         let alert = NSAlert()
         alert.messageText = "导出成功"
-        alert.informativeText = "数据已保存至: \\(url.lastPathComponent)"
+        alert.informativeText = "数据已保存至: \(url.lastPathComponent)"
         alert.addButton(withTitle: L("button_ok"))
         alert.addButton(withTitle: "打开文件夹")
         
@@ -512,17 +693,4 @@ extension NSView {
             )
         }
     }
-}
-
-// MARK: - Chart Configuration
-struct ChartConfiguration {
-    let timeRange: TimeRange
-    let chartType: ChartType
-    let theme: ChartTheme
-    
-    static let `default` = ChartConfiguration(
-        timeRange: .lastMonth,
-        chartType: .line,
-        theme: .academic
-    )
 }

@@ -318,7 +318,7 @@ class DataRepairViewController: NSViewController {
                     self.tableView?.reloadData()
                     print("✅ [DataRepair DEBUG] Table view reloaded with \(history.count) entries")
                 case .failure(let error):
-                    self.showError("Failed to load history", error.localizedDescription)
+                    self.showError(L("data_repair_load_failed_title"), error.localizedDescription)
                     print("❌ [DataRepair DEBUG] History loading failed: \(error)")
                 }
             }
@@ -340,7 +340,7 @@ class DataRepairViewController: NSViewController {
     @objc private func editSelectedEntry() {
         let selectedRow = tableView.selectedRow
         guard selectedRow >= 0, selectedRow < historyEntries.count else {
-            showAlert("Please select an entry to edit")
+            showAlert(L("data_repair_select_entry_edit"))
             return
         }
         
@@ -351,7 +351,7 @@ class DataRepairViewController: NSViewController {
     @objc private func deleteSelectedEntries() {
         let selectedRows = tableView.selectedRowIndexes
         guard !selectedRows.isEmpty else {
-            showAlert("Please select entries to delete")
+            showAlert(L("data_repair_select_entries_delete"))
             return
         }
         
@@ -365,7 +365,7 @@ class DataRepairViewController: NSViewController {
     @objc private func restoreToSelectedPoint() {
         let selectedRow = tableView.selectedRow
         guard selectedRow >= 0, selectedRow < historyEntries.count else {
-            showAlert("Please select a restore point")
+            showAlert(L("data_repair_select_restore_point"))
             return
         }
         
@@ -376,7 +376,7 @@ class DataRepairViewController: NSViewController {
     @objc private func refreshFromSelectedPoint() {
         let selectedRow = tableView.selectedRow
         guard selectedRow >= 0, selectedRow < historyEntries.count else {
-            showAlert("Please select a starting point")
+            showAlert(L("data_repair_select_start_point"))
             return
         }
         
@@ -413,7 +413,7 @@ class DataRepairViewController: NSViewController {
     
     private func showAlert(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "Data Repair"
+        alert.messageText = L("data_repair_title")
         alert.informativeText = message
         alert.runModal()
     }
@@ -488,7 +488,7 @@ extension DataRepairViewController: NSTableViewDelegate {
             
         case NSUserInterfaceItemIdentifier("actions"):
             let cellView = NSTableCellView()
-            let editButton = NSButton(title: "Edit", target: self, action: #selector(editEntryAtRow(_:)))
+            let editButton = NSButton(title: L("button_edit"), target: self, action: #selector(editEntryAtRow(_:)))
             editButton.tag = row
             editButton.bezelStyle = .rounded
             editButton.controlSize = .small
@@ -552,7 +552,7 @@ extension DataRepairViewController {
         citationField.stringValue = "\(entry.citationCount)"
         citationField.frame = NSRect(x: 100, y: 30, width: 100, height: 24)
         
-        let citationLabel = NSTextField(labelWithString: "Citations:")
+        let citationLabel = NSTextField(labelWithString: L("citations_label") + ":")
         citationLabel.frame = NSRect(x: 0, y: 30, width: 90, height: 24)
         
         accessoryView.addSubview(citationLabel)
@@ -629,9 +629,9 @@ extension DataRepairViewController {
                 switch result {
                 case .success:
                     self?.loadHistoryData()
-                    self?.showAlert("Entry updated successfully")
+                    self?.showAlert(L("data_repair_update_success"))
                 case .failure(let error):
-                    self?.showError("Update failed", error.localizedDescription)
+                    self?.showError(L("data_repair_update_failed_title"), error.localizedDescription)
                 }
             }
         }
@@ -643,9 +643,9 @@ extension DataRepairViewController {
                 switch result {
                 case .success:
                     self?.loadHistoryData()
-                    self?.showAlert("Entries deleted successfully")
+                    self?.showAlert(L("data_repair_delete_success"))
                 case .failure(let error):
-                    self?.showError("Delete failed", error.localizedDescription)
+                    self?.showError(L("data_repair_delete_failed_title"), error.localizedDescription)
                 }
             }
         }
@@ -675,10 +675,10 @@ extension DataRepairViewController {
                     
                     self?.currentScholar = updatedScholar
                     self?.loadHistoryData()
-                    self?.showAlert("Data restored successfully")
+                    self?.showAlert(L("data_repair_restore_success"))
                     
                 case .failure(let error):
-                    self?.showError("Restore failed", error.localizedDescription)
+                    self?.showError(L("data_repair_restore_failed_title"), error.localizedDescription)
                 }
             }
         }
@@ -694,9 +694,9 @@ extension DataRepairViewController {
                 switch result {
                 case .success:
                     self?.loadHistoryData()
-                    self?.showAlert("Data refreshed successfully")
+                    self?.showAlert(L("data_repair_refresh_success"))
                 case .failure(let error):
-                    self?.showError("Refresh failed", error.localizedDescription)
+                    self?.showError(L("data_repair_refresh_failed_title"), error.localizedDescription)
                 }
             }
         }

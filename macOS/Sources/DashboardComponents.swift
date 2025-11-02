@@ -44,9 +44,7 @@ class DashboardView: NSView {
     
     private func createStatisticsCards() {
         // Create 4 statistics cards
-        let cardTitles = ["Total Citations", "Monthly Change", "Growth Rate", "Trend"]
-        
-        for _ in cardTitles {
+        for _ in 0..<4 {
             let card = StatisticsCardView()
             card.theme = theme
             statisticsCards.append(card)
@@ -81,31 +79,31 @@ class DashboardView: NSView {
         if #available(macOS 11.0, *) {
             statisticsData = [
                 StatisticData(
-                    title: "Total Citations",
+                    title: L("total_citations"),
                     value: scholar.citations ?? 0,
-                    subtitle: "all time",
-                    icon: NSImage(systemSymbolName: "quote.bubble", accessibilityDescription: "Citations"),
+                    subtitle: L("dashboard_subtitle_all_time"),
+                    icon: NSImage(systemSymbolName: "quote.bubble", accessibilityDescription: L("citations_label")),
                     change: nil,
                     type: .number
                 ),
                 StatisticData(
-                    title: "Monthly Change",
+                    title: L("monthly_change"),
                     value: stats.totalChange,
-                    subtitle: "this period",
-                    icon: NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: "Change"),
+                    subtitle: L("dashboard_subtitle_this_period"),
+                    icon: NSImage(systemSymbolName: "chart.line.uptrend.xyaxis", accessibilityDescription: L("total_change")),
                     change: StatisticChange(value: stats.growthRate, isPositive: stats.totalChange >= 0),
                     type: .number
                 ),
                 StatisticData(
-                    title: "Growth Rate",
+                    title: L("growth_rate"),
                     value: stats.growthRate,
-                    subtitle: "percentage",
-                    icon: NSImage(systemSymbolName: "percent", accessibilityDescription: "Growth"),
+                    subtitle: L("dashboard_subtitle_percentage"),
+                    icon: NSImage(systemSymbolName: "percent", accessibilityDescription: L("growth_rate")),
                     change: nil,
                     type: .percentage
                 ),
                 StatisticData(
-                    title: "Trend",
+                    title: L("trend_label"),
                     value: stats.trend.symbol,
                     subtitle: stats.trend.displayName,
                     icon: trendIcon(for: stats.trend),
@@ -117,31 +115,31 @@ class DashboardView: NSView {
             // macOS 10.15 fallback without icons
             statisticsData = [
                 StatisticData(
-                    title: "Total Citations",
+                    title: L("total_citations"),
                     value: scholar.citations ?? 0,
-                    subtitle: "all time",
+                    subtitle: L("dashboard_subtitle_all_time"),
                     icon: nil,
                     change: nil,
                     type: .number
                 ),
                 StatisticData(
-                    title: "Monthly Change",
+                    title: L("monthly_change"),
                     value: stats.totalChange,
-                    subtitle: "this period",
+                    subtitle: L("dashboard_subtitle_this_period"),
                     icon: nil,
                     change: StatisticChange(value: stats.growthRate, isPositive: stats.totalChange >= 0),
                     type: .number
                 ),
                 StatisticData(
-                    title: "Growth Rate",
+                    title: L("growth_rate"),
                     value: stats.growthRate,
-                    subtitle: "percentage",
+                    subtitle: L("dashboard_subtitle_percentage"),
                     icon: nil,
                     change: nil,
                     type: .percentage
                 ),
                 StatisticData(
-                    title: "Trend",
+                    title: L("trend_label"),
                     value: stats.trend.symbol,
                     subtitle: stats.trend.displayName,
                     icon: nil,
@@ -174,13 +172,13 @@ class DashboardView: NSView {
         if #available(macOS 11.0, *) {
             switch trend {
             case .increasing:
-                return NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: "Increasing")
+                return NSImage(systemSymbolName: "arrow.up.right", accessibilityDescription: L("trend_increasing"))
             case .decreasing:
-                return NSImage(systemSymbolName: "arrow.down.right", accessibilityDescription: "Decreasing")
+                return NSImage(systemSymbolName: "arrow.down.right", accessibilityDescription: L("trend_decreasing"))
             case .stable:
-                return NSImage(systemSymbolName: "arrow.right", accessibilityDescription: "Stable")
+                return NSImage(systemSymbolName: "arrow.right", accessibilityDescription: L("trend_stable"))
             case .unknown:
-                return NSImage(systemSymbolName: "questionmark", accessibilityDescription: "Unknown")
+                return NSImage(systemSymbolName: "questionmark", accessibilityDescription: L("trend_unknown"))
             }
         } else {
             // macOS 10.15 fallback
@@ -193,7 +191,7 @@ class DashboardView: NSView {
 class InsightPanel: NSView {
     
     // MARK: - UI Components
-    private let titleLabel = NSTextField(labelWithString: "📊 Insights")
+    private let titleLabel = NSTextField(labelWithString: L("dashboard_title_insights"))
     private let scrollView = NSScrollView()
     private let stackView = NSStackView()
     private var insightCards: [InsightCardView] = []

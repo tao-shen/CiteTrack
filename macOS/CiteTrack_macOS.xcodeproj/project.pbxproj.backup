@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		05B9329CAD2643E5A02D0D59 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100940A01A2345728BBD4213 /* Localization.swift */; };
-		08DE33A0FA8E384B4075B31C /* ModernSettingsWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A41677D05CA3307FE705003F /* ModernSettingsWindow.swift */; };
 		0C90CE75B622BEAB1148CF7A /* ChartDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0BF1BA84CFC692DFF8BB622 /* ChartDataService.swift */; };
 		12B5FF382C80BB5E93317BA4 /* DashboardComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE2E87D92DE5D70521EF2C7C /* DashboardComponents.swift */; };
 		19B8A3380D51A98A2941D5FF /* iCloudSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0620709F6B00D1BA0F91F35D /* iCloudSyncManager.swift */; };
@@ -21,9 +20,7 @@
 		601C15F95B4FC0BB392D61BB /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0645FFA42AA62D830396B83D /* UserNotifications.framework */; };
 		6C58A5F1E9649A116A71BD3C /* CoreData.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 643869C723E33C66818148CD /* CoreData.framework */; };
 		6CC19E4FCCD1B380016DE884 /* EnhancedChartTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D14CD0F271179EDE599460 /* EnhancedChartTypes.swift */; };
-		897DA3C7090B4AD33B74A828 /* ModernUIComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 220BB24890C889599AE78A72 /* ModernUIComponents.swift */; };
 		8A5308578F9410F59536465F /* ChartsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EAE454AF13A0AC2030512B8 /* ChartsWindowController.swift */; };
-		912AEE695C49E063D151FB46 /* ModernChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C182C8842885ADDC33AA560 /* ModernChartView.swift */; };
 		AA2F97A100F18AAE421C3000 /* CitationHistoryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7218C7442A020FA686FDB564 /* CitationHistoryManager.swift */; };
 		AA5A144AF2205D8A2D7B817F /* ChartsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD84EBC806E3367F23A120D5 /* ChartsViewController.swift */; };
 		AC11BD407130C9A1D5FE0373 /* app_icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 0C8E41AC27A6DFFF142067A1 /* app_icon.icns */; };
@@ -57,13 +54,11 @@
 		0C8E41AC27A6DFFF142067A1 /* app_icon.icns */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = image.icns; name = app_icon.icns; path = assets/app_icon.icns; sourceTree = "<group>"; };
 		100940A01A2345728BBD4213 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		1DEB81CB7485CA1AE278D1F8 /* DataRepairViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DataRepairViewController.swift; sourceTree = "<group>"; };
-		220BB24890C889599AE78A72 /* ModernUIComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ModernUIComponents.swift; path = Sources/ModernUIComponents.swift; sourceTree = "<group>"; };
 		349AD2EC69BF4EA147E9542D /* CitationHistoryEntity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CitationHistoryEntity.swift; sourceTree = "<group>"; };
 		4EC1FD7C83DADA9610E71046 /* SettingsWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
 		53D6F19A30864BD48C42E99D /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Sparkle.framework; path = Frameworks/Sparkle.framework; sourceTree = "<group>"; };
 		54073A10E35C3BE9A8FA92B9 /* ChartTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChartTheme.swift; sourceTree = "<group>"; };
 		5481763000DE36C43866100A /* ModernCardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModernCardView.swift; sourceTree = "<group>"; };
-		5C182C8842885ADDC33AA560 /* ModernChartView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ModernChartView.swift; path = Sources/ModernChartView.swift; sourceTree = "<group>"; };
 		643869C723E33C66818148CD /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = "<group>"; };
 		64A1948FEF426329EAA06D07 /* CitationHistory.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CitationHistory.swift; sourceTree = "<group>"; };
 		6B7B97D8DA160C19D653BC62 /* CoreDataManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CoreDataManager.swift; sourceTree = "<group>"; };
@@ -72,7 +67,6 @@
 		90DF9034D7FF46C58BF34F6D /* CiteTrack.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CiteTrack.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		980B98E75FF042B6A4210AD0 /* CiteTrack.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CiteTrack.entitlements; sourceTree = "<group>"; };
 		9EAE454AF13A0AC2030512B8 /* ChartsWindowController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChartsWindowController.swift; sourceTree = "<group>"; };
-		A41677D05CA3307FE705003F /* ModernSettingsWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ModernSettingsWindow.swift; path = Sources/ModernSettingsWindow.swift; sourceTree = "<group>"; };
 		AD84EBC806E3367F23A120D5 /* ChartsViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChartsViewController.swift; sourceTree = "<group>"; };
 		BE2E87D92DE5D70521EF2C7C /* DashboardComponents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DashboardComponents.swift; sourceTree = "<group>"; };
 		C0BF1BA84CFC692DFF8BB622 /* ChartDataService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChartDataService.swift; sourceTree = "<group>"; };
@@ -120,9 +114,6 @@
 				F5D14CD0F271179EDE599460 /* EnhancedChartTypes.swift */,
 				5481763000DE36C43866100A /* ModernCardView.swift */,
 				F20AB979609DC748496227E0 /* DataManager.swift */,
-				220BB24890C889599AE78A72 /* ModernUIComponents.swift */,
-				A41677D05CA3307FE705003F /* ModernSettingsWindow.swift */,
-				5C182C8842885ADDC33AA560 /* ModernChartView.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -249,9 +240,6 @@
 				6CC19E4FCCD1B380016DE884 /* EnhancedChartTypes.swift in Sources */,
 				B74571FA2558FF7BE1418393 /* ModernCardView.swift in Sources */,
 				257FE290D82D47715773397D /* DataManager.swift in Sources */,
-				897DA3C7090B4AD33B74A828 /* ModernUIComponents.swift in Sources */,
-				08DE33A0FA8E384B4075B31C /* ModernSettingsWindow.swift in Sources */,
-				912AEE695C49E063D151FB46 /* ModernChartView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
