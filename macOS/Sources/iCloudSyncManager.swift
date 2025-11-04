@@ -198,6 +198,28 @@ class iCloudSyncManager {
         try exportCitationData(jsonData: jsonData)
     }
     
+    /// Export citation data to iCloud folder (public method for UI)
+    func exportCitationDataToiCloud(jsonData: Data) throws {
+        try createiCloudFolder()
+        try exportCitationData(jsonData: jsonData)
+        try exportAppConfig()
+    }
+    
+    /// Import citation data from iCloud folder (public method for UI)
+    func importCitationDataFromiCloud() throws -> Data {
+        guard let citationURL = citationDataURL else {
+            throw iCloudError.invalidURL
+        }
+        
+        guard FileManager.default.fileExists(atPath: citationURL.path) else {
+            throw iCloudError.fileNotFound
+        }
+        
+        let data = try Data(contentsOf: citationURL)
+        print("✅ Citation data imported from iCloud: \(citationURL.path)")
+        return data
+    }
+    
     /// Export app configuration to iCloud
     func exportAppConfig() throws {
         guard let configURL = configFileURL else {
@@ -207,6 +229,33 @@ class iCloudSyncManager {
         try jsonData.write(to: configURL)
         
         print("✅ App config exported to iCloud: \(configURL.path)")
+    }
+    
+    /// Get current sync status string
+    func getSyncStatus() -> String {
+        let fileManager = FileManager.default
+        let citationExists = citationDataURL.map { fileManager.fileExists(atPath: $0.path) } ?? false
+        let configExists = configFileURL.map { fileManager.fileExists(atPath: $0.path) } ?? false
+        let folderExists = citeTrackFolderURL.map { fileManager.fileExists(atPath: $0.path) } ?? false
+        
+        var lastSync: Date? = nil
+        if let citationURL = citationDataURL, fileManager.fileExists(atPath: citationURL.path) {
+            if let attrs = try? fileManager.attributesOfItem(atPath: citationURL.path),
+               let modDate = attrs[.modificationDate] as? Date {
+                lastSync = modDate
+            }
+        }
+        
+        let status = iCloudFileStatus(
+            iCloudAvailable: isiCloudAvailable,
+            folderExists: folderExists,
+            citationDataExists: citationExists,
+            configExists: configExists,
+            lastSyncDate: lastSync,
+            isSyncEnabled: PreferencesManager.shared.iCloudDriveFolderEnabled
+        )
+        
+        return status.description
     }
     
     // MARK: - Auto Sync Management
@@ -741,6 +790,7 @@ enum iCloudError: LocalizedError {
     case invalidURL
     case invalidFileFormat
     case folderCreationFailed
+    case fileNotFound
     case exportFailed(String)
     case importFailed(String)
     
@@ -754,6 +804,8 @@ enum iCloudError: LocalizedError {
             return L("icloud_error_invalid_file_format")
         case .folderCreationFailed:
             return L("icloud_error_folder_creation_failed")
+        case .fileNotFound:
+            return L("icloud_error_file_not_found")
         case .exportFailed(let message):
             return L("icloud_error_export_failed", message)
         case .importFailed(let message):

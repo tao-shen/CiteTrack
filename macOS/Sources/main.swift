@@ -14,6 +14,7 @@ extension UserDefaults {
         static let showInMenuBar = "ShowInMenuBar"
         static let launchAtLogin = "LaunchAtLogin"
         static let iCloudSyncEnabled = "iCloudSyncEnabled"
+        static let iCloudDriveFolderEnabled = "iCloudDriveFolderEnabled"
     }
 }
 
@@ -336,6 +337,15 @@ class PreferencesManager {
         }
     }
     
+    var iCloudDriveFolderEnabled: Bool {
+        get {
+            return userDefaults.bool(forKey: UserDefaults.Keys.iCloudDriveFolderEnabled)
+        }
+        set {
+            userDefaults.set(newValue, forKey: UserDefaults.Keys.iCloudDriveFolderEnabled)
+        }
+    }
+    
     private func updateActivationPolicy() {
         DispatchQueue.main.async(qos: .userInitiated) {
             if self.showInDock {
@@ -368,6 +378,16 @@ class PreferencesManager {
         var currentScholars = scholars
         currentScholars.removeAll { $0.id == id }
         scholars = currentScholars
+        
+        // 同时删除该学者的所有历史数据
+        CitationHistoryManager.shared.deleteHistory(for: id) { result in
+            switch result {
+            case .success(let count):
+                print("✅ Successfully deleted \(count) history entries for scholar: \(id)")
+            case .failure(let error):
+                print("⚠️ Failed to delete history data for scholar \(id): \(error)")
+            }
+        }
     }
     
     func updateScholar(withId id: String, name: String? = nil, citations: Int? = nil) {
@@ -544,6 +564,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self,
             selector: #selector(scholarsUpdated),
             name: NSNotification.Name("ScholarsUpdated"),
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(scholarsUpdated),
+            name: .scholarsDataUpdated,
             object: nil
         )
         

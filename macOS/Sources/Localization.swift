@@ -215,6 +215,10 @@ class LocalizationManager {
             "button_add_scholar": "Add Scholar",
             "button_remove": "Remove",
             "button_refresh_data": "Refresh Data",
+            "remove_scholar_title": "Remove Scholar",
+            "remove_scholar_message": "Are you sure you want to remove this scholar?",
+            "remove_scholars_title": "Remove Scholars",
+            "remove_scholars_message": "Are you sure you want to remove the selected scholars?",
             
             // Settings Options
             "setting_update_interval": "Auto Update Interval:",
@@ -282,12 +286,22 @@ class LocalizationManager {
             "button_open_folder": "Open Folder",
             "button_import": "Import",
             
+            "label_export_to_icloud": "Export to iCloud Folder:",
+            "label_import_from_icloud": "Import from iCloud Folder:",
+            
+            "show_in_icloud_drive": "Show in iCloud Drive",
+            "sync_now": "Sync Now",
+            "syncing": "Syncing...",
+            "manual_import_file": "Import from File",
+            "export_to_device": "Export to File",
+            
             "exporting_to_icloud": "Exporting to iCloud",
             "importing_from_icloud": "Importing from iCloud", 
             "please_wait_exporting": "Please wait while your data is being exported to iCloud Drive...",
             "please_wait_importing": "Please wait while your data is being imported from iCloud Drive...",
             
             "export_to_icloud_success": "Your citation data has been successfully saved to iCloud Drive in the CiteTrack folder.",
+            "export_to_icloud_success_message": "Data has been successfully exported to iCloud Drive. You can access it from the Files app on iOS or Finder on macOS.",
             "import_from_icloud_title": "Import from iCloud",
             "import_from_icloud_warning": "This will replace your current data with the data from iCloud. Are you sure you want to continue?",
             "import_from_icloud_success": "Data successfully imported from iCloud:",
@@ -317,6 +331,7 @@ class LocalizationManager {
             "icloud_error_invalid_url": "Invalid iCloud URL",
             "icloud_error_invalid_file_format": "Invalid file format",
             "icloud_error_folder_creation_failed": "Failed to create CiteTrack folder in iCloud",
+            "icloud_error_file_not_found": "No data file found in iCloud. Please export data first.",
             "icloud_error_export_failed": "Export failed: %@",
             "icloud_error_import_failed": "Import failed: %@",
             "icloud_cloudkit_unavailable": "CloudKit import not available, please use iCloud Drive sync",
@@ -545,6 +560,10 @@ class LocalizationManager {
             "button_add_scholar": "添加学者",
             "button_remove": "删除",
             "button_refresh_data": "刷新数据",
+            "remove_scholar_title": "删除学者",
+            "remove_scholar_message": "确定要删除该学者吗？",
+            "remove_scholars_title": "删除学者",
+            "remove_scholars_message": "确定要删除选中的学者吗？",
             
             // Settings Options
             "setting_update_interval": "自动更新间隔:",
@@ -612,12 +631,22 @@ class LocalizationManager {
             "button_open_folder": "打开文件夹",
             "button_import": "导入",
             
+            "label_export_to_icloud": "导出到iCloud文件夹：",
+            "label_import_from_icloud": "从iCloud文件夹导入：",
+            
+            "show_in_icloud_drive": "在iCloud Drive中显示",
+            "sync_now": "立即同步",
+            "syncing": "正在同步...",
+            "manual_import_file": "从文件导入",
+            "export_to_device": "导出到文件",
+            
             "exporting_to_icloud": "正在导出到iCloud",
             "importing_from_icloud": "正在从iCloud导入",
             "please_wait_exporting": "请等待，正在将您的数据导出到iCloud Drive...",
             "please_wait_importing": "请等待，正在从iCloud Drive导入您的数据...",
             
             "export_to_icloud_success": "您的引用数据已成功保存到iCloud Drive的CiteTrack文件夹中。",
+            "export_to_icloud_success_message": "数据已成功导出到iCloud Drive。您可以在iOS的文件应用或macOS的访达中访问它。",
             "import_from_icloud_title": "从iCloud导入",
             "import_from_icloud_warning": "这将用iCloud中的数据替换您当前的数据。您确定要继续吗？",
             "import_from_icloud_success": "数据已成功从iCloud导入:",
@@ -647,6 +676,7 @@ class LocalizationManager {
             "icloud_error_invalid_url": "无效的 iCloud URL",
             "icloud_error_invalid_file_format": "无效的文件格式",
             "icloud_error_folder_creation_failed": "无法在 iCloud 中创建 CiteTrack 文件夹",
+            "icloud_error_file_not_found": "在iCloud中未找到数据文件。请先导出数据。",
             "icloud_error_export_failed": "导出失败：%@",
             "icloud_error_import_failed": "导入失败：%@",
             "icloud_cloudkit_unavailable": "CloudKit 导入不可用，请使用 iCloud Drive 同步",
@@ -874,6 +904,10 @@ class LocalizationManager {
             "button_add_scholar": "研究者を追加",
             "button_remove": "削除",
             "button_refresh": "データを更新",
+            "remove_scholar_title": "研究者を削除",
+            "remove_scholar_message": "この研究者を削除してもよろしいですか？",
+            "remove_scholars_title": "研究者を削除",
+            "remove_scholars_message": "選択した研究者を削除してもよろしいですか？",
             
             // Settings Options
             "setting_update_interval": "自動更新間隔:",
@@ -901,6 +935,22 @@ class LocalizationManager {
             "add_scholar_name_label": "名前（オプション）:",
             "button_add": "追加",
             "button_cancel": "キャンセル",
+            "button_export_to_icloud": "iCloudにエクスポート",
+            "button_import_from_icloud": "iCloudからインポート",
+            "button_open_folder": "フォルダを開く",
+            "button_import": "インポート",
+            
+            "label_export_to_icloud": "iCloudフォルダにエクスポート:",
+            "label_import_from_icloud": "iCloudフォルダからインポート:",
+            
+            "show_in_icloud_drive": "iCloud Driveに表示",
+            "sync_now": "今すぐ同期",
+            "syncing": "同期中...",
+            "manual_import_file": "ファイルからインポート",
+            "export_to_device": "ファイルにエクスポート",
+            
+            "export_to_icloud_success_message": "データがiCloud Driveに正常にエクスポートされました。iOSのファイルアプリまたはmacOSのFinderからアクセスできます。",
+            
             "import_file_panel_message": "iOSからエクスポートしたデータファイル（citation_data.json または ios_data.json）を選択してください",
             "import_success_title": "インポート成功",
             "import_success_message": "研究者を %d 人、履歴を %d 件インポートしました",
@@ -922,6 +972,7 @@ class LocalizationManager {
             "icloud_error_invalid_url": "無効なiCloud URL",
             "icloud_error_invalid_file_format": "無効なファイル形式",
             "icloud_error_folder_creation_failed": "iCloudにCiteTrackフォルダを作成できませんでした",
+            "icloud_error_file_not_found": "iCloudにデータファイルが見つかりません。まずデータをエクスポートしてください。",
             "icloud_error_export_failed": "エクスポートに失敗しました: %@",
             "icloud_error_import_failed": "インポートに失敗しました: %@",
             "icloud_cloudkit_unavailable": "CloudKitのインポートは利用できません。iCloud Drive同期を使用してください",
