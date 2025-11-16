@@ -701,12 +701,20 @@ struct MainView: View {
             }
             .tag(2)
             
+            // Who Cite Me Tab
+            WhoCiteMeView()
+                .tabItem {
+                    Image(systemName: "quote.bubble")
+                    Text(localizationManager.localized("who_cite_me"))
+                }
+                .tag(3)
+            
             SettingsView()
                 .tabItem {
                     Image(systemName: "gear")
                     Text(localizationManager.localized("settings"))
                 }
-                .tag(3)
+                .tag(4)
         }
                 .onReceive(NotificationCenter.default.publisher(for: .deepLinkAddScholar)) { _ in
                     selectedTab = 1 // 切换到学者管理页面
