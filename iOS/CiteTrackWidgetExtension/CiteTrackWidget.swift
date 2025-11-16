@@ -1144,6 +1144,10 @@ struct QuickRefreshIntent: AppIntent {
                 var citations = 0
                 for p in citationPatterns { if let v = firstMatch(p, html), let c = Int(v) { citations = c; break } }
                 if name.isEmpty { name = scholarId }
+                
+                // Widget Extension 无法访问 Shared 模块，所以不在这里解析论文列表
+                // 论文列表的解析和缓存由主 App 的 GoogleScholarService 处理
+                
                 return (name: name, citations: citations)
             }
             do {

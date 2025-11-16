@@ -64,6 +64,8 @@ struct WhoCiteMeView: View {
     @StateObject private var dataManager = DataManager.shared
     @StateObject private var localizationManager = LocalizationManager.shared
     
+    @AppStorage("ConfirmedMyScholarId") private var confirmedMyScholarId: String?
+    
     @State private var selectedScholar: Scholar?
     @State private var showingFilterSheet = false
     @State private var showingExportSheet = false
@@ -79,6 +81,33 @@ struct WhoCiteMeView: View {
     @State private var citingPapersSortByDate: Bool = true  // 默认按日期排序
     @State private var sortOption: PublicationSortOption = .citations
     @State private var sortAscending: Bool = false  // 注意：Google Scholar 的排序方向由参数决定，这里保留用于UI显示
+    
+    // 排序后的学者列表：将 "it's me" 的学者排在第一位
+    private var sortedScholars: [Scholar] {
+        let scholars = dataManager.scholars
+        guard let myScholarId = confirmedMyScholarId else {
+            return scholars
+        }
+        
+        // 分离 "it's me" 的学者和其他学者
+        var myScholar: Scholar?
+        var otherScholars: [Scholar] = []
+        
+        for scholar in scholars {
+            if scholar.id == myScholarId {
+                myScholar = scholar
+            } else {
+                otherScholars.append(scholar)
+            }
+        }
+        
+        // 将 "it's me" 的学者放在第一位
+        if let myScholar = myScholar {
+            return [myScholar] + otherScholars
+        } else {
+            return scholars
+        }
+    }
     
     var body: some View {
         NavigationView {
@@ -114,9 +143,28 @@ struct WhoCiteMeView: View {
             }
         }
         .onAppear {
-            if selectedScholar == nil, let firstScholar = dataManager.scholars.first {
-                selectedScholar = firstScholar
-                loadData(for: firstScholar)
+            if selectedScholar == nil {
+                // 优先选择 "it's me" 的学者，否则选择第一个
+                let firstScholar: Scholar?
+                if let myScholarId = confirmedMyScholarId,
+                   let myScholar = dataManager.scholars.first(where: { $0.id == myScholarId }) {
+                    firstScholar = myScholar
+                } else {
+                    firstScholar = sortedScholars.first
+                }
+                
+                if let firstScholar = firstScholar {
+                    selectedScholar = firstScholar
+                    loadData(for: firstScholar)
+                }
+            }
+        }
+        .onChange(of: confirmedMyScholarId) { _, _ in
+            // 当 "it's me" 改变时，重新选择学者
+            if let myScholarId = confirmedMyScholarId,
+               let myScholar = dataManager.scholars.first(where: { $0.id == myScholarId }) {
+                selectedScholar = myScholar
+                loadData(for: myScholar)
             }
         }
         .onChange(of: currentFilter) { _, newFilter in
@@ -129,7 +177,7 @@ struct WhoCiteMeView: View {
     private var scholarPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
-            ForEach(dataManager.scholars) { scholar in
+            ForEach(sortedScholars) { scholar in
                     scholarChip(scholar)
             }
         }
@@ -141,29 +189,51 @@ struct WhoCiteMeView: View {
     
     private func scholarChip(_ scholar: Scholar) -> some View {
         let isSelected = selectedScholar?.id == scholar.id
+        let isMyScholar = scholar.id == confirmedMyScholarId
         
         return Button(action: {
-            selectedScholar = scholar
+            // 切换学者时，清空该学者的现有数据，确保从第一页开始加载
+            if selectedScholar?.id != scholar.id {
+                // 清空之前学者的数据（可选，保留可以快速切换回来）
+                // 清空当前学者的数据，确保从第一页开始
+                Task { @MainActor in
+                    citationManager.scholarPublications[scholar.id] = []
+                    citationManager.hasMorePublications[scholar.id] = true
+                    // 等待清空完成后再加载数据
+                    selectedScholar = scholar
+                    loadData(for: scholar)
+                }
+            } else {
+                selectedScholar = scholar
                 loadData(for: scholar)
+            }
         }) {
             HStack(spacing: 8) {
                 // 学者头像占位符
                 Circle()
-                    .fill(isSelected ? Color.blue : Color(.systemGray5))
+                    .fill(isSelected ? Color.blue : (isMyScholar ? Color.green.opacity(0.3) : Color(.systemGray5)))
                     .frame(width: 32, height: 32)
                     .overlay(
                         Text(String(scholar.name.prefix(1)).uppercased())
                             .font(.caption)
                             .fontWeight(.semibold)
-                            .foregroundColor(isSelected ? .white : .secondary)
+                            .foregroundColor(isSelected ? .white : (isMyScholar ? .green : .secondary))
                     )
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(scholar.displayName)
-                        .font(.subheadline)
-                        .fontWeight(isSelected ? .semibold : .regular)
-                        .foregroundColor(isSelected ? .blue : .primary)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(scholar.displayName)
+                            .font(.subheadline)
+                            .fontWeight(isSelected ? .semibold : .regular)
+                            .foregroundColor(isSelected ? .blue : .primary)
+                            .lineLimit(1)
+                        
+                        if isMyScholar {
+                            Text("(It's me)")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                    }
                     
                     if let stats = citationManager.statistics[scholar.id] {
                         Text("\(stats.totalCitingPapers) \("citations".localized)")
@@ -176,11 +246,11 @@ struct WhoCiteMeView: View {
             .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 20)
-                    .fill(isSelected ? Color.blue.opacity(0.1) : Color(.systemGray6))
+                    .fill(isSelected ? Color.blue.opacity(0.1) : (isMyScholar ? Color.green.opacity(0.1) : Color(.systemGray6)))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 20)
-                    .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 1.5)
+                    .stroke(isSelected ? Color.blue : (isMyScholar ? Color.green.opacity(0.5) : Color.clear), lineWidth: 1.5)
             )
         }
         .buttonStyle(.plain)
@@ -469,7 +539,7 @@ struct WhoCiteMeView: View {
                     citationManager.fetchScholarPublications(
                         for: scholarId,
                         sortBy: sortParam,
-                        forceRefresh: true
+                        forceRefresh: false
                     )
                 }) {
                     HStack {
@@ -502,7 +572,7 @@ struct WhoCiteMeView: View {
                     citationManager.fetchScholarPublications(
                         for: scholarId,
                         sortBy: sortParam,
-                        forceRefresh: true
+                        forceRefresh: false
                     )
                 }) {
                     HStack {
@@ -589,7 +659,7 @@ struct WhoCiteMeView: View {
     private func loadData(for scholar: Scholar) {
         // 使用当前选择的排序选项
         let sortParam = sortOption.googleScholarParam
-        citationManager.fetchScholarPublications(for: scholar.id, sortBy: sortParam, forceRefresh: true)
+        citationManager.fetchScholarPublications(for: scholar.id, sortBy: sortParam, forceRefresh: false)
     }
     
     /// 加载更多论文
@@ -599,7 +669,7 @@ struct WhoCiteMeView: View {
     }
     
     private func refreshData(for scholar: Scholar) async {
-        citationManager.fetchScholarPublications(for: scholar.id, forceRefresh: true)
+        citationManager.fetchScholarPublications(for: scholar.id, forceRefresh: false)
         
         // 等待数据加载
         try? await Task.sleep(nanoseconds: 2_000_000_000)

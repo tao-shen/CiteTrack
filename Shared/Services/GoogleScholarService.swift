@@ -113,6 +113,34 @@ public class GoogleScholarService: ObservableObject {
                 }
                 
                 print("✅ 成功获取学者信息: \(name), 引用数: \(citations)")
+                
+                // 同时解析论文列表并保存到统一缓存（最大化利用页面内容）
+                Task { @MainActor in
+                    // 使用 CitationFetchService 解析论文列表
+                    let publications = CitationFetchService.shared.parseScholarPublications(from: htmlString)
+                    
+                    // 提取完整的学者信息（h-index, i10-index）
+                    let extractedInfo = CitationFetchService.shared.extractScholarFullInfo(from: htmlString)
+                    
+                    if !publications.isEmpty || extractedInfo != nil {
+                        // 保存到统一缓存
+                        let snapshot = ScholarDataSnapshot(
+                            scholarId: scholarId,
+                            timestamp: Date(),
+                            scholarName: extractedInfo?.name ?? name,
+                            totalCitations: extractedInfo?.totalCitations ?? citations,
+                            hIndex: extractedInfo?.hIndex,
+                            i10Index: extractedInfo?.i10Index,
+                            publications: publications,
+                            sortBy: "total",  // 默认使用 total 排序
+                            startIndex: 0,
+                            source: .dashboard
+                        )
+                        UnifiedCacheManager.shared.saveDataSnapshot(snapshot)
+                        print("📦 [GoogleScholarService] Saved \(publications.count) publications to unified cache from scholar page refresh")
+                    }
+                }
+                
                 completion(.success((name: name, citations: citations)))
             }
         }.resume()

@@ -190,7 +190,7 @@ class GoogleScholarService {
                 return
             }
             
-            self.parseScholarInfo(from: data, completion: completion)
+            self.parseScholarInfo(from: data, scholarId: scholarId, completion: completion)
         }.resume()
     }
     
@@ -205,7 +205,7 @@ class GoogleScholarService {
         }
     }
     
-    private func parseScholarInfo(from data: Data, completion: @escaping (Result<(name: String, citations: Int), ScholarError>) -> Void) {
+    private func parseScholarInfo(from data: Data, scholarId: String, completion: @escaping (Result<(name: String, citations: Int), ScholarError>) -> Void) {
         guard let htmlString = String(data: data, encoding: .utf8) else {
             completion(.failure(.parsingError))
             return
@@ -244,6 +244,34 @@ class GoogleScholarService {
                 let citationString = String(htmlString[range])
                 if let count = Int(citationString) {
                     let finalName = scholarName.isEmpty ? L("unknown_scholar") : scholarName
+                    
+                    // 同时解析论文列表并保存到统一缓存（最大化利用页面内容）
+                    Task { @MainActor in
+                        // 使用 CitationFetchService 解析论文列表
+                        let publications = CitationFetchService.shared.parseScholarPublications(from: htmlString)
+                        
+                        // 提取完整的学者信息（h-index, i10-index）
+                        let extractedInfo = CitationFetchService.shared.extractScholarFullInfo(from: htmlString)
+                        
+                        if !publications.isEmpty || extractedInfo != nil {
+                            // 保存到统一缓存
+                            let snapshot = ScholarDataSnapshot(
+                                scholarId: scholarId,
+                                timestamp: Date(),
+                                scholarName: extractedInfo?.name ?? finalName,
+                                totalCitations: extractedInfo?.totalCitations ?? count,
+                                hIndex: extractedInfo?.hIndex,
+                                i10Index: extractedInfo?.i10Index,
+                                publications: publications,
+                                sortBy: "total",  // 默认使用 total 排序
+                                startIndex: 0,
+                                source: .dashboard
+                            )
+                            UnifiedCacheManager.shared.saveDataSnapshot(snapshot)
+                            print("📦 [GoogleScholarService-macOS] Saved \(publications.count) publications to unified cache from scholar page refresh")
+                        }
+                    }
+                    
                     completion(.success((name: finalName, citations: count)))
                     return
                 }

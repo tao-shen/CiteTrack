@@ -19,6 +19,18 @@ public struct ScholarPublication: Identifiable, Codable {
     }
 }
 
+// MARK: - Scholar Publications Result
+/// 包含学者论文列表和学者基本信息的结果
+public struct ScholarPublicationsResult {
+    public let publications: [ScholarPublication]
+    public let scholarInfo: ScholarFullInfo?  // 仅在第一页（startIndex == 0）时有值
+    
+    public init(publications: [ScholarPublication], scholarInfo: ScholarFullInfo? = nil) {
+        self.publications = publications
+        self.scholarInfo = scholarInfo
+    }
+}
+
 // MARK: - Citation Fetch Service
 public class CitationFetchService: ObservableObject {
     public static let shared = CitationFetchService()
@@ -240,13 +252,13 @@ public class CitationFetchService: ObservableObject {
         }
     }
     
-    /// 获取学者的所有论文（公开方法）
-    public func fetchScholarPublications(
+    /// 获取学者的所有论文（公开方法）- 新版本，包含学者信息
+    public func fetchScholarPublicationsWithInfo(
         for scholarId: String,
         sortBy: String? = nil,
         startIndex: Int = 0,
         forceRefresh: Bool = false,
-        completion: @escaping (Result<[ScholarPublication], CitationError>) -> Void
+        completion: @escaping (Result<ScholarPublicationsResult, CitationError>) -> Void
     ) {
         applyRateLimit { [weak self] in
             guard let self = self else { return }
@@ -316,15 +328,52 @@ public class CitationFetchService: ObservableObject {
                     // 解析学者的论文列表
                     let publications = self.parseScholarPublications(from: htmlString)
                     
+                    // 如果是第一页，同时提取学者完整信息
+                    var scholarInfo: ScholarFullInfo? = nil
+                    if startIndex == 0 {
+                        scholarInfo = self.extractScholarFullInfo(from: htmlString)
+                    }
+                    
                     if publications.isEmpty {
                         self.logWarning("No publications found in scholar profile")
                     } else {
                         self.logSuccess("Parsed \(publications.count) publications")
+                        if let info = scholarInfo {
+                            self.logSuccess("Parsed scholar info: \(info.name), citations: \(info.totalCitations)")
+                        }
                     }
                     
-                    completion(.success(publications))
+                    let result = ScholarPublicationsResult(
+                        publications: publications,
+                        scholarInfo: scholarInfo
+                    )
+                    completion(.success(result))
                 }
             }.resume()
+        }
+    }
+    
+    /// 获取学者的所有论文（公开方法）- 旧版本，保持向后兼容
+    public func fetchScholarPublications(
+        for scholarId: String,
+        sortBy: String? = nil,
+        startIndex: Int = 0,
+        forceRefresh: Bool = false,
+        completion: @escaping (Result<[ScholarPublication], CitationError>) -> Void
+    ) {
+        // 调用新版本，然后只返回论文列表
+        fetchScholarPublicationsWithInfo(
+            for: scholarId,
+            sortBy: sortBy,
+            startIndex: startIndex,
+            forceRefresh: forceRefresh
+        ) { result in
+            switch result {
+            case .success(let publicationsResult):
+                completion(.success(publicationsResult.publications))
+            case .failure(let error):
+                completion(.failure(error))
+            }
         }
     }
     
@@ -899,7 +948,7 @@ public class CitationFetchService: ObservableObject {
     }
     
     /// 解析学者的论文列表
-    private func parseScholarPublications(from html: String) -> [ScholarPublication] {
+    public func parseScholarPublications(from html: String) -> [ScholarPublication] {
         var publications: [ScholarPublication] = []
         
         // Google Scholar学者主页的论文列表结构：
@@ -1359,7 +1408,7 @@ public class CitationFetchService: ObservableObject {
     }
     
     /// 提取正则表达式的第一个匹配
-    private func extractFirstMatch(from text: String, pattern: String) -> String? {
+    internal func extractFirstMatch(from text: String, pattern: String) -> String? {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else {
             return nil
         }

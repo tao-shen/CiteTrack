@@ -74,6 +74,30 @@ public class ScholarDataService: ObservableObject {
     
     /// 获取学者信息并更新数据
     public func fetchAndUpdateScholar(id: String) async throws -> Scholar {
+        print("🔍 [ScholarDataService] Fetching scholar: \(id)")
+        
+        // 1. 先检查统一缓存
+        if let basicInfo = await UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: id) {
+            print("💾 [ScholarDataService] Using unified cache: \(basicInfo.name), \(basicInfo.citations) citations")
+            
+            // 使用缓存数据，跳过网络请求
+            var scholar = Scholar(id: id, name: basicInfo.name)
+            scholar.citations = basicInfo.citations
+            scholar.lastUpdated = basicInfo.lastUpdated
+            
+            await dataManager.updateScholar(scholar)
+            
+            // 添加引用历史记录
+            let history = CitationHistory(scholarId: id, citationCount: basicInfo.citations)
+            await dataManager.addCitationHistory(history)
+            
+            print("✅ [ScholarDataService] Updated from cache: \(basicInfo.name) - \(basicInfo.citations)引用")
+            return scholar
+        }
+        
+        print("🌐 [ScholarDataService] Cache miss, fetching from network")
+        
+        // 2. 缓存未命中，从网络获取
         // 检查请求限制
         try checkRequestThrottle()
         
@@ -183,7 +207,38 @@ public class ScholarDataService: ObservableObject {
             throw ScholarDataError.parsingError
         }
         
-        return try parseScholarData(from: htmlString)
+        // 解析学者基本信息
+        let (name, citations) = try parseScholarData(from: htmlString)
+        
+        // 同时解析论文列表并保存到统一缓存（最大化利用页面内容）
+        Task { @MainActor in
+            // 使用 CitationFetchService 解析论文列表
+            let publications = CitationFetchService.shared.parseScholarPublications(from: htmlString)
+            
+            // 提取完整的学者信息（h-index, i10-index）
+            // 使用 CitationFetchService 的扩展方法
+            let extractedInfo = CitationFetchService.shared.extractScholarFullInfo(from: htmlString)
+            
+            if !publications.isEmpty || extractedInfo != nil {
+                // 保存到统一缓存
+                let snapshot = ScholarDataSnapshot(
+                    scholarId: scholarId,
+                    timestamp: Date(),
+                    scholarName: extractedInfo?.name ?? name,
+                    totalCitations: extractedInfo?.totalCitations ?? citations,
+                    hIndex: extractedInfo?.hIndex,
+                    i10Index: extractedInfo?.i10Index,
+                    publications: publications,
+                    sortBy: "total",  // Dashboard 刷新默认使用 total 排序
+                    startIndex: 0,
+                    source: .dashboard
+                )
+                UnifiedCacheManager.shared.saveDataSnapshot(snapshot)
+                print("📦 [ScholarDataService] Saved \(publications.count) publications to unified cache from dashboard refresh")
+            }
+        }
+        
+        return (name, citations)
     }
     
     /// 解析学者数据

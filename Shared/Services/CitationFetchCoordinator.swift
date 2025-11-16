@@ -421,7 +421,8 @@ public class CitationFetchCoordinator: ObservableObject {
     /// 获取学者论文列表
     private func fetchScholarPublications(scholarId: String, sortBy: String, startIndex: Int) async -> Bool {
         return await withCheckedContinuation { continuation in
-            fetchService.fetchScholarPublications(
+            // 使用新方法获取学者信息和论文列表
+            fetchService.fetchScholarPublicationsWithInfo(
                 for: scholarId,
                 sortBy: sortBy,
                 startIndex: startIndex,
@@ -433,8 +434,10 @@ public class CitationFetchCoordinator: ObservableObject {
                 }
                 
                 switch result {
-                case .success(let publications):
-                    // 缓存数据
+                case .success(let publicationsResult):
+                    let publications = publicationsResult.publications
+                    
+                    // 1. 旧缓存（保持兼容性）
                     self.cacheService.cacheScholarPublicationsList(
                         publications,
                         for: scholarId,
@@ -443,6 +446,45 @@ public class CitationFetchCoordinator: ObservableObject {
                     )
                     
                     print("💾 [FetchCoordinator] Cached \(publications.count) publications for \(scholarId), sortBy: \(sortBy), start: \(startIndex)")
+                    
+                    // 2. 新的统一缓存
+                    if let scholarInfo = publicationsResult.scholarInfo {
+                        Task { @MainActor in
+                            let snapshot = ScholarDataSnapshot(
+                                scholarId: scholarId,
+                                timestamp: Date(),
+                                scholarName: scholarInfo.name,
+                                totalCitations: scholarInfo.totalCitations,
+                                hIndex: scholarInfo.hIndex,
+                                i10Index: scholarInfo.i10Index,
+                                publications: publications,
+                                sortBy: sortBy,
+                                startIndex: startIndex,
+                                source: .whoCiteMe
+                            )
+                            UnifiedCacheManager.shared.saveDataSnapshot(snapshot)
+                            print("📦 [FetchCoordinator] Saved to unified cache: \(scholarInfo.name), \(scholarInfo.totalCitations) citations")
+                        }
+                    } else if startIndex == 0 {
+                        // 第一页但没有学者信息，只保存论文列表
+                        Task { @MainActor in
+                            let snapshot = ScholarDataSnapshot(
+                                scholarId: scholarId,
+                                timestamp: Date(),
+                                scholarName: nil,
+                                totalCitations: nil,
+                                hIndex: nil,
+                                i10Index: nil,
+                                publications: publications,
+                                sortBy: sortBy,
+                                startIndex: startIndex,
+                                source: .whoCiteMe
+                            )
+                            UnifiedCacheManager.shared.saveDataSnapshot(snapshot)
+                            print("📦 [FetchCoordinator] Saved publications to unified cache (no scholar info)")
+                        }
+                    }
+                    
                     continuation.resume(returning: true)
                     
                 case .failure(let error):
