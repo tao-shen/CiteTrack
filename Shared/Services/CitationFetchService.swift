@@ -128,10 +128,12 @@ public class CitationFetchService: ObservableObject {
     }
     
     private func logWarning(_ message: String) {
+        // 警告信息仍然输出
         print("⚠️ [CitationFetch] \(message)")
     }
     
     private func logError(_ message: String, error: Error? = nil) {
+        // 错误信息仍然输出
         if let error = error {
             print("❌ [CitationFetch] \(message): \(error.localizedDescription)")
         } else {

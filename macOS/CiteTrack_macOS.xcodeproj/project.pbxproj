@@ -13,10 +13,8 @@
 		19B8A3380D51A98A2941D5FF /* iCloudSyncManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0620709F6B00D1BA0F91F35D /* iCloudSyncManager.swift */; };
 		218D6BD244C6BFE75CBED94F /* CitationHistoryEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 349AD2EC69BF4EA147E9542D /* CitationHistoryEntity.swift */; };
 		257FE290D82D47715773397D /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F20AB979609DC748496227E0 /* DataManager.swift */; };
-		28A3CADE5CFD464C8A9DFC45 /* Sparkle.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 53D6F19A30864BD48C42E99D /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		48626BB417CA1DC5FBB09352 /* ChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7911B549389C696AD0AD38CA /* ChartView.swift */; };
 		4BDE546BC5A1C948F3CC490C /* ChartTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54073A10E35C3BE9A8FA92B9 /* ChartTheme.swift */; };
-		549A782BF64E4A7F86BD1C5D /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 53D6F19A30864BD48C42E99D /* Sparkle.framework */; };
 		601C15F95B4FC0BB392D61BB /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0645FFA42AA62D830396B83D /* UserNotifications.framework */; };
 		6C58A5F1E9649A116A71BD3C /* CoreData.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 643869C723E33C66818148CD /* CoreData.framework */; };
 		6CC19E4FCCD1B380016DE884 /* EnhancedChartTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D14CD0F271179EDE599460 /* EnhancedChartTypes.swift */; };
@@ -32,7 +30,14 @@
 		D1B0A0D6E4BCC81390A8511F /* DataRepairViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DEB81CB7485CA1AE278D1F8 /* DataRepairViewController.swift */; };
 		E886B418385CB02D07759C14 /* CitationHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A1948FEF426329EAA06D07 /* CitationHistory.swift */; };
 		EE8E71B7F70B0FB3273E2A11 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E9CD073C6469F5298E7572 /* main.swift */; };
-/* End PBXBuildFile section */
+		702AA077A68E4E6B9AA0C60D /* CitationFetchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64A3E3930F6F4F0DA4EE11EF /* CitationFetchService.swift */; };
+		2CBA8D7279854336902F1730 /* CitationFetchService+ScholarInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED15E696AC2848EFB494326A /* CitationFetchService+ScholarInfo.swift */; };
+		59E3601E1B1543C9A3860D16 /* UnifiedCacheManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B46969BCF75C4050B90B2387 /* UnifiedCacheManager.swift */; };
+		16E75A65B8B742BC8CA79748 /* CitingPaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3620EAF2B7C54F0FB78A58CE /* CitingPaper.swift */; };
+		F93941F9D9C3451182C89A15 /* CitingAuthor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A726D21159D428AB39585C5 /* CitingAuthor.swift */; };
+		E5382A5D6E344E2EB79B0A0C /* CitationCacheService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 002A29E87D14470BACF2D64C /* CitationCacheService.swift */; };
+		9E5F82A5E13D4A7491A976B9 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935D94836ED349F7B0E9C40D /* Constants.swift */; };
+		/* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
 		62DE196BA960438E9052558D /* Embed Frameworks */ = {
@@ -41,7 +46,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				28A3CADE5CFD464C8A9DFC45 /* Sparkle.framework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -56,7 +60,6 @@
 		1DEB81CB7485CA1AE278D1F8 /* DataRepairViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DataRepairViewController.swift; sourceTree = "<group>"; };
 		349AD2EC69BF4EA147E9542D /* CitationHistoryEntity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CitationHistoryEntity.swift; sourceTree = "<group>"; };
 		4EC1FD7C83DADA9610E71046 /* SettingsWindow.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsWindow.swift; sourceTree = "<group>"; };
-		53D6F19A30864BD48C42E99D /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Sparkle.framework; path = Frameworks/Sparkle.framework; sourceTree = "<group>"; };
 		54073A10E35C3BE9A8FA92B9 /* ChartTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ChartTheme.swift; sourceTree = "<group>"; };
 		5481763000DE36C43866100A /* ModernCardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModernCardView.swift; sourceTree = "<group>"; };
 		643869C723E33C66818148CD /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = "<group>"; };
@@ -75,14 +78,20 @@
 		F0E9CD073C6469F5298E7572 /* main.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		F20AB979609DC748496227E0 /* DataManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
 		F5D14CD0F271179EDE599460 /* EnhancedChartTypes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EnhancedChartTypes.swift; sourceTree = "<group>"; };
-/* End PBXFileReference section */
+		64A3E3930F6F4F0DA4EE11EF /* CitationFetchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CitationFetchService.swift"; path = "../../Shared/Services/CitationFetchService.swift"; sourceTree = "<group>"; };
+		ED15E696AC2848EFB494326A /* CitationFetchService+ScholarInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CitationFetchService+ScholarInfo.swift"; path = "../../Shared/Services/CitationFetchService+ScholarInfo.swift"; sourceTree = "<group>"; };
+		B46969BCF75C4050B90B2387 /* UnifiedCacheManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "UnifiedCacheManager.swift"; path = "../../Shared/Services/UnifiedCacheManager.swift"; sourceTree = "<group>"; };
+		3620EAF2B7C54F0FB78A58CE /* CitingPaper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CitingPaper.swift"; path = "../../Shared/Models/CitingPaper.swift"; sourceTree = "<group>"; };
+		8A726D21159D428AB39585C5 /* CitingAuthor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CitingAuthor.swift"; path = "../../Shared/Models/CitingAuthor.swift"; sourceTree = "<group>"; };
+				002A29E87D14470BACF2D64C /* CitationCacheService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "CitationCacheService.swift"; path = "../../Shared/Services/CitationCacheService.swift"; sourceTree = "<group>"; };
+		935D94836ED349F7B0E9C40D /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = "Constants.swift"; path = "../../Shared/Constants.swift"; sourceTree = "<group>"; };
+		/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A175C7E927F949C496D4E55B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				549A782BF64E4A7F86BD1C5D /* Sparkle.framework in Frameworks */,
 				6C58A5F1E9649A116A71BD3C /* CoreData.framework in Frameworks */,
 				601C15F95B4FC0BB392D61BB /* UserNotifications.framework in Frameworks */,
 			);
@@ -93,6 +102,8 @@
 /* Begin PBXGroup section */
 		10868796DF6E478EBB8857C3 /* Sources */ = {
 			isa = PBXGroup;
+			path = Sources;
+			sourceTree = "<group>";
 			children = (
 				100940A01A2345728BBD4213 /* Localization.swift */,
 				F0E9CD073C6469F5298E7572 /* main.swift */,
@@ -114,6 +125,13 @@
 				F5D14CD0F271179EDE599460 /* EnhancedChartTypes.swift */,
 				5481763000DE36C43866100A /* ModernCardView.swift */,
 				F20AB979609DC748496227E0 /* DataManager.swift */,
+				64A3E3930F6F4F0DA4EE11EF /* CitationFetchService.swift */,
+				ED15E696AC2848EFB494326A /* CitationFetchService+ScholarInfo.swift */,
+				B46969BCF75C4050B90B2387 /* UnifiedCacheManager.swift */,
+				002A29E87D14470BACF2D64C /* CitationCacheService.swift */,
+				3620EAF2B7C54F0FB78A58CE /* CitingPaper.swift */,
+				8A726D21159D428AB39585C5 /* CitingAuthor.swift */,
+				935D94836ED349F7B0E9C40D /* Constants.swift */,
 			);
 			path = Sources;
 			sourceTree = "<group>";
@@ -129,7 +147,6 @@
 		A327CF1C6E194DC6AFD79525 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				53D6F19A30864BD48C42E99D /* Sparkle.framework */,
 				643869C723E33C66818148CD /* CoreData.framework */,
 				0645FFA42AA62D830396B83D /* UserNotifications.framework */,
 			);
@@ -161,12 +178,10 @@
 		1290956C0876418485365FB9 /* CiteTrack */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E0BA0E9CD21444B0985135CD /* Build configuration list for PBXNativeTarget "CiteTrack" */;
-			buildPhases = (
-				B0AD46090196463BBC57C24E /* Sources */,
+			buildPhases = (B0AD46090196463BBC57C24E /* Sources */,
 				A175C7E927F949C496D4E55B /* Frameworks */,
 				E00C32D8152340BA92BFA5EA /* Resources */,
-				62DE196BA960438E9052558D /* Embed Frameworks */,
-			);
+				62DE196BA960438E9052558D /* Embed Frameworks */,);
 			buildRules = (
 			);
 			dependencies = (
@@ -177,6 +192,7 @@
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
+
 
 /* Begin PBXProject section */
 		274072E91867465CB1167D76 /* Project object */ = {
@@ -240,6 +256,14 @@
 				6CC19E4FCCD1B380016DE884 /* EnhancedChartTypes.swift in Sources */,
 				B74571FA2558FF7BE1418393 /* ModernCardView.swift in Sources */,
 				257FE290D82D47715773397D /* DataManager.swift in Sources */,
+			
+				702AA077A68E4E6B9AA0C60D /* CitationFetchService.swift in Sources */,
+				2CBA8D7279854336902F1730 /* CitationFetchService+ScholarInfo.swift in Sources */,
+				59E3601E1B1543C9A3860D16 /* UnifiedCacheManager.swift in Sources */,
+				16E75A65B8B742BC8CA79748 /* CitingPaper.swift in Sources */,
+				F93941F9D9C3451182C89A15 /* CitingAuthor.swift in Sources */,
+				E5382A5D6E344E2EB79B0A0C /* CitationCacheService.swift in Sources */,
+				9E5F82A5E13D4A7491A976B9 /* Constants.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,6 +287,7 @@
 				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				ENABLE_APP_INTENTS_METADATA_EXTRACTION = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Frameworks",
@@ -378,6 +403,7 @@
 				ENABLE_RESOURCE_ACCESS_CONTACTS = NO;
 				ENABLE_RESOURCE_ACCESS_LOCATION = NO;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+				ENABLE_APP_INTENTS_METADATA_EXTRACTION = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)/Frameworks",
@@ -397,7 +423,8 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.0;
 				MARKETING_VERSION = 1.0.0;
-				OTHER_SWIFT_FLAGS = "";
+				OTHER_SWIFT_FLAGS = "-D APP_STORE";
+				STRIP_INSTALLED_PRODUCT = NO;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = NO;

@@ -139,14 +139,19 @@ public class DataManager: ObservableObject {
     /// 获取所有历史记录（使用 Core Data）
     private func getAllHistory() -> [CitationHistory] {
         let context = CoreDataManager.shared.viewContext
+        
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         let entities = CitationHistoryEntity.fetchAllHistory(in: context)
+        
         return entities.compactMap { CitationHistory.fromCoreDataEntity($0) }
     }
     
     /// 保存历史记录到 Core Data
     private func saveHistory(_ history: CitationHistory) {
         let context = CoreDataManager.shared.viewContext
+        context.performAndWait {
         _ = history.toCoreDataEntity(in: context)
+        }
         CoreDataManager.shared.saveContext()
     }
     
@@ -181,6 +186,7 @@ public class DataManager: ObservableObject {
         let context = CoreDataManager.shared.viewContext
         let entities: [CitationHistoryEntity]
         
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         if let start = startDate, let end = endDate {
             entities = CitationHistoryEntity.fetchHistory(for: scholarId, from: start, to: end, in: context)
         } else if let start = startDate {
@@ -202,7 +208,10 @@ public class DataManager: ObservableObject {
     /// 删除指定学者的所有历史记录
     public func removeAllHistory(for scholarId: String) {
         let context = CoreDataManager.shared.viewContext
+        
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         CitationHistoryEntity.deleteHistory(for: scholarId, in: context)
+        
         CoreDataManager.shared.saveContext()
         print("✅ [DataManager] 删除了学者的历史记录: \(scholarId)")
     }
@@ -210,7 +219,10 @@ public class DataManager: ObservableObject {
     /// 清理所有历史记录
     public func clearAllHistory() {
         let context = CoreDataManager.shared.viewContext
+        
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         CitationHistoryEntity.deleteAllHistory(in: context)
+        
         CoreDataManager.shared.saveContext()
         print("✅ [DataManager] 已清理所有历史记录")
     }
@@ -219,7 +231,10 @@ public class DataManager: ObservableObject {
     public func cleanOldHistory(keepDays: Int = 365) {
         let cutoffDate = Calendar.current.date(byAdding: .day, value: -keepDays, to: Date()) ?? Date()
         let context = CoreDataManager.shared.viewContext
+        
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         CitationHistoryEntity.deleteHistoryBefore(date: cutoffDate, in: context)
+        
         CoreDataManager.shared.saveContext()
         print("✅ [DataManager] 清理旧数据")
     }
@@ -439,8 +454,10 @@ public class DataManager: ObservableObject {
         let context = CoreDataManager.shared.viewContext
         var importedCount = 0
         
+        // 批量操作使用 performAndWait 提高效率
+        context.performAndWait {
         for history in historyList {
-            // 检查是否已存在相同的记录（相同学者+时间戳）
+                // CitationHistoryEntity.historyExists 内部已使用 performAndWait
             let exists = CitationHistoryEntity.historyExists(
                 scholarId: history.scholarId,
                 timestamp: history.timestamp,
@@ -450,6 +467,7 @@ public class DataManager: ObservableObject {
             if !exists {
                 _ = history.toCoreDataEntity(in: context)
                 importedCount += 1
+                }
             }
         }
         

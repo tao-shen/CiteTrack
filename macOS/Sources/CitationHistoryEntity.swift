@@ -73,126 +73,170 @@ extension CitationHistoryEntity {
     
     /// Fetch all citation history for a specific scholar
     static func fetchHistory(for scholarId: String, in context: NSManagedObjectContext) -> [CitationHistoryEntity] {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            request.predicate = NSPredicate(format: "scholarId == %@", scholarId)
-            request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
-            
-            return try context.fetch(request)
-        } catch {
-            print("Error fetching citation history for scholar \(scholarId): \(error)")
-            return []
+        var result: [CitationHistoryEntity] = []
+        
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                request.predicate = NSPredicate(format: "scholarId == %@", scholarId)
+                request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+                
+                result = try context.fetch(request)
+            } catch {
+                print("Error fetching citation history for scholar \(scholarId): \(error)")
+                result = []
+            }
         }
+        
+        return result
     }
     
     /// Fetch citation history for a specific scholar within a date range
     static func fetchHistory(for scholarId: String, from startDate: Date, to endDate: Date, in context: NSManagedObjectContext) -> [CitationHistoryEntity] {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            request.predicate = NSPredicate(
-                format: "scholarId == %@ AND timestamp >= %@ AND timestamp <= %@",
-                scholarId, startDate as NSDate, endDate as NSDate
-            )
-            request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
-            
-            return try context.fetch(request)
-        } catch {
-            print("Error fetching citation history for scholar \(scholarId) in date range: \(error)")
-            return []
+        var result: [CitationHistoryEntity] = []
+        
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                request.predicate = NSPredicate(
+                    format: "scholarId == %@ AND timestamp >= %@ AND timestamp <= %@",
+                    scholarId, startDate as NSDate, endDate as NSDate
+                )
+                request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+                
+                result = try context.fetch(request)
+            } catch {
+                print("Error fetching citation history for scholar \(scholarId) in date range: \(error)")
+                result = []
+            }
         }
+        
+        return result
     }
     
     /// Fetch the latest citation history entry for a specific scholar
     static func fetchLatestEntry(for scholarId: String, in context: NSManagedObjectContext) -> CitationHistoryEntity? {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            request.predicate = NSPredicate(format: "scholarId == %@", scholarId)
-            request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
-            request.fetchLimit = 1
-            
-            return try context.fetch(request).first
-        } catch {
-            print("Error fetching latest citation history for scholar \(scholarId): \(error)")
-            return nil
+        var result: CitationHistoryEntity?
+        
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                request.predicate = NSPredicate(format: "scholarId == %@", scholarId)
+                request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
+                request.fetchLimit = 1
+                
+                result = try context.fetch(request).first
+            } catch {
+                print("Error fetching latest citation history for scholar \(scholarId): \(error)")
+                result = nil
+            }
         }
+        
+        return result
     }
     
     /// Delete all citation history for a specific scholar
     static func deleteHistory(for scholarId: String, in context: NSManagedObjectContext) {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            request.predicate = NSPredicate(format: "scholarId == %@", scholarId)
-            
-            let entities = try context.fetch(request)
-            for entity in entities {
-                context.delete(entity)
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                request.predicate = NSPredicate(format: "scholarId == %@", scholarId)
+                
+                let entities = try context.fetch(request)
+                for entity in entities {
+                    context.delete(entity)
+                }
+            } catch {
+                print("Error deleting citation history for scholar \(scholarId): \(error)")
             }
-        } catch {
-            print("Error deleting citation history for scholar \(scholarId): \(error)")
         }
     }
     
     /// Fetch all citation history
     static func fetchAllHistory(in context: NSManagedObjectContext) -> [CitationHistoryEntity] {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
-            
-            return try context.fetch(request)
-        } catch {
-            print("Error fetching all citation history: \(error)")
-            return []
+        var result: [CitationHistoryEntity] = []
+        
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+                
+                result = try context.fetch(request)
+            } catch {
+                print("Error fetching all citation history: \(error)")
+                result = []
+            }
         }
+        
+        return result
     }
     
     /// Check if a history entry exists with the same scholar ID and timestamp (within 1 minute tolerance)
     static func historyExists(scholarId: String, timestamp: Date, in context: NSManagedObjectContext) -> Bool {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            let tolerance: TimeInterval = 60 // 1 minute
-            let startDate = timestamp.addingTimeInterval(-tolerance)
-            let endDate = timestamp.addingTimeInterval(tolerance)
-            
-            request.predicate = NSPredicate(
-                format: "scholarId == %@ AND timestamp >= %@ AND timestamp <= %@",
-                scholarId, startDate as NSDate, endDate as NSDate
-            )
-            request.fetchLimit = 1
-            
-            let count = try context.count(for: request)
-            return count > 0
-        } catch {
-            print("Error checking if history exists: \(error)")
-            return false
+        var result = false
+        
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                let tolerance: TimeInterval = 60 // 1 minute
+                let startDate = timestamp.addingTimeInterval(-tolerance)
+                let endDate = timestamp.addingTimeInterval(tolerance)
+                
+                request.predicate = NSPredicate(
+                    format: "scholarId == %@ AND timestamp >= %@ AND timestamp <= %@",
+                    scholarId, startDate as NSDate, endDate as NSDate
+                )
+                request.fetchLimit = 1
+                
+                let count = try context.count(for: request)
+                result = count > 0
+            } catch {
+                print("Error checking if history exists: \(error)")
+                result = false
+            }
         }
+        
+        return result
     }
     
     /// Delete all citation history
     static func deleteAllHistory(in context: NSManagedObjectContext) {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            let entities = try context.fetch(request)
-            
-            for entity in entities {
-                context.delete(entity)
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                let entities = try context.fetch(request)
+                
+                for entity in entities {
+                    context.delete(entity)
+                }
+            } catch {
+                print("Error deleting all citation history: \(error)")
             }
-        } catch {
-            print("Error deleting all citation history: \(error)")
         }
     }
     
     /// Delete citation history before a specific date
     static func deleteHistoryBefore(date: Date, in context: NSManagedObjectContext) {
-        do {
-            let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
-            request.predicate = NSPredicate(format: "timestamp < %@", date as NSDate)
-            
-            let entities = try context.fetch(request)
-            for entity in entities {
-                context.delete(entity)
+        // 确保在正确的线程上执行，避免优先级反转
+        context.performAndWait {
+            do {
+                let request: NSFetchRequest<CitationHistoryEntity> = try CitationHistoryEntity.safeFetchRequest(in: context)
+                request.predicate = NSPredicate(format: "timestamp < %@", date as NSDate)
+                
+                let entities = try context.fetch(request)
+                for entity in entities {
+                    context.delete(entity)
+                }
+            } catch {
+                print("Error deleting citation history before \(date): \(error)")
             }
-        } catch {
-            print("Error deleting citation history before \(date): \(error)")
         }
     }
 }

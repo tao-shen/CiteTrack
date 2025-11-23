@@ -1,5 +1,25 @@
 import Cocoa
 import Foundation
+import ObjectiveC
+
+// MARK: - Flipped View for ScrollView Content
+class FlippedView: NSView {
+    override var isFlipped: Bool {
+        return true
+    }
+}
+
+// MARK: - Custom Tab View Controller with Window Resize Support
+class ResizableTabViewController: NSTabViewController {
+    weak var windowController: SettingsWindowController?
+    
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        
+        // 通知窗口控制器调整窗口尺寸
+        windowController?.adjustWindowSize(for: tabViewItem)
+    }
+}
 
 // MARK: - Custom TextField with Copy/Paste Support
 class EditableTextField: NSTextField {
@@ -98,6 +118,10 @@ class SettingsWindowController: NSWindowController {
     private var scholars: [Scholar] = []
     private let googleScholarService = GoogleScholarService()
     
+    // Add Scholar Dialog
+    private var addScholarDialogWindow: NSWindow?
+    private var addScholarInputField: NSTextField?
+    
     // Controls
     private var updateIntervalPopup: NSPopUpButton!
     private var showInDockCheckbox: NSButton!
@@ -145,8 +169,30 @@ class SettingsWindowController: NSWindowController {
     }
     
     private func setupWindow() {
+        // 获取屏幕尺寸
+        guard let screen = NSScreen.main else {
+            // 如果无法获取屏幕，使用默认尺寸
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                contentRect: NSRect(x: 0, y: 0, width: 550, height: 500),
+                styleMask: [.titled, .closable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.center()
+            window.title = L("settings_title")
+            window.isReleasedWhenClosed = false
+            window.minSize = NSSize(width: 500, height: 450)
+            self.window = window
+            return
+        }
+        
+        let screenSize = screen.visibleFrame.size
+        // 根据屏幕尺寸计算合适的窗口大小（屏幕的 40-50%）
+        let preferredWidth: CGFloat = min(550, screenSize.width * 0.45)
+        let preferredHeight: CGFloat = min(600, screenSize.height * 0.55)
+        
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: preferredWidth, height: preferredHeight),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
@@ -155,7 +201,15 @@ class SettingsWindowController: NSWindowController {
         window.center()
         window.title = L("settings_title")
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 750, height: 550)
+        // 最小尺寸：根据屏幕尺寸调整，但不要太小
+        let minWidth = min(480, screenSize.width * 0.35)
+        let minHeight = min(420, screenSize.height * 0.45)
+        window.minSize = NSSize(width: minWidth, height: minHeight)
+        
+        // 最大尺寸：不超过屏幕的 90%
+        let maxWidth = screenSize.width * 0.9
+        let maxHeight = screenSize.height * 0.9
+        window.maxSize = NSSize(width: maxWidth, height: maxHeight)
         
         self.window = window
     }
@@ -163,9 +217,10 @@ class SettingsWindowController: NSWindowController {
     private func setupUI() {
         guard let window = window else { return }
         
-        // 使用原生 NSTabViewController
-        let tabViewController = NSTabViewController()
+        // 使用自定义的 NSTabViewController 子类来监听标签页切换
+        let tabViewController = ResizableTabViewController()
         tabViewController.tabStyle = .toolbar
+        tabViewController.windowController = self
         
         // 通用设置
         let generalVC = NSViewController()
@@ -206,80 +261,155 @@ class SettingsWindowController: NSWindowController {
     // MARK: - Content Setup
     
     private func setupDataManagementSection(in parentView: NSView) {
+        // 创建内容容器视图 - 使用 FlippedView 确保坐标系从顶部开始
+        let contentView = FlippedView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        
+        // iCloud同步部分
+        let iCloudSyncLabel = createSectionLabel(L("icloud_sync"))
+        iCloudSyncLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        // iCloud Drive显示开关
+        let iCloudDriveCheckbox = NSButton(checkboxWithTitle: L("show_in_icloud_drive"), target: self, action: #selector(toggleiCloudDriveFolder(_:)))
+        iCloudDriveCheckbox.state = PreferencesManager.shared.iCloudDriveFolderEnabled ? .on : .off
+        iCloudDriveCheckbox.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 立即同步按钮和状态
+        let syncNowButton = NSButton(title: L("sync_now"), target: self, action: #selector(performImmediateSync))
+        syncNowButton.bezelStyle = .rounded
+        syncNowButton.translatesAutoresizingMaskIntoConstraints = false
+        
+        let syncStatusLabel = NSTextField(labelWithString: iCloudSyncManager.shared.getSyncStatus())
+        syncStatusLabel.textColor = .secondaryLabelColor
+        syncStatusLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        syncStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        self.syncStatusLabel = syncStatusLabel
+        
+        let syncRow = NSStackView(views: [syncNowButton, syncStatusLabel])
+        syncRow.orientation = .horizontal
+        syncRow.spacing = 12
+        syncRow.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 分隔视图
+        let separator = NSView()
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        separator.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        
+        // 数据管理部分
+        let dataManagementLabel = createSectionLabel(L("data_management"))
+        dataManagementLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 本地导入按钮
+        let importButton = NSButton(title: L("manual_import_file"), target: self, action: #selector(importData))
+        importButton.bezelStyle = .rounded
+        importButton.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 导出到本地按钮
+        let exportButton = NSButton(title: L("export_to_device"), target: self, action: #selector(exportData))
+        exportButton.bezelStyle = .rounded
+        exportButton.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 添加到内容视图
+        contentView.addSubview(iCloudSyncLabel)
+        contentView.addSubview(iCloudDriveCheckbox)
+        contentView.addSubview(syncRow)
+        contentView.addSubview(separator)
+        contentView.addSubview(dataManagementLabel)
+        contentView.addSubview(importButton)
+        contentView.addSubview(exportButton)
+        
+        // 设置约束 - 从上到下排列，左对齐
+        // 优化间距：减少顶部和左右边距，使内容更紧凑但不拥挤
+        NSLayoutConstraint.activate([
+            // iCloud同步标签
+            iCloudSyncLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
+            iCloudSyncLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 25),
+            iCloudSyncLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -25),
+            
+            // iCloud Drive复选框
+            iCloudDriveCheckbox.topAnchor.constraint(equalTo: iCloudSyncLabel.bottomAnchor, constant: 10),
+            iCloudDriveCheckbox.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 25),
+            iCloudDriveCheckbox.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -25),
+            
+            // 同步按钮行
+            syncRow.topAnchor.constraint(equalTo: iCloudDriveCheckbox.bottomAnchor, constant: 10),
+            syncRow.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 25),
+            syncRow.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -25),
+            
+            // 分隔视图
+            separator.topAnchor.constraint(equalTo: syncRow.bottomAnchor, constant: 16),
+            separator.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            
+            // 数据管理标签
+            dataManagementLabel.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 16),
+            dataManagementLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 25),
+            dataManagementLabel.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -25),
+            
+            // 导入按钮
+            importButton.topAnchor.constraint(equalTo: dataManagementLabel.bottomAnchor, constant: 10),
+            importButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 25),
+            importButton.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -25),
+            
+            // 导出按钮
+            exportButton.topAnchor.constraint(equalTo: importButton.bottomAnchor, constant: 10),
+            exportButton.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 25),
+            exportButton.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -25),
+            
+            // 内容视图底部约束
+            exportButton.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
+        ])
+        
+        // 创建滚动视图
         let scrollView = NSScrollView()
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         
-        let contentView = NSView()
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        
-        // iCloud同步部分
-        let iCloudSyncLabel = createSectionLabel(L("icloud_sync"))
-        
-        // iCloud Drive显示开关
-        let iCloudDriveCheckbox = NSButton(checkboxWithTitle: L("show_in_icloud_drive"), target: self, action: #selector(toggleiCloudDriveFolder(_:)))
-        iCloudDriveCheckbox.state = PreferencesManager.shared.iCloudDriveFolderEnabled ? .on : .off
-        
-        // 立即同步按钮和状态
-        let syncNowButton = NSButton(title: L("sync_now"), target: self, action: #selector(performImmediateSync))
-        syncNowButton.bezelStyle = .rounded
-        
-        let syncStatusLabel = NSTextField(labelWithString: iCloudSyncManager.shared.getSyncStatus())
-        syncStatusLabel.textColor = .secondaryLabelColor
-        syncStatusLabel.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-        self.syncStatusLabel = syncStatusLabel
-        
-        let syncRow = NSStackView(views: [syncNowButton, syncStatusLabel])
-        syncRow.orientation = .horizontal
-        syncRow.spacing = 12
-        
-        // 数据管理部分
-        let dataManagementLabel = createSectionLabel(L("data_management"))
-        
-        // 本地导入按钮
-        let importButton = NSButton(title: L("manual_import_file"), target: self, action: #selector(importData))
-        importButton.bezelStyle = .rounded
-        
-        // 导出到本地按钮
-        let exportButton = NSButton(title: L("export_to_device"), target: self, action: #selector(exportData))
-        exportButton.bezelStyle = .rounded
-        
-        // 垂直布局
-        let stackView = NSStackView(views: [
-            iCloudSyncLabel,
-            iCloudDriveCheckbox,
-            syncRow,
-            NSView(), // 分隔
-            dataManagementLabel,
-            importButton,
-            exportButton
-        ])
-        stackView.orientation = .vertical
-        stackView.alignment = .leading
-        stackView.spacing = 12
-        stackView.translatesAutoresizingMaskIntoConstraints = false
-        
-        contentView.addSubview(stackView)
-        
-        NSLayoutConstraint.activate([
-            stackView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
-            stackView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            stackView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            stackView.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -20)
-        ])
-        
-        scrollView.documentView = contentView
         parentView.addSubview(scrollView)
         
+        // 滚动视图约束
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: parentView.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: parentView.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: parentView.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: parentView.bottomAnchor),
-            contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor)
+            scrollView.bottomAnchor.constraint(equalTo: parentView.bottomAnchor)
         ])
+        
+        // 设置 documentView
+        scrollView.documentView = contentView
+        
+        // 内容视图约束 - 确保宽度匹配，高度根据内容自动调整
+        // 关键：不设置固定高度，让内容视图根据实际内容自动调整
+        NSLayoutConstraint.activate([
+            // 内容视图宽度约束（确保内容不会超出滚动视图）
+            contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor)
+            // 不设置高度约束，让内容视图根据子视图的约束自动计算高度
+        ])
+        
+        // 确保滚动视图从顶部开始显示
+        // 在布局完成后，滚动到顶部
+        DispatchQueue.main.async {
+            // 等待布局完成
+            parentView.layoutSubtreeIfNeeded()
+            contentView.layoutSubtreeIfNeeded()
+            
+            // 滚动到顶部
+            // 在 macOS 中，NSScrollView 使用翻转坐标系
+            // 要显示顶部内容，需要将 clipView 滚动到 documentView 的顶部
+            let clipView = scrollView.contentView
+            if let documentView = scrollView.documentView {
+                // 计算需要滚动到的位置：documentView 的高度减去 clipView 的高度
+                let documentHeight = documentView.bounds.height
+                let clipHeight = clipView.bounds.height
+                let scrollY = max(0, documentHeight - clipHeight)
+                clipView.scroll(to: NSPoint(x: 0, y: scrollY))
+            } else {
+                // 如果没有 documentView，直接滚动到原点
+                clipView.scroll(to: NSPoint(x: 0, y: 0))
+            }
+        }
         
         // 启动时检查iCloud状态
         updateiCloudStatus()
@@ -526,7 +656,8 @@ class SettingsWindowController: NSWindowController {
         
         NSLayoutConstraint.activate([
             gridView.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 20),
-            gridView.centerXAnchor.constraint(equalTo: parentView.centerXAnchor)
+            gridView.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 25),
+            gridView.trailingAnchor.constraint(lessThanOrEqualTo: parentView.trailingAnchor, constant: -25)
         ])
         
         // 更新 iCloud 状态
@@ -643,10 +774,10 @@ class SettingsWindowController: NSWindowController {
         mainContainer.addArrangedSubview(scrollView)
         
         NSLayoutConstraint.activate([
-            mainContainer.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 20),
-            mainContainer.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 20),
-            mainContainer.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -20),
-            mainContainer.bottomAnchor.constraint(equalTo: parentView.bottomAnchor, constant: -20),
+            mainContainer.topAnchor.constraint(equalTo: parentView.topAnchor, constant: 16),
+            mainContainer.leadingAnchor.constraint(equalTo: parentView.leadingAnchor, constant: 25),
+            mainContainer.trailingAnchor.constraint(equalTo: parentView.trailingAnchor, constant: -25),
+            mainContainer.bottomAnchor.constraint(equalTo: parentView.bottomAnchor, constant: -16),
             
             toolbar.widthAnchor.constraint(equalTo: mainContainer.widthAnchor),
             scrollView.widthAnchor.constraint(equalTo: mainContainer.widthAnchor)
@@ -655,29 +786,186 @@ class SettingsWindowController: NSWindowController {
     
     // MARK: - Scholar Management Actions
     @objc private func addScholar() {
-        // 实现添加学者的逻辑
-        let alert = NSAlert()
-        alert.messageText = L("add_scholar_title")
-        alert.informativeText = L("add_scholar_message")
+        // 创建自定义窗口而不是使用 NSAlert，以支持键盘快捷键和完整粘贴
+        let dialogWindow = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 500, height: 200),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
         
-        let inputField = NSTextField(frame: NSRect(x: 0, y: 0, width: 300, height: 24))
+        dialogWindow.title = L("add_scholar_title")
+        dialogWindow.center()
+        dialogWindow.isReleasedWhenClosed = false
+        
+        // 创建内容视图
+        let contentView = NSView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 提示文本
+        let messageLabel = NSTextField(labelWithString: L("add_scholar_message"))
+        messageLabel.font = .systemFont(ofSize: 13)
+        messageLabel.textColor = .secondaryLabelColor
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 输入框 - 使用支持键盘快捷键的自定义 TextField
+        let inputField = ValidatedTextField()
         inputField.placeholderString = L("scholar_id_placeholder")
-        alert.accessoryView = inputField
+        inputField.translatesAutoresizingMaskIntoConstraints = false
+        inputField.font = .systemFont(ofSize: 13)
+        inputField.isEditable = true
+        inputField.isSelectable = true
+        inputField.focusRingType = .default
         
-        alert.addButton(withTitle: L("button_add"))
-        alert.addButton(withTitle: L("button_cancel"))
+        // 提示文本（显示支持的格式）
+        let hintLabel = NSTextField(labelWithString: L("add_scholar_hint", "例如：MeaDj20AAAAJ 或 https://scholar.google.com/citations?user=MeaDj20AAAAJ"))
+        hintLabel.font = .systemFont(ofSize: 11)
+        hintLabel.textColor = .tertiaryLabelColor
+        hintLabel.translatesAutoresizingMaskIntoConstraints = false
         
-        if alert.runModal() == .alertFirstButtonReturn {
-            let scholarId = inputField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !scholarId.isEmpty {
-                // 添加学者的逻辑
+        // 按钮
+        let addButton = NSButton(title: L("button_add"), target: nil, action: nil)
+        addButton.keyEquivalent = "\r"  // Enter 键
+        addButton.keyEquivalentModifierMask = []  // 不需要修饰键
+        addButton.bezelStyle = .rounded
+        addButton.translatesAutoresizingMaskIntoConstraints = false
+        
+        let cancelButton = NSButton(title: L("button_cancel"), target: nil, action: nil)
+        cancelButton.keyEquivalent = "\u{1b}"  // Escape 键
+        cancelButton.keyEquivalentModifierMask = []  // 不需要修饰键
+        cancelButton.bezelStyle = .rounded
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 按钮容器
+        let buttonStack = NSStackView(views: [cancelButton, addButton])
+        buttonStack.orientation = .horizontal
+        buttonStack.spacing = 12
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        // 添加到视图
+        contentView.addSubview(messageLabel)
+        contentView.addSubview(inputField)
+        contentView.addSubview(hintLabel)
+        contentView.addSubview(buttonStack)
+        
+        // 布局约束
+        NSLayoutConstraint.activate([
+            messageLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
+            messageLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            messageLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            
+            inputField.topAnchor.constraint(equalTo: messageLabel.bottomAnchor, constant: 12),
+            inputField.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            inputField.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            inputField.heightAnchor.constraint(equalToConstant: 24),
+            
+            hintLabel.topAnchor.constraint(equalTo: inputField.bottomAnchor, constant: 8),
+            hintLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            hintLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            
+            buttonStack.topAnchor.constraint(equalTo: hintLabel.bottomAnchor, constant: 20),
+            buttonStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            buttonStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -20)
+        ])
+        
+        dialogWindow.contentView = contentView
+        
+        // 存储窗口和输入框引用到实例变量
+        addScholarDialogWindow = dialogWindow
+        addScholarInputField = inputField
+        
+        // 设置按钮动作
+        cancelButton.target = self
+        cancelButton.action = #selector(cancelAddScholar(_:))
+        
+        addButton.target = self
+        addButton.action = #selector(confirmAddScholar(_:))
+        
+        // 显示窗口并激活应用
+        NSApp.activate(ignoringOtherApps: true)
+        dialogWindow.makeKeyAndOrderFront(nil)
+        
+        // 确保窗口成为 key window 并可以接收事件
+        dialogWindow.level = .normal
+        dialogWindow.isMovableByWindowBackground = false
+        
+        // 延迟设置第一响应者，确保窗口已完全显示
+        DispatchQueue.main.async {
+            dialogWindow.makeFirstResponder(inputField)
+            // 选中所有文本，方便直接粘贴替换
+            inputField.selectText(nil)
+        }
+    }
+    
+    @objc private func confirmAddScholar(_ sender: NSButton) {
+        print("🔍 [DEBUG] confirmAddScholar called")
+        guard let inputField = addScholarInputField,
+              let dialogWindow = addScholarDialogWindow else {
+            print("❌ [DEBUG] Failed to get inputField or dialogWindow from instance variables")
+            return
+        }
+        print("✅ [DEBUG] Got inputField and dialogWindow")
+        
+        let inputText = inputField.stringValue.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+        
+        guard !inputText.isEmpty else {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = L("error_invalid_scholar_id")
+            errorAlert.informativeText = L("error_invalid_scholar_id_message")
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: L("button_ok"))
+            errorAlert.runModal()
+            return
+        }
+        
+        // 从输入中提取 Scholar ID（支持完整链接或直接 ID）
+        guard let scholarId = GoogleScholarService.extractScholarId(from: inputText) else {
+            // 显示错误提示
+            let errorAlert = NSAlert()
+            errorAlert.messageText = L("error_invalid_scholar_id")
+            errorAlert.informativeText = L("error_invalid_scholar_id_message")
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: L("button_ok"))
+            errorAlert.runModal()
+            return
+        }
+        
+        // 检查是否已存在
+        if PreferencesManager.shared.scholars.contains(where: { $0.id == scholarId }) {
+            let errorAlert = NSAlert()
+            errorAlert.messageText = L("error_scholar_exists")
+            errorAlert.informativeText = L("error_scholar_exists_message")
+            errorAlert.alertStyle = .warning
+            errorAlert.addButton(withTitle: L("button_ok"))
+            errorAlert.runModal()
+            return
+        }
+        
+        // 添加学者
                 let newScholar = Scholar(id: scholarId)
                 PreferencesManager.shared.addScholar(newScholar)
                 loadData()
+        
                 // 通知更新
                 NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
-            }
+        
+        // 关闭对话框并清理引用
+        print("✅ [DEBUG] Closing dialog window after adding scholar")
+        dialogWindow.close()
+        addScholarDialogWindow = nil
+        addScholarInputField = nil
+    }
+    
+    @objc private func cancelAddScholar(_ sender: NSButton) {
+        print("🔍 [DEBUG] cancelAddScholar called")
+        guard let dialogWindow = addScholarDialogWindow else {
+            print("❌ [DEBUG] Failed to get dialogWindow from instance variable")
+            return
         }
+        print("✅ [DEBUG] Closing dialog window")
+        dialogWindow.close()
+        addScholarDialogWindow = nil
+        addScholarInputField = nil
     }
     
     @objc private func removeScholar() {
@@ -1148,5 +1436,69 @@ extension SettingsWindowController: NSTableViewDataSource, NSTableViewDelegate {
 extension SettingsWindowController: ScholarTableViewKeyboardDelegate {
     func tableViewDidPressDelete(_ tableView: NSTableView) {
         removeScholar()
+    }
+}
+
+// MARK: - Window Size Adjustment
+extension SettingsWindowController {
+    func adjustWindowSize(for tabViewItem: NSTabViewItem?) {
+        guard let window = window, let tabViewItem = tabViewItem else { return }
+        
+        // 根据选中的标签页调整窗口尺寸
+        let currentFrame = window.frame
+        let currentOrigin = currentFrame.origin
+        let currentHeight = currentFrame.height
+        
+        var newWidth: CGFloat
+        var newMinWidth: CGFloat
+        
+        // 获取屏幕尺寸，根据屏幕和内容调整窗口大小
+        if let screen = NSScreen.main {
+            let screenSize = screen.visibleFrame.size
+            
+            // 判断是哪个标签页
+            if tabViewItem.label == L("sidebar_scholars") {
+                // Scholars 标签页：需要更宽的窗口，但不超过屏幕的 70%
+                newWidth = min(900, screenSize.width * 0.65)
+                newMinWidth = min(750, screenSize.width * 0.55)
+            } else {
+                // General 和 Data 标签页：窄一些的窗口，屏幕的 40-45%
+                newWidth = min(550, screenSize.width * 0.42)
+                newMinWidth = min(480, screenSize.width * 0.35)
+            }
+        } else {
+            // 如果无法获取屏幕，使用默认值
+            if tabViewItem.label == L("sidebar_scholars") {
+                newWidth = 900
+                newMinWidth = 800
+            } else {
+                newWidth = 550
+                newMinWidth = 500
+            }
+        }
+        
+        // 保持窗口顶部位置不变，调整宽度
+        let widthDiff = newWidth - currentFrame.width
+        let newOrigin = NSPoint(
+            x: currentOrigin.x - widthDiff / 2,
+            y: currentOrigin.y
+        )
+        
+        // 更新最小尺寸和最大尺寸
+        if let screen = NSScreen.main {
+            let screenSize = screen.visibleFrame.size
+            window.minSize = NSSize(width: newMinWidth, height: min(420, screenSize.height * 0.45))
+            window.maxSize = NSSize(width: screenSize.width * 0.9, height: screenSize.height * 0.9)
+        } else {
+            window.minSize = NSSize(width: newMinWidth, height: 450)
+        }
+        
+        // 动画调整窗口尺寸
+        let newFrame = NSRect(
+            origin: newOrigin,
+            size: NSSize(width: newWidth, height: currentHeight)
+        )
+        
+        window.setFrame(newFrame, display: true, animate: true)
     }
 } 

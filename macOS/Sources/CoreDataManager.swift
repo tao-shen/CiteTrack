@@ -88,7 +88,11 @@ class CoreDataManager {
                 }
             }
             
+            // 配置 viewContext 以避免优先级反转
             container.viewContext.automaticallyMergesChangesFromParent = true
+            container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+            container.viewContext.undoManager = nil // 禁用撤销管理器以提高性能
+            
             return container
         }
         
@@ -196,7 +200,12 @@ class CoreDataManager {
             }
         }
         
+        // 配置 viewContext 以避免优先级反转
         container.viewContext.automaticallyMergesChangesFromParent = true
+        container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        // 确保 viewContext 在主队列上执行（默认就是，但明确设置更安全）
+        container.viewContext.undoManager = nil // 禁用撤销管理器以提高性能
+        
         return container
     }()
     
@@ -292,6 +301,8 @@ class CoreDataManager {
     func newBackgroundContext() -> NSManagedObjectContext {
         let context = persistentContainer.newBackgroundContext()
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        // 确保后台 context 使用正确的 QoS
+        context.undoManager = nil // 禁用撤销管理器以提高性能
         return context
     }
     

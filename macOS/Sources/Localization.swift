@@ -361,6 +361,9 @@ class LocalizationManager {
             "error_empty_input_message": "Please enter a valid Google Scholar user ID or link",
             "error_scholar_exists": "Scholar Already Exists",
             "error_scholar_exists_message": "This scholar is already in the list",
+            "error_invalid_scholar_id": "Invalid Scholar ID",
+            "error_invalid_scholar_id_message": "Please enter a valid Google Scholar user ID or complete link",
+            "add_scholar_hint": "%@",
             "error_invalid_format": "Invalid Input Format",
             "error_no_scholars_for_charts": "No Scholar Data",
             "error_no_scholars_for_charts_message": "Please add scholar information in Preferences first, then you can view chart analysis.",
@@ -599,9 +602,12 @@ class LocalizationManager {
             "add_scholar_name_placeholder": "学者姓名（可选）",
             "add_scholar_id_label": "Scholar ID或链接:",
             "add_scholar_name_label": "姓名（可选）:",
+            "add_scholar_hint": "%@",
             "button_add": "添加",
             "button_cancel": "取消",
             "button_open_charts": "打开图表",
+            "error_invalid_scholar_id": "无效的Scholar ID",
+            "error_invalid_scholar_id_message": "请输入有效的Google Scholar用户ID或完整链接",
             
             // Data Repair
             "button_edit_entry": "编辑条目",
@@ -1157,4 +1163,11 @@ func L(_ key: String) -> String {
 func L(_ key: String, _ args: CVarArg...) -> String {
     let format = LocalizationManager.shared.localized(key)
     return String(format: format, arguments: args)
+}
+
+// MARK: - String Extension for Localization
+extension String {
+    var localized: String {
+        return LocalizationManager.shared.localized(self)
+    }
 } 

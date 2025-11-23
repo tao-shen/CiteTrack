@@ -496,7 +496,11 @@ class ModernChartView: NSView {
         CATransaction.commit()
         
         updateTrackingArea()
-        updateChart()
+        
+        // 延迟更新图表，避免在布局过程中触发递归布局
+        DispatchQueue.main.async { [weak self] in
+            self?.updateChart()
+        }
     }
     
     private func updateTrackingArea() {

@@ -81,23 +81,31 @@ class GoogleScholarService {
             return nil
         }
         
-        if trimmed.contains("scholar.google.com") {
+        // 检查是否包含 URL
+        if trimmed.contains("scholar.google.com") || trimmed.contains("http") {
+            // 尝试多种 URL 模式
             let patterns = [
-                #"user=([A-Za-z0-9_-]{8,20})"#,  // 更严格的长度验证
-                #"citations\?user=([A-Za-z0-9_-]{8,20})"#,
-                #"profile/([A-Za-z0-9_-]{8,20})"#
+                #"user=([A-Za-z0-9_-]+)"#,  // 标准格式：user=ID
+                #"citations\?user=([A-Za-z0-9_-]+)"#,  // citations?user=ID
+                #"citations\?.*user=([A-Za-z0-9_-]+)"#,  // citations?其他参数&user=ID
+                #"profile/([A-Za-z0-9_-]+)"#,  // profile/ID
+                #"user%3D([A-Za-z0-9_-]+)"#,  // URL 编码的 user=ID
             ]
             
             for pattern in patterns {
                 if let regex = try? NSRegularExpression(pattern: pattern, options: []),
                    let match = regex.firstMatch(in: trimmed, options: [], range: NSRange(location: 0, length: trimmed.count)),
+                   match.numberOfRanges > 1,
                    let range = Range(match.range(at: 1), in: trimmed) {
                     let extractedId = String(trimmed[range])
                     
+                    // URL 解码（处理 %3D 等情况）
+                    let decodedId = extractedId.removingPercentEncoding ?? extractedId
+                    
                     // 验证提取的ID
-                    if isValidScholarId(extractedId) {
-                        print("✅ 从URL提取到有效的Scholar ID: \(extractedId)")
-                        return extractedId
+                    if isValidScholarId(decodedId) {
+                        print("✅ 从URL提取到有效的Scholar ID: \(decodedId)")
+                        return decodedId
                     }
                 }
             }
@@ -243,22 +251,30 @@ class GoogleScholarService {
                let range = Range(match.range(at: 1), in: htmlString) {
                 let citationString = String(htmlString[range])
                 if let count = Int(citationString) {
-                    let finalName = scholarName.isEmpty ? L("unknown_scholar") : scholarName
+                    // 使用 CitationFetchService 提取完整的学者信息（包括更准确的姓名）
+                    let extractedInfo = CitationFetchService.shared.extractScholarFullInfo(from: htmlString)
+                    
+                    // 优先使用 extractScholarFullInfo 提取的姓名，如果为空则使用手动解析的姓名，最后才使用默认值
+                    let finalName: String
+                    if let extractedName = extractedInfo?.name, !extractedName.isEmpty {
+                        finalName = extractedName
+                    } else if !scholarName.isEmpty {
+                        finalName = scholarName
+                    } else {
+                        finalName = L("unknown_scholar")
+                    }
                     
                     // 同时解析论文列表并保存到统一缓存（最大化利用页面内容）
                     Task { @MainActor in
                         // 使用 CitationFetchService 解析论文列表
                         let publications = CitationFetchService.shared.parseScholarPublications(from: htmlString)
                         
-                        // 提取完整的学者信息（h-index, i10-index）
-                        let extractedInfo = CitationFetchService.shared.extractScholarFullInfo(from: htmlString)
-                        
                         if !publications.isEmpty || extractedInfo != nil {
                             // 保存到统一缓存
                             let snapshot = ScholarDataSnapshot(
                                 scholarId: scholarId,
                                 timestamp: Date(),
-                                scholarName: extractedInfo?.name ?? finalName,
+                                scholarName: finalName,
                                 totalCitations: extractedInfo?.totalCitations ?? count,
                                 hIndex: extractedInfo?.hIndex,
                                 i10Index: extractedInfo?.i10Index,
@@ -268,7 +284,14 @@ class GoogleScholarService {
                                 source: .dashboard
                             )
                             UnifiedCacheManager.shared.saveDataSnapshot(snapshot)
+                            
+                            // 同时更新 PreferencesManager，确保姓名和引用数同步
+                            PreferencesManager.shared.updateScholar(withId: scholarId, name: finalName, citations: extractedInfo?.totalCitations ?? count)
+                            
                             print("📦 [GoogleScholarService-macOS] Saved \(publications.count) publications to unified cache from scholar page refresh")
+                        } else {
+                            // 即使没有论文数据，也要更新 PreferencesManager 中的姓名和引用数
+                            PreferencesManager.shared.updateScholar(withId: scholarId, name: finalName, citations: count)
                         }
                     }
                     
@@ -422,9 +445,12 @@ class PreferencesManager {
         var currentScholars = scholars
         if let index = currentScholars.firstIndex(where: { $0.id == id }) {
             let oldCitations = currentScholars[index].citations
+            let oldName = currentScholars[index].name
+            var shouldNotify = false
             
-            if let name = name {
+            if let name = name, name != oldName {
                 currentScholars[index].name = name
+                shouldNotify = true
             }
             if let citations = citations {
                 currentScholars[index].citations = citations
@@ -442,10 +468,16 @@ class PreferencesManager {
                 
                 // 如果引用数有变化，发送通知
                 if citations != oldCitations {
-                    NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+                    shouldNotify = true
                 }
             }
+            
             scholars = currentScholars
+            
+            // 如果姓名或引用数有变化，发送通知
+            if shouldNotify {
+                NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+            }
         }
     }
 }

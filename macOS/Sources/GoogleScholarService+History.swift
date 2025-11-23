@@ -40,24 +40,35 @@ extension GoogleScholarService {
     }
     
     /// Batch fetch and save citation data for multiple scholars
-    func fetchAndSaveMultipleScholars(_ scholars: [Scholar], completion: @escaping (Result<[String: Int], Error>) -> Void) {
+    func fetchAndSaveMultipleScholars(_ scholars: [Scholar], completion: @escaping (Result<[String: (name: String, citations: Int)], Error>) -> Void) {
         let dispatchGroup = DispatchGroup()
-        var results: [String: Int] = [:]
+        var results: [String: (name: String, citations: Int)] = [:]
         var errors: [Error] = []
         let resultsQueue = DispatchQueue(label: "com.citetrack.batchfetch", attributes: .concurrent)
         
-        for scholar in scholars {
+        // 请求间隔：每个请求之间延迟5-8秒，避免触发频率限制
+        // Google Scholar 对频率限制很严格，需要更长的延迟
+        let baseDelay: TimeInterval = 5.0
+        let randomDelayRange: TimeInterval = 3.0  // 0-3秒随机延迟
+        
+        for (index, scholar) in scholars.enumerated() {
             dispatchGroup.enter()
             
-            fetchAndSaveScholarInfo(for: scholar.id) { result in
+            // 计算延迟时间：第一个请求无延迟，后续请求递增延迟
+            // 8个学者总共需要约35-64秒完成，避免触发429错误
+            let delay = index == 0 ? 0.0 : baseDelay * Double(index) + Double.random(in: 0...randomDelayRange)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                self.fetchAndSaveScholarInfo(for: scholar.id) { result in
                 resultsQueue.async(flags: .barrier) {
                     switch result {
                     case .success(let info):
-                        results[scholar.id] = info.citations
+                            results[scholar.id] = (name: info.name, citations: info.citations)
                     case .failure(let error):
                         errors.append(error)
                     }
                     dispatchGroup.leave()
+                    }
                 }
             }
         }
@@ -329,10 +340,10 @@ class BackgroundDataCollectionService {
             self?.performAutomaticCollection()
         }
         
-        // Perform initial collection
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-            self.performAutomaticCollection()
-        }
+        // 启动时不执行初始收集，只按设定的间隔自动更新
+        // DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+        //     self.performAutomaticCollection()
+        // }
     }
     
     func stopAutomaticCollection() {
@@ -361,16 +372,33 @@ class BackgroundDataCollectionService {
             case .success(let results):
                 print("Successfully updated \(results.count) scholars")
                 
-                // Update PreferencesManager with new citation counts
-                for (scholarId, citations) in results {
-                    PreferencesManager.shared.updateScholar(withId: scholarId, citations: citations)
+                // Update PreferencesManager with new names and citation counts
+                for (scholarId, info) in results {
+                    PreferencesManager.shared.updateScholar(withId: scholarId, name: info.name, citations: info.citations)
                 }
                 
                 // Post notification for UI updates
                 NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
                 
             case .failure(let error):
+                // 如果是频率限制错误，等待更长时间后重试
+                // 检查是否是 networkError 且包含 429 错误码
+                var isRateLimited = false
+                if case .networkError(let nestedError) = error as? GoogleScholarService.ScholarError {
+                    if let nsError = nestedError as NSError?, nsError.code == 429 {
+                        isRateLimited = true
+                    }
+                }
+                
+                if isRateLimited {
+                    print("⚠️ Rate limited (429). Will retry after longer delay...")
+                    // 等待60秒后重试
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 60.0) { [weak self] in
+                        self?.performAutomaticCollection()
+                    }
+                } else {
                 print("Failed to update scholars: \(error)")
+                }
             }
         }
     }
@@ -389,15 +417,17 @@ class BackgroundDataCollectionService {
         googleScholarService.fetchAndSaveMultipleScholars(scholars) { result in
             switch result {
             case .success(let results):
-                // Update PreferencesManager with new citation counts
-                for (scholarId, citations) in results {
-                    PreferencesManager.shared.updateScholar(withId: scholarId, citations: citations)
+                // Update PreferencesManager with new names and citation counts
+                for (scholarId, info) in results {
+                    PreferencesManager.shared.updateScholar(withId: scholarId, name: info.name, citations: info.citations)
                 }
                 
                 // Post notification for UI updates
                 NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
                 
-                completion(.success(results))
+                // Convert to [String: Int] for backward compatibility
+                let citationResults = results.mapValues { $0.citations }
+                completion(.success(citationResults))
                 
             case .failure(let error):
                 completion(.failure(error))

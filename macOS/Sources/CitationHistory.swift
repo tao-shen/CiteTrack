@@ -114,7 +114,10 @@ extension Scholar {
     // Historical data computed properties
     var historicalData: [CitationHistory] {
         let context = CoreDataManager.shared.viewContext
+        
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         let entities = CitationHistoryEntity.fetchHistory(for: self.id, in: context)
+        
         return entities.compactMap { CitationHistory.fromCoreDataEntity($0) }
     }
     
@@ -142,14 +145,20 @@ extension Scholar {
     // Get historical data for a specific time range
     func getHistoricalData(from startDate: Date, to endDate: Date) -> [CitationHistory] {
         let context = CoreDataManager.shared.viewContext
+        
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         let entities = CitationHistoryEntity.fetchHistory(for: self.id, from: startDate, to: endDate, in: context)
+        
         return entities.compactMap { CitationHistory.fromCoreDataEntity($0) }
     }
     
     // Get the latest citation entry
     var latestHistoryEntry: CitationHistory? {
         let context = CoreDataManager.shared.viewContext
+        
+        // CitationHistoryEntity 方法内部已使用 performAndWait，这里直接调用即可
         guard let entity = CitationHistoryEntity.fetchLatestEntry(for: self.id, in: context) else { return nil }
+        
         return CitationHistory.fromCoreDataEntity(entity)
     }
     
