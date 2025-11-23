@@ -168,6 +168,7 @@ public class UnifiedCacheManager: ObservableObject {
     public enum DataChangeEvent {
         case scholarInfoUpdated(scholarId: String, oldCitations: Int?, newCitations: Int?)
         case publicationsUpdated(scholarId: String, sortBy: String, count: Int)
+        case publicationsChanged(scholarId: String, changes: CitationCacheService.PublicationChanges)
         case newPublicationsDetected(scholarId: String, newCount: Int)
         case citingPapersUpdated(clusterId: String, count: Int)
     }
@@ -244,7 +245,7 @@ public class UnifiedCacheManager: ObservableObject {
             print("✅ [UnifiedCache] Updated basic info: \(name), citations: \(citations)")
         }
         
-        // 3. 更新论文列表
+        // 3. 更新论文列表（增量更新：只更新引用数发生变化的论文）
         if !snapshot.publications.isEmpty {
             if scholarPublications[snapshot.scholarId] == nil {
                 scholarPublications[snapshot.scholarId] = [:]
@@ -253,29 +254,76 @@ public class UnifiedCacheManager: ObservableObject {
                 scholarPublications[snapshot.scholarId]?[snapshot.sortBy] = []
             }
             
-            // 合并论文列表（去重）
+            // 获取现有论文列表
             let existingPublications = scholarPublications[snapshot.scholarId]?[snapshot.sortBy] ?? []
-            let mergedPublications = mergePublications(
+            
+            // 增量合并：只更新引用数发生变化的论文
+            let mergeResult = mergePublications(
                 existing: existingPublications,
                 new: snapshot.publications,
                 startIndex: snapshot.startIndex
             )
             
-            scholarPublications[snapshot.scholarId]?[snapshot.sortBy] = mergedPublications
+            let mergedPublications = mergeResult.merged
+            let updatedCount = mergeResult.updatedCount
+            let newCount = mergeResult.newCount
             
-            // 发送变化通知
-            dataChangePublisher.send(
-                .publicationsUpdated(
-                    scholarId: snapshot.scholarId,
-                    sortBy: snapshot.sortBy,
-                    count: mergedPublications.count
+            // 增量更新策略：只有在引用数发生变化、新增论文或第一页论文数量变化时才更新
+            let existingCount = existingPublications.count
+            let mergedCount = mergedPublications.count
+            let firstPageCountChanged = (snapshot.startIndex == 0 && existingCount != mergedCount)
+            
+            if updatedCount > 0 || newCount > 0 || firstPageCountChanged {
+                scholarPublications[snapshot.scholarId]?[snapshot.sortBy] = mergedPublications
+                
+                // 发送变化通知
+                dataChangePublisher.send(
+                    .publicationsUpdated(
+                        scholarId: snapshot.scholarId,
+                        sortBy: snapshot.sortBy,
+                        count: mergedPublications.count
+                    )
                 )
-            )
-            
-            print("✅ [UnifiedCache] Updated publications: \(mergedPublications.count) total, sortBy: \(snapshot.sortBy)")
-            
-            // 持久化
-            persistData()
+                
+                // 计算详细变化并发送通知（仅针对 total 排序或第一页）
+                if snapshot.sortBy == "total" || snapshot.startIndex == 0 {
+                    // 转换为 Snapshot 以便对比
+                    let oldSnapshots = existingPublications.map { pub in
+                        CitationCacheService.PublicationSnapshot(
+                            title: pub.title,
+                            clusterId: pub.clusterId,
+                            citationCount: pub.citationCount,
+                            year: pub.year
+                        )
+                    }
+                    
+                    let newSnapshots = mergedPublications.map { pub in
+                        CitationCacheService.PublicationSnapshot(
+                            title: pub.title,
+                            clusterId: pub.clusterId,
+                            citationCount: pub.citationCount,
+                            year: pub.year
+                        )
+                    }
+                    
+                    let changes = CitationCacheService.shared.comparePublications(old: oldSnapshots, new: newSnapshots)
+                    if changes.hasChanges {
+                        dataChangePublisher.send(.publicationsChanged(scholarId: snapshot.scholarId, changes: changes))
+                        print("📢 [UnifiedCache] Broadcasted detailed changes: \(changes.totalNewCitations) new citations")
+                    }
+                }
+                
+                if updatedCount > 0 || newCount > 0 {
+                    print("✅ [UnifiedCache] Incremental update: \(updatedCount) citations updated, \(newCount) new papers, \(mergedCount) total, sortBy: \(snapshot.sortBy)")
+                } else if firstPageCountChanged {
+                    print("✅ [UnifiedCache] First page count changed: \(existingCount) → \(mergedCount), sortBy: \(snapshot.sortBy)")
+                }
+                
+                // 持久化
+                persistData()
+            } else {
+                print("ℹ️ [UnifiedCache] No changes detected (citations unchanged, no new papers), skipping cache update (sortBy: \(snapshot.sortBy), startIndex: \(snapshot.startIndex))")
+            }
         }
     }
     
@@ -309,7 +357,9 @@ public class UnifiedCacheManager: ObservableObject {
         }
         
         // 返回指定范围的论文
-        let endIndex = min(startIndex + limit, publications.count)
+        // 使用安全的加法，防止溢出（特别是当 limit 是 Int.max 时）
+        let safeLimit = min(limit, Int.max - startIndex)
+        let endIndex = min(startIndex + safeLimit, publications.count)
         guard startIndex < publications.count else {
             return []
         }
@@ -334,28 +384,65 @@ public class UnifiedCacheManager: ObservableObject {
     
     // MARK: - 辅助方法
     
-    /// 合并论文列表（处理分页和去重）
+    /// 合并论文列表（增量更新：只更新引用数发生变化的论文）
+    /// - Returns: (合并后的论文列表, 更新的论文数量, 新增的论文数量)
     private func mergePublications(
         existing: [ScholarPublication],
         new: [ScholarPublication],
         startIndex: Int
-    ) -> [ScholarPublication] {
-        var result = existing
-        
-        // 如果是第一页（startIndex == 0），直接替换
-        if startIndex == 0 {
-            result = new
-        } else {
-            // 否则，追加新数据（但要去重）
-            let existingIds = Set(existing.compactMap { $0.clusterId })
-            let newUnique = new.filter { pub in
-                guard let id = pub.clusterId else { return true }
-                return !existingIds.contains(id)
-            }
-            result.append(contentsOf: newUnique)
+    ) -> (merged: [ScholarPublication], updatedCount: Int, newCount: Int) {
+        // 创建现有论文的字典（以 clusterId 为 key，如果没有 clusterId 则用 title+year 组合）
+        var existingDict: [String: ScholarPublication] = [:]
+        for pub in existing {
+            let key = pub.clusterId ?? "\(pub.title)_\(pub.year ?? 0)"
+            existingDict[key] = pub
         }
         
-        return result
+        var updatedCount = 0
+        var newCount = 0
+        var result: [ScholarPublication] = []
+        
+        // 处理新论文
+        for newPub in new {
+            let key = newPub.clusterId ?? "\(newPub.title)_\(newPub.year ?? 0)"
+            
+            if let existingPub = existingDict[key] {
+                // 论文已存在，检查引用数是否变化
+                let oldCitationCount = existingPub.citationCount ?? 0
+                let newCitationCount = newPub.citationCount ?? 0
+                
+                if oldCitationCount != newCitationCount {
+                    // 引用数发生变化，更新论文
+                    result.append(newPub)
+                    updatedCount += 1
+                    print("🔄 [UnifiedCache] Citation count updated: '\(newPub.title.prefix(50))...' \(oldCitationCount) → \(newCitationCount)")
+                } else {
+                    // 引用数未变化，保留原有论文（避免不必要的更新）
+                    result.append(existingPub)
+                }
+                // 从字典中移除，表示已处理
+                existingDict.removeValue(forKey: key)
+            } else {
+                // 新论文，直接添加
+                result.append(newPub)
+                newCount += 1
+            }
+        }
+        
+        // 如果是第一页（startIndex == 0），只保留 result 中的论文（第一页的论文）
+        // 如果是后续页，保留所有现有论文（包括未在新数据中的）
+        if startIndex == 0 {
+            // 第一页：只保留 result 中的论文（已更新或新增的第一页论文）
+            // 注意：不在第一页的现有论文会被移除，因为它们会在后续页中处理
+            // result 已经包含了所有第一页的论文（已更新引用数的 + 未变化的 + 新增的）
+        } else {
+            // 后续页：保留所有现有论文（包括未在新数据中的）
+            for (_, existingPub) in existingDict {
+                result.append(existingPub)
+            }
+        }
+        
+        return (result, updatedCount, newCount)
     }
     
     /// 清除学者的所有缓存
@@ -403,6 +490,79 @@ public class UnifiedCacheManager: ObservableObject {
         public let scholarCount: Int
         public let publicationCount: Int
         public let snapshotCount: Int
+    }
+    
+    /// 计算缓存大小（字节）
+    public func calculateCacheSize() -> Int64 {
+        var totalSize: Int64 = 0
+        
+        // 计算内存中数据的大小（近似值）
+        // 1. 学者基本信息
+        for (_, info) in scholarBasicInfo {
+            totalSize += Int64(MemoryLayout.size(ofValue: info.scholarId))
+            totalSize += Int64(info.name.utf8.count)
+            totalSize += Int64(MemoryLayout<Int>.size) // citations
+            if info.hIndex != nil {
+                totalSize += Int64(MemoryLayout<Int>.size)
+            }
+            if info.i10Index != nil {
+                totalSize += Int64(MemoryLayout<Int>.size)
+            }
+        }
+        
+        // 2. 论文列表
+        for (_, sortDict) in scholarPublications {
+            for (_, publications) in sortDict {
+                for pub in publications {
+                    totalSize += Int64(pub.title.utf8.count)
+                    totalSize += Int64(pub.id.utf8.count)
+                    if let clusterId = pub.clusterId {
+                        totalSize += Int64(clusterId.utf8.count)
+                    }
+                    if pub.citationCount != nil {
+                        totalSize += Int64(MemoryLayout<Int>.size)
+                    }
+                    if pub.year != nil {
+                        totalSize += Int64(MemoryLayout<Int>.size)
+                    }
+                }
+            }
+        }
+        
+        // 3. 引用文章缓存
+        for (_, sortDict) in citingPapersCache {
+            for (_, papers) in sortDict {
+                for paper in papers {
+                    totalSize += Int64(paper.title.utf8.count)
+                    totalSize += Int64(paper.authors.joined(separator: ", ").utf8.count)
+                    if let venue = paper.venue {
+                        totalSize += Int64(venue.utf8.count)
+                    }
+                }
+            }
+        }
+        
+        // 4. 计算持久化存储的大小
+        let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier) ?? UserDefaults.standard
+        if let data = appGroupDefaults.data(forKey: persistenceKey) {
+            totalSize += Int64(data.count)
+        }
+        
+        return totalSize
+    }
+    
+    /// 格式化缓存大小为可读字符串
+    public func getFormattedCacheSize() -> String {
+        let size = calculateCacheSize()
+        return formatBytes(size)
+    }
+    
+    /// 格式化字节数为可读字符串
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB, .useGB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
 }
 

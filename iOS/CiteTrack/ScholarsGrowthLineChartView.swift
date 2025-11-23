@@ -538,13 +538,34 @@ struct LineView: View {
     
     func getClosestDataPoint(toPoint: CGPoint, width:CGFloat, height: CGFloat) -> CGPoint {
         let points = self.data.onlyPoints()
-        let stepWidth: CGFloat = width / CGFloat(points.count-1)
-        let stepHeight: CGFloat = height / CGFloat(points.max()! + points.min()!)
+        guard points.count > 1 else { return .zero }
         
-        let index:Int = Int(floor((toPoint.x-15)/stepWidth))
-        if (index >= 0 && index < points.count){
-            self.currentDataNumber = points[index]
-            return CGPoint(x: CGFloat(index)*stepWidth, y: CGFloat(points[index])*stepHeight)
+        // 使用安全的计算，防止溢出
+        let safeCount = CGFloat(max(points.count - 1, 1))
+        let stepWidth: CGFloat = width / safeCount
+        
+        // 使用安全的加法和类型转换，防止溢出
+        let maxValue = points.max() ?? 0
+        let minValue = points.min() ?? 0
+        // 使用安全的限制值，防止溢出（限制在安全范围内，相加时不会溢出）
+        // 直接使用 CGFloat 转换，避免 Int 溢出
+        let maxValueCGFloat = CGFloat(maxValue)
+        let minValueCGFloat = CGFloat(minValue)
+        let sum = maxValueCGFloat + minValueCGFloat
+        let safeSum = max(sum, 1.0) // 防止除零
+        let stepHeight: CGFloat = height / safeSum
+        
+        // 使用安全的计算，防止溢出
+        let safeX = max(min(toPoint.x, CGFloat.greatestFiniteMagnitude), -CGFloat.greatestFiniteMagnitude)
+        let calculatedIndex = (safeX - 15) / stepWidth
+        let clampedIndex = max(min(Int(floor(calculatedIndex)), Int.max - 1), 0)
+        
+        if clampedIndex >= 0 && clampedIndex < points.count {
+            self.currentDataNumber = points[clampedIndex]
+            let safeIndex = CGFloat(min(clampedIndex, Int.max - 1))
+            let safePointValue = points[clampedIndex]
+            let safePointValueCGFloat = CGFloat(safePointValue)
+            return CGPoint(x: safeIndex * stepWidth, y: safePointValueCGFloat * stepHeight)
         }
         return .zero
     }
@@ -552,11 +573,21 @@ struct LineView: View {
     // 获取当前拖拽位置对应的日期字符串
     func getCurrentDateString(for location: CGPoint, width: CGFloat) -> String {
         let points = self.data.onlyPoints()
-        let stepWidth: CGFloat = width / CGFloat(points.count-1)
-        let index: Int = Int(floor((location.x - self.calculateDynamicOffset()) / stepWidth))
+        guard points.count > 1 else { return "" }
         
-        if index >= 0 && index < points.count && index < dates.count {
-            return formatDateForXAxis(index: index)
+        // 使用安全的计算，防止溢出
+        let safeCount = CGFloat(max(points.count - 1, 1))
+        let stepWidth: CGFloat = width / safeCount
+        
+        // 使用安全的计算，防止溢出
+        let offset = self.calculateDynamicOffset()
+        let safeLocationX = max(min(location.x, CGFloat.greatestFiniteMagnitude), -CGFloat.greatestFiniteMagnitude)
+        let safeOffset = max(min(offset, CGFloat.greatestFiniteMagnitude), -CGFloat.greatestFiniteMagnitude)
+        let calculatedIndex = (safeLocationX - safeOffset) / stepWidth
+        let clampedIndex = max(min(Int(floor(calculatedIndex)), Int.max - 1), 0)
+        
+        if clampedIndex >= 0 && clampedIndex < points.count && clampedIndex < dates.count {
+            return formatDateForXAxis(index: clampedIndex)
         }
         return ""
     }

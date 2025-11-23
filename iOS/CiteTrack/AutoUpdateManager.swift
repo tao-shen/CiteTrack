@@ -163,33 +163,39 @@ public class AutoUpdateManager: ObservableObject {
         let totalCount = scholars.count
         
         for scholar in scholars {
-            let result = await withCheckedContinuation { continuation in
-                googleScholarService.fetchScholarInfo(for: scholar.id) { result in
-                    continuation.resume(returning: result)
-                }
-            }
+            // 使用统一协调器获取学者数据（中等优先级，后台自动更新）
+            await CitationFetchCoordinator.shared.fetchScholarComprehensive(
+                scholarId: scholar.id,
+                priority: .medium
+            )
             
-            switch result {
-            case .success(let (name, citations)):
-                var updatedScholar = Scholar(id: scholar.id, name: name)
-                updatedScholar.citations = citations
-                updatedScholar.lastUpdated = Date()
+            // 初始化引用变化通知服务的引用量记录
+            // 注意：需要确保 CitationChangeNotificationService.swift 已添加到 Xcode 项目
+            // Task { @MainActor in
+            //     let service = CitationChangeNotificationService.shared
+            //     service.initializeCitationCounts(for: scholar.id)
+            // }
+            
+            // 从统一缓存获取更新后的数据
+            if let basicInfo = UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: scholar.id) {
+                var updatedScholar = Scholar(id: scholar.id, name: basicInfo.name)
+                updatedScholar.citations = basicInfo.citations
+                updatedScholar.lastUpdated = basicInfo.lastUpdated
                 
                 dataManager.updateScholar(updatedScholar)
                 dataManager.saveHistoryIfChanged(
                     scholarId: scholar.id,
-                    citationCount: citations
+                    citationCount: basicInfo.citations
                 )
                 
-                successCount += 1
-                print("✅ [AutoUpdateManager] 成功更新学者: \(name) - \(citations) citations")
-                
-            case .failure(let error):
-                print("❌ [AutoUpdateManager] 更新学者失败 \(scholar.id): \(error.localizedDescription)")
+                // 使用安全的加法，防止溢出
+                successCount = min(successCount + 1, Int.max - 1)
+                print("✅ [AutoUpdateManager] 成功更新学者: \(basicInfo.name) - \(basicInfo.citations) citations")
+            } else {
+                print("⚠️ [AutoUpdateManager] 无法从缓存获取学者信息: \(scholar.id)")
             }
             
-            // 添加延迟避免请求过于频繁
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒
+            // 注意：协调器内部已经处理了延迟，这里不需要额外延迟
         }
         
         print("✅ [AutoUpdateManager] 自动更新完成: \(successCount)/\(totalCount) 位学者")

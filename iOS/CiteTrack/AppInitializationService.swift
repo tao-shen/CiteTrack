@@ -52,7 +52,8 @@ class AppInitializationService: ObservableObject {
         await importInitialData()
         
         // 3. 更新所有学者数据
-        await updateAllScholars()
+        // ❌ 注释掉自动更新：首次安装时不应该自动获取数据，应该由用户手动触发
+        // await updateAllScholars()
         
         // 4. 标记初始化完成
         await markInitializationComplete()
@@ -168,41 +169,38 @@ class AppInitializationService: ObservableObject {
         
         print("🔄 [AppInitialization] \(String(format: "debug_init_start_update".localized, scholars.count))")
         
-        // 🚀 优化：使用 TaskGroup 并行更新所有学者，而不是串行执行
-        typealias ScholarResult = (Scholar, Result<(name: String, citations: Int), GoogleScholarService.ScholarError>)
-        let results: [ScholarResult] = await withTaskGroup(of: ScholarResult.self, returning: [ScholarResult].self) { group in
-            for scholar in scholars {
-                group.addTask {
-                    let result: Result<(name: String, citations: Int), GoogleScholarService.ScholarError> = await withCheckedContinuation { continuation in
-                        self.googleScholarService.fetchScholarInfo(for: scholar.id) { result in
-                            continuation.resume(returning: result)
-                        }
-                    }
-                    return (scholar, result)
-                }
-            }
-            
-            var allResults: [ScholarResult] = []
-            for await result in group {
-                allResults.append(result)
-            }
-            return allResults
-        }
-        
-        // 处理所有结果
+        // 🚀 使用统一协调器并行更新所有学者
+        // 协调器内部会管理任务队列和速率限制
         var successCount = 0
-        for (scholar, result) in results {
+        for scholar in scholars {
             await MainActor.run {
                 initializationProgress = String(format: "debug_init_update_scholar".localized, scholar.name)
             }
             
-            switch result {
-            case .success(let (name, citations)):
+            // 使用统一协调器获取学者数据（中等优先级，初始化过程）
+            await CitationFetchCoordinator.shared.fetchScholarComprehensive(
+                scholarId: scholar.id,
+                priority: .medium
+            )
+            
+            // 初始化引用变化通知服务的引用量记录
+            // 注意：需要确保 CitationChangeNotificationService.swift 已添加到 Xcode 项目
+            // Task { @MainActor in
+            //     let service = CitationChangeNotificationService.shared
+            //     service.initializeCitationCounts(for: scholar.id)
+            // }
+            
+            // 从统一缓存获取更新后的数据（需要在主线程访问）
+            let basicInfo = await MainActor.run {
+                UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: scholar.id)
+            }
+            
+            if let basicInfo = basicInfo {
                 // 更新学者信息
                 var updatedScholar = scholar
-                updatedScholar.name = name
-                updatedScholar.citations = citations
-                updatedScholar.lastUpdated = Date()
+                updatedScholar.name = basicInfo.name
+                updatedScholar.citations = basicInfo.citations
+                updatedScholar.lastUpdated = basicInfo.lastUpdated
                 
                 // 复制为不可变常量，避免在并发闭包中捕获可变引用
                 let scholarToUpdate = updatedScholar
@@ -212,15 +210,15 @@ class AppInitializationService: ObservableObject {
                     dataManager.updateScholar(scholarToUpdate)
                     
                     // 添加引用历史记录
-                    let history = CitationHistory(scholarId: scholar.id, citationCount: citations)
+                    let history = CitationHistory(scholarId: scholar.id, citationCount: basicInfo.citations)
                     dataManager.addHistory(history)
                 }
                 
-                successCount += 1
-                print("✅ [AppInitialization] \(String(format: "debug_init_scholar_success".localized, name, citations))")
-                
-            case .failure(let error):
-                print("❌ [AppInitialization] \(String(format: "debug_init_scholar_failed".localized, scholar.name, error.localizedDescription))")
+                // 使用安全的加法，防止溢出
+                successCount = min(successCount + 1, Int.max - 1)
+                print("✅ [AppInitialization] \(String(format: "debug_init_scholar_success".localized, basicInfo.name, basicInfo.citations))")
+            } else {
+                print("❌ [AppInitialization] \(String(format: "debug_init_scholar_failed".localized, scholar.name, "无法从缓存获取学者信息"))")
             }
         }
         

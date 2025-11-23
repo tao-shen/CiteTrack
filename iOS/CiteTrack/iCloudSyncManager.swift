@@ -884,8 +884,9 @@ class iCloudSyncManager: ObservableObject {
 				print("✅ [iCloud Import] Found citation data file")
 				let citationData = try Data(contentsOf: citationURL)
 				result = try importFromJSONData(citationData)
-				importedHistory += result.importedHistory
-				importedScholars += result.importedScholars
+				// 使用安全的加法，防止溢出
+				importedHistory = min(importedHistory + result.importedHistory, Int.max - 1)
+				importedScholars = min(importedScholars + result.importedScholars, Int.max - 1)
 			} else {
 				print("ℹ️ [iCloud Import] Citation data not found at path")
 			}
@@ -980,8 +981,9 @@ class iCloudSyncManager: ObservableObject {
 						var res: ImportResult!
 						DispatchQueue.main.sync { res = try? self.importFromUnifiedData(data) }
 						if let res = res {
-							importedScholars += res.importedScholars
-							importedHistory += res.importedHistory
+							// 使用安全的加法，防止溢出
+							importedScholars = min(importedScholars + res.importedScholars, Int.max - 1)
+							importedHistory = min(importedHistory + res.importedHistory, Int.max - 1)
 							print("📥 [iCloud Import] Unified file imported: scholars=\(res.importedScholars), history=\(res.importedHistory)")
 						}
 						break

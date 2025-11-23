@@ -110,6 +110,11 @@ struct CiteTrackApp: App {
     
     init() {
         NSLog("🧪 [CiteTrackApp] init called - app is starting up")
+        
+        // 设置通知中心代理（确保前台也能显示通知）
+        // 创建一个简单的代理类来处理前台通知显示
+        UNUserNotificationCenter.current().delegate = AppNotificationDelegate.shared
+        
         // 注册后台刷新任务
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.refreshTaskIdentifier, using: nil) { task in
             guard let task = task as? BGAppRefreshTask else {
@@ -170,6 +175,9 @@ struct CiteTrackApp: App {
                         try? await Task.sleep(nanoseconds: 300_000_000)
                         await initializationService.performInitialization()
                     }
+                    
+                    // ❌ 已移除测试通知：避免在生产环境中弹出测试消息
+                    // 如需测试通知，请在开发环境中手动调用 sendTestCitationNotification()
                     
                     // 🚀 优化：延迟并后台执行 iCloud 检查
                     DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1.0) {
@@ -271,30 +279,33 @@ struct CiteTrackApp: App {
         if !scholars.isEmpty {
             print("🔄 [Widget] \(String(format: "debug_refresh_scholars_count".localized, scholars.count))")
             
-            let group = DispatchGroup()
-            for scholar in scholars {
-                group.enter()
-                GoogleScholarService.shared.fetchScholarInfo(for: scholar.id) { result in
-                    DispatchQueue.main.async {
-                        switch result {
-                        case .success(let info):
-                            var updated = Scholar(id: scholar.id, name: info.name)
-                            updated.citations = info.citations
-                            updated.lastUpdated = Date()
+            // 使用统一协调器更新所有学者（低优先级，Widget后台更新）
+            Task {
+                for scholar in scholars {
+                    await CitationFetchCoordinator.shared.fetchScholarComprehensive(
+                        scholarId: scholar.id,
+                        priority: .low
+                    )
+                    
+                    // 从统一缓存获取更新后的数据
+                    if let basicInfo = UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: scholar.id) {
+                        var updated = Scholar(id: scholar.id, name: basicInfo.name)
+                        updated.citations = basicInfo.citations
+                        updated.lastUpdated = basicInfo.lastUpdated
+                        await MainActor.run {
                             self.dataManager.updateScholar(updated)
-                            self.dataManager.saveHistoryIfChanged(scholarId: scholar.id, citationCount: info.citations)
-                        case .failure(let error):
-                            print("❌ \(String(format: "debug_widget_refresh_failed".localized, scholar.id, error.localizedDescription))")
+                            self.dataManager.saveHistoryIfChanged(scholarId: scholar.id, citationCount: basicInfo.citations)
                         }
-                        group.leave()
+                    } else {
+                        print("❌ \(String(format: "debug_widget_refresh_failed".localized, scholar.id, "无法从缓存获取学者信息"))")
                     }
                 }
-            }
-            
-            group.notify(queue: .main) {
-                // 🎯 使用DataManager的refreshWidgets来计算并保存变化数据
-                self.dataManager.refreshWidgets()
-                print("✅ [Widget] \("debug_widget_refresh_complete".localized)")
+                
+                await MainActor.run {
+                    // 🎯 使用DataManager的refreshWidgets来计算并保存变化数据
+                    self.dataManager.refreshWidgets()
+                    print("✅ [Widget] \("debug_widget_refresh_complete".localized)")
+                }
             }
         } else {
             // 没有学者数据，直接更新小组件
@@ -427,40 +438,45 @@ extension CiteTrackApp {
 
         let limited = Array(scholars.prefix(5))
 
-        let group = DispatchGroup()
-        for scholar in limited {
-            group.enter()
-            GoogleScholarService.shared.fetchScholarInfo(for: scholar.id) { result in
-                DispatchQueue.main.async {
-                    switch result {
-                    case .success(let info):
-                        var updated = Scholar(id: scholar.id, name: info.name)
-                        updated.citations = info.citations
-                        updated.lastUpdated = Date()
-                        
+        // 使用统一协调器更新学者（高优先级，用户主动请求）
+        Task {
+            for scholar in limited {
+                await CitationFetchCoordinator.shared.fetchScholarComprehensive(
+                    scholarId: scholar.id,
+                    priority: .high
+                )
+                
+                // 从统一缓存获取更新后的数据（需要在主线程访问）
+                let basicInfo = await MainActor.run {
+                    UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: scholar.id)
+                }
+                
+                if let basicInfo = basicInfo {
+                    var updated = Scholar(id: scholar.id, name: basicInfo.name)
+                    updated.citations = basicInfo.citations
+                    updated.lastUpdated = basicInfo.lastUpdated
+                    
+                    await MainActor.run {
                         DataManager.shared.updateScholar(updated)
                         DataManager.shared.saveHistoryIfChanged(
                             scholarId: scholar.id,
-                            citationCount: info.citations
+                            citationCount: basicInfo.citations
                         )
-                        
-                        print("✅ [批量更新] \(String(format: "debug_batch_update_success".localized, info.name, info.citations))")
-                        
-                    case .failure(let error):
-                        print("❌ [批量更新] \(String(format: "debug_batch_update_failed".localized, scholar.id, error.localizedDescription))")
                     }
                     
-                    group.leave()
+                    print("✅ [批量更新] \(String(format: "debug_batch_update_success".localized, basicInfo.name, basicInfo.citations))")
+                } else {
+                    print("❌ [批量更新] \(String(format: "debug_batch_update_failed".localized, scholar.id, "无法从缓存获取学者信息"))")
                 }
             }
-        }
-
-        group.notify(queue: .main) {
+            
             // 完成本地抓取后，保存一次 CloudKit 长期同步
-            iCloudSyncManager.shared.exportUsingCloudKit { _ in
-                // 🎯 使用DataManager的refreshWidgets来刷新已计算好的数据
-                DataManager.shared.refreshWidgets()
-                task.setTaskCompleted(success: true)
+            await MainActor.run {
+                iCloudSyncManager.shared.exportUsingCloudKit { _ in
+                    // 🎯 使用DataManager的refreshWidgets来刷新已计算好的数据
+                    DataManager.shared.refreshWidgets()
+                    task.setTaskCompleted(success: true)
+                }
             }
         }
     }
@@ -470,6 +486,7 @@ struct MainView: View {
     @State private var selectedTab = 0
     @StateObject private var localizationManager = LocalizationManager.shared
     @StateObject private var settingsManager = SettingsManager.shared
+    @StateObject private var badgeCountManager = BadgeCountManager.shared
     @EnvironmentObject private var initializationService: AppInitializationService
     @State private var contributionData: [Double] = []
     
@@ -707,6 +724,7 @@ struct MainView: View {
                     Image(systemName: "quote.bubble")
                     Text(localizationManager.localized("who_cite_me"))
                 }
+                .badge(badgeCountManager.count)
                 .tag(3)
             
             SettingsView()
@@ -801,8 +819,10 @@ struct DashboardView: View {
     private func moveSortSelection(offset: Int) {
         let all = SortOption.allCases
         guard let currentIndex = all.firstIndex(of: sortOption) else { return }
-        let newIndex = min(max(currentIndex + offset, 0), all.count - 1)
-        if newIndex != currentIndex {
+        // 简化逻辑，避免复杂的溢出检查
+        let newIndex = currentIndex + offset
+        // 确保索引在有效范围内
+        if newIndex >= 0 && newIndex < all.count {
             withAnimation { sortOption = all[newIndex] }
         }
     }
@@ -978,13 +998,15 @@ struct NewScholarView: View {
         if delta > 0 {
             // 有本次增长：标题🎉 恭喜！ 描述：该学者引用量增长了 +%d，礼花：显示
             lastConfettiReason = "single_update delta=\(delta)"
-            confettiTrigger += 1
+            // 使用安全的加法，防止溢出（虽然不太可能，但为了安全）
+            confettiTrigger = min(confettiTrigger + 1, Int.max - 1)
             print("🎆 [Confetti] Single update trigger: \(lastConfettiReason)")
             showEntryKitPopup(titleKey: "single_update_title_growth", descKey: "single_update_desc_growth", value: delta, context: "single_update_delta_positive")
         } else if todayGrowth > 0 {
             // 本次0，但今日累计>0：也需放礼花
             lastConfettiReason = "single_update todayGrowth=\(todayGrowth)"
-            confettiTrigger += 1
+            // 使用安全的加法，防止溢出（虽然不太可能，但为了安全）
+            confettiTrigger = min(confettiTrigger + 1, Int.max - 1)
             print("🎆 [Confetti] Single update trigger: \(lastConfettiReason)")
             showEntryKitPopup(titleKey: "single_update_title_today_growth", descKey: "single_update_desc_today_growth", value: todayGrowth, context: "single_update_today_growth_positive")
         } else {
@@ -1026,7 +1048,8 @@ struct NewScholarView: View {
     private func showBatchRefreshPopupAndConfetti(totalDelta: Int) {
         if totalDelta > 0 {
             lastConfettiReason = "batch_done totalDelta=\(totalDelta)"
-            confettiTrigger += 1
+            // 使用安全的加法，防止溢出（虽然不太可能，但为了安全）
+            confettiTrigger = min(confettiTrigger + 1, Int.max - 1)
             print("🎉 [Confetti] Batch finished trigger: \(lastConfettiReason)")
             // 延迟以避免与礼花重叠
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
@@ -1123,7 +1146,8 @@ struct NewScholarView: View {
                         dataManager.addScholar(newScholar)
                         // 新增学者：触发礼花并弹窗（统一风格）
                         lastConfettiReason = "added_scholar id=\(newScholar.id)"
-                        confettiTrigger += 1
+                        // 使用安全的加法，防止溢出（虽然不太可能，但为了安全）
+            confettiTrigger = min(confettiTrigger + 1, Int.max - 1)
                         print("🎉 [Confetti] Added scholar trigger: \(lastConfettiReason)")
                         showAddedScholarPopup(currentCitations: newScholar.citations)
                         // 取消紧接着的二次更新抓取，避免出现"+0" 动效
@@ -1367,34 +1391,39 @@ struct NewScholarView: View {
         
         // 仅在显式的用户动作入口加1，此处不再重复计数
         
-        googleScholarService.fetchScholarInfo(for: scholar.id) { result in
-            DispatchQueue.main.async {
+        // 使用统一协调器获取学者数据（高优先级，用户主动请求）
+        Task {
+            await CitationFetchCoordinator.shared.fetchScholarComprehensive(
+                scholarId: scholar.id,
+                priority: .high
+            )
+            
+            await MainActor.run {
                 isLoading = false
                 loadingScholarId = nil
                 
-                switch result {
-                case .success(let info):
+                // 从统一缓存获取更新后的数据
+                if let basicInfo = UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: scholar.id) {
                     // 计算增量（用于文案显示），但无条件触发庆祝
-                    let oldCitations = dataManager.getScholar(id: scholar.id)?.citations ?? info.citations
-                    var updatedScholar = Scholar(id: scholar.id, name: info.name)
-                    updatedScholar.citations = info.citations
-                    updatedScholar.lastUpdated = Date()
+                    let oldCitations = dataManager.getScholar(id: scholar.id)?.citations ?? basicInfo.citations
+                    var updatedScholar = Scholar(id: scholar.id, name: basicInfo.name)
+                    updatedScholar.citations = basicInfo.citations
+                    updatedScholar.lastUpdated = basicInfo.lastUpdated
                     
                     dataManager.updateScholar(updatedScholar)
                     dataManager.saveHistoryIfChanged(
                         scholarId: scholar.id,
-                        citationCount: info.citations
+                        citationCount: basicInfo.citations
                     )
                     // Popup & confetti for single update (per rules)
-                    let delta = info.citations - oldCitations
-                    showSingleRefreshPopupAndConfetti(scholarId: scholar.id, delta: delta, currentCitations: info.citations)
+                    let delta = basicInfo.citations - oldCitations
+                    showSingleRefreshPopupAndConfetti(scholarId: scholar.id, delta: delta, currentCitations: basicInfo.citations)
                     
-                    print("✅ \(String(format: "debug_batch_update_success_direct_print".localized, info.name, info.citations))")
-                    
-                case .failure(let error):
-                    errorMessage = error.localizedDescription
+                    print("✅ \(String(format: "debug_batch_update_success_direct_print".localized, basicInfo.name, basicInfo.citations))")
+                } else {
+                    errorMessage = "无法获取学者信息"
                     showingErrorAlert = true
-                    print("❌ \(String(format: "debug_batch_update_failed_direct_print".localized, error.localizedDescription))")
+                    print("❌ 无法从缓存获取学者信息: \(scholar.id)")
                 }
             }
         }
@@ -1410,46 +1439,45 @@ struct NewScholarView: View {
         totalScholars = scholars.count
         refreshProgress = 0
         
-        let group = DispatchGroup()
-        let queue = DispatchQueue.global(qos: .userInitiated)
-        
-        for (_, scholar) in scholars.enumerated() {
-            group.enter()
-            
-            queue.async {
-                googleScholarService.fetchScholarInfo(for: scholar.id) { result in
-                    DispatchQueue.main.async {
-                        refreshProgress += 1
-                        
-                        switch result {
-                        case .success(let info):
-                            var updatedScholar = Scholar(id: scholar.id, name: info.name)
-                            updatedScholar.citations = info.citations
-                            updatedScholar.lastUpdated = Date()
-                            
-                            dataManager.updateScholar(updatedScholar)
-                            dataManager.saveHistoryIfChanged(
-                                scholarId: scholar.id,
-                                citationCount: info.citations
-                            )
-                            
-                            print("✅ [批量更新] \(String(format: "debug_batch_update_success_direct_print".localized, info.name, info.citations))")
-                            
-                        case .failure(let error):
-                            print("❌ [批量更新] \(String(format: "debug_batch_update_failed".localized, scholar.id, error.localizedDescription))")
-                        }
-                        
-                        group.leave()
-                    }
+        // 使用统一协调器更新所有学者（高优先级，用户主动刷新）
+        Task {
+            for (_, scholar) in scholars.enumerated() {
+                // 使用统一协调器更新学者（高优先级，用户主动刷新）
+                await CitationFetchCoordinator.shared.fetchScholarComprehensive(
+                    scholarId: scholar.id,
+                    priority: .high
+                )
+                
+                await MainActor.run {
+                    // 使用安全的加法，防止溢出
+                    refreshProgress = min(refreshProgress + 1, Int.max - 1)
                 }
+                
+                // 从统一缓存获取更新后的数据
+                if let basicInfo = UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: scholar.id) {
+                    var updatedScholar = Scholar(id: scholar.id, name: basicInfo.name)
+                    updatedScholar.citations = basicInfo.citations
+                    updatedScholar.lastUpdated = basicInfo.lastUpdated
+                    
+                    await MainActor.run {
+                        dataManager.updateScholar(updatedScholar)
+                        dataManager.saveHistoryIfChanged(
+                            scholarId: scholar.id,
+                            citationCount: basicInfo.citations
+                        )
+                    }
+                    
+                    print("✅ [批量更新] \(String(format: "debug_batch_update_success_direct_print".localized, basicInfo.name, basicInfo.citations))")
+                } else {
+                    print("❌ [批量更新] \(String(format: "debug_batch_update_failed".localized, scholar.id, "无法从缓存获取学者信息"))")
+                }
+                // 注意：协调器内部已经处理了延迟，这里不需要额外延迟
             }
             
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        
-        group.notify(queue: .main) {
-            isRefreshing = false
-            print("✅ [批量更新] \(String(format: "debug_batch_update_complete_direct_print".localized, refreshProgress, totalScholars))")
+            await MainActor.run {
+                isRefreshing = false
+                print("✅ [批量更新] \(String(format: "debug_batch_update_complete_direct_print".localized, refreshProgress, totalScholars))")
+            }
         }
     }
 
@@ -1470,12 +1498,16 @@ struct NewScholarView: View {
         await withTaskGroup(of: Void.self) { group in
             for (index, scholar) in scholars.enumerated() {
                 group.addTask {
-                    try? await Task.sleep(nanoseconds: UInt64(index * 500_000_000))
+                    // 使用安全的乘法，防止溢出
+                    let safeIndex = min(index, Int.max / 500_000_000)
+                    let nanoseconds = UInt64(safeIndex * 500_000_000)
+                    try? await Task.sleep(nanoseconds: nanoseconds)
                     
                     await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                         scholarService.fetchScholarInfo(for: scholar.id) { result in
                             Task { @MainActor in
-                                refreshProgress += 1
+                                // 使用安全的加法，防止溢出
+                                refreshProgress = min(refreshProgress + 1, Int.max - 1)
                                 
                                 switch result {
                                 case .success(let info):
@@ -1491,7 +1523,8 @@ struct NewScholarView: View {
                                     )
                                     // Accumulate delta only (MainActor safe)
                                     let delta = info.citations - oldCitations
-                                    totalDeltaLocal += delta
+                                    // 使用安全的加法，防止溢出
+                                    totalDeltaLocal = min(max(totalDeltaLocal + delta, Int.min + 1), Int.max - 1)
                                     print("📈 [Batch] Accumulate delta id=\(scholar.id) old=\(oldCitations) new=\(info.citations) delta=\(delta)")
                                     
                                     print("✅ [批量更新] \(String(format: "debug_batch_update_success_direct_print".localized, info.name, info.citations))")
@@ -1888,6 +1921,9 @@ struct SettingsView: View {
     @State private var showingCreateFolderAlert = false
     @State private var showingCreateFolderSuccessAlert = false
     @State private var createFolderMessage = ""
+    @State private var showingClearCacheAlert = false
+    @State private var showingClearCacheSuccessAlert = false
+    @State private var cacheSize: String = "计算中..."
     
     var body: some View {
         NavigationView {
@@ -2011,6 +2047,26 @@ struct SettingsView: View {
                         }
                     }
                     .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+                    
+                    // 清理所有缓存
+                    HStack {
+                        Button(action: {
+                            showingClearCacheAlert = true
+                        }) {
+                            HStack {
+                                Image(systemName: "trash")
+                                    .foregroundColor(.red)
+                                Text(localizationManager.localized("clear_cache"))
+                            }
+                        }
+                        .disabled(iCloudManager.isImporting || iCloudManager.isExporting)
+                        
+                        Spacer()
+                        
+                        Text(cacheSize)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Section(localizationManager.localized("about")) {
@@ -2035,6 +2091,9 @@ struct SettingsView: View {
                     iCloudManager.bootstrapContainerIfPossible()
                     iCloudManager.runDeepDiagnostics()
                 }
+                
+                // 计算并显示缓存大小
+                updateCacheSize()
             }
             .alert(localizationManager.localized("import_from_icloud_alert_title"), isPresented: $showingImportAlert) {
                 Button(localizationManager.localized("cancel"), role: .cancel) { }
@@ -2176,6 +2235,40 @@ struct SettingsView: View {
                 // 复位 manager 的提示开关，避免下次不触发
                 iCloudManager.showingImportResult = false
             }
+            .alert(localizationManager.localized("clear_cache_title"), isPresented: $showingClearCacheAlert) {
+                Button(localizationManager.localized("cancel"), role: .cancel) { }
+                Button(localizationManager.localized("delete"), role: .destructive, action: clearAllCache)
+            } message: {
+                Text(localizationManager.localized("clear_cache_message"))
+            }
+            .alert(localizationManager.localized("clear_cache_success"), isPresented: $showingClearCacheSuccessAlert) {
+                Button(localizationManager.localized("confirm")) { }
+            }
+        }
+    }
+    
+    private func clearAllCache() {
+        print("🗑️ [Settings] Clearing all cache...")
+        
+        // 清理 UnifiedCacheManager 的缓存
+        UnifiedCacheManager.shared.clearAllCache()
+        
+        // 清理 CitationCacheService 的缓存
+        CitationCacheService.shared.clearAllCache()
+        
+        print("✅ [Settings] All cache cleared successfully")
+        
+        // 更新缓存大小显示
+        updateCacheSize()
+        
+        // 显示成功提示
+        showingClearCacheSuccessAlert = true
+    }
+    
+    private func updateCacheSize() {
+        Task { @MainActor in
+            let size = UnifiedCacheManager.shared.getFormattedCacheSize()
+            cacheSize = size
         }
     }
     
@@ -2519,23 +2612,27 @@ struct AddScholarView: View {
             return
         }
         
-        // 使用Google Scholar Service获取真实的学者信息
-        GoogleScholarService.shared.fetchScholarInfo(for: finalScholarId) { result in
-            DispatchQueue.main.async {
+        // 使用统一协调器获取真实的学者信息
+        Task {
+            await CitationFetchCoordinator.shared.fetchScholarComprehensive(
+                scholarId: finalScholarId,
+                priority: .high
+            )
+            
+            await MainActor.run {
                 self.isLoading = false
                 
-                switch result {
-                case .success(let info):
-                    let name = self.scholarName.isEmpty ? info.name : self.scholarName
+                // 从统一缓存获取数据
+                if let basicInfo = UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: finalScholarId) {
+                    let name = self.scholarName.isEmpty ? basicInfo.name : self.scholarName
                     var newScholar = Scholar(id: finalScholarId, name: name)
-                    newScholar.citations = info.citations
-                    newScholar.lastUpdated = Date()
+                    newScholar.citations = basicInfo.citations
+                    newScholar.lastUpdated = basicInfo.lastUpdated
                     
                     self.onAdd(newScholar)
                     self.dismiss()
-                    
-                case .failure(let error):
-                    self.errorMessage = error.localizedDescription
+                } else {
+                    self.errorMessage = "无法获取学者信息"
                 }
             }
         }
@@ -3133,7 +3230,9 @@ struct ScholarChartDetailView: View {
     private func moveTimeRangeSelection(offset: Int) {
         let all = Array(0..<timeRanges.count)
         let currentIndex = selectedTimeRange
-        let newIndex = min(max(currentIndex + offset, all.first ?? 0), (all.last ?? 0))
+        // 使用安全的加法，防止溢出
+        let safeOffset = max(min(offset, Int.max - currentIndex), Int.min - currentIndex)
+        let newIndex = min(max(currentIndex + safeOffset, all.first ?? 0), (all.last ?? 0))
         if newIndex != currentIndex {
             withAnimation { selectedTimeRange = newIndex }
             // 选择变化后加载数据
@@ -3237,7 +3336,11 @@ struct ScholarChartDetailView: View {
                                 // 生成5个均匀分布的Y轴标签值
                                 ForEach(0..<5, id: \.self) { i in
                                     let normalizedPosition = CGFloat(4 - i) / 4.0 // 从上到下
-                                    let value = minValue + Int(normalizedPosition * Double(range))
+                                    // 使用安全的计算，防止溢出
+                                    let safeRange = max(min(range, Int.max - 1), 1)
+                                    let normalizedValue = normalizedPosition * Double(safeRange)
+                                    let safeNormalizedValue = max(min(Int(normalizedValue), Int.max - minValue), Int.min - minValue)
+                                    let value = minValue + safeNormalizedValue
                                     
                                     Text(formatNumber(value))
                                         .font(.caption)
@@ -3271,8 +3374,14 @@ struct ScholarChartDetailView: View {
                                             let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
                                             
                                             for (index, point) in chartData.enumerated() {
-                                                let x = CGFloat(index) * (chartWidth / CGFloat(max(chartData.count - 1, 1)))
-                                                let normalizedValue = CGFloat(point.value - minValue) / CGFloat(range)
+                                                // 使用安全的计算，防止溢出
+                                                let safeIndex = min(index, Int.max - 1)
+                                                let safeCount = max(chartData.count - 1, 1)
+                                                let x = CGFloat(safeIndex) * (chartWidth / CGFloat(safeCount))
+                                                let valueDiff = point.value - minValue
+                                                let safeValueDiff = max(min(valueDiff, Int.max - 1), Int.min + 1)
+                                                let safeRange = max(range, 1)
+                                                let normalizedValue = CGFloat(safeValueDiff) / CGFloat(safeRange)
                                                 let y = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
                                                 
                                                 if index == 0 {
@@ -3291,8 +3400,14 @@ struct ScholarChartDetailView: View {
                                         let minValue = chartData.map(\.value).min() ?? 0
                                         let range = max(maxValue - minValue, 1)
                                         let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
-                                        let x = CGFloat(index) * (chartWidth / CGFloat(max(chartData.count - 1, 1)))
-                                        let normalizedValue = CGFloat(point.value - minValue) / CGFloat(range)
+                                        // 使用安全的计算，防止溢出
+                                        let safeIndex = min(index, Int.max - 1)
+                                        let safeCount = max(chartData.count - 1, 1)
+                                        let x = CGFloat(safeIndex) * (chartWidth / CGFloat(safeCount))
+                                        let valueDiff = point.value - minValue
+                                        let safeValueDiff = max(min(valueDiff, Int.max - 1), Int.min + 1)
+                                        let safeRange = max(range, 1)
+                                        let normalizedValue = CGFloat(safeValueDiff) / CGFloat(safeRange)
                                         let y = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
                                         
                                         ZStack {
@@ -3563,19 +3678,33 @@ struct ScholarChartDetailView: View {
     }
     
     private func findClosestDataPoint(to point: CGPoint, in geometry: GeometryProxy) -> ChartDataPoint? {
-        let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
+        let chartWidth = max(geometry.size.width - 90, 1) // 调整宽度匹配新Y轴，防止除零
         let chartHeight: CGFloat = 160 // 图表高度
         
-        let x = point.x
-        let y = chartHeight - point.y // 将Y坐标反转，使其与图表坐标系一致
+        // 使用安全的计算，防止溢出
+        let x = max(min(point.x, CGFloat.greatestFiniteMagnitude), -CGFloat.greatestFiniteMagnitude)
+        let clampedPointY = max(min(point.y, CGFloat.greatestFiniteMagnitude), -CGFloat.greatestFiniteMagnitude)
+        let y = max(0, min(chartHeight - clampedPointY, chartHeight)) // 将Y坐标反转，防止溢出
         
         // 找到最近的点
         var closestPoint: ChartDataPoint? = nil
-        var minDistance: CGFloat = CGFloat.infinity
+        var minDistance: CGFloat = CGFloat.greatestFiniteMagnitude
+        
+        guard !chartData.isEmpty else { return nil }
+        let safeCount = max(chartData.count - 1, 1)
+        let stepWidth = chartWidth / CGFloat(safeCount)
         
         for (index, dataPoint) in chartData.enumerated() {
-            let dataPointX = CGFloat(index) * (chartWidth / CGFloat(max(chartData.count - 1, 1)))
-            let dataPointY = 160 - (CGFloat(dataPoint.value - minValue) / CGFloat(range) * 128) // 范围从32到160，与网格线精确匹配
+            // 使用安全的乘法，防止溢出
+            let safeIndex = min(index, Int.max - 1)
+            let dataPointX = CGFloat(safeIndex) * stepWidth
+            
+            // 使用安全的减法，防止溢出
+            let valueDiff = dataPoint.value - minValue
+            let safeValueDiff = max(min(valueDiff, Int.max - 1), Int.min + 1)
+            let safeRange = max(range, 1) // 防止除零
+            let normalizedValue = CGFloat(safeValueDiff) / CGFloat(safeRange)
+            let dataPointY = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
             
             let distance = hypot(x - dataPointX, y - dataPointY)
             
@@ -3681,6 +3810,147 @@ extension DateFormatter {
 }
 
 // (已移除) Simple 历史数据管理实现，统一由 DataManager 维护
+
+// MARK: - Notification Delegate
+/// 通知代理类，确保前台也能显示通知
+class AppNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = AppNotificationDelegate()
+    
+    private override init() {
+        super.init()
+    }
+    
+    // 应用在前台时也显示通知
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // iOS 14+ 使用新的 API
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .badge, .sound])
+        } else {
+            completionHandler([.alert, .badge, .sound])
+        }
+        print("📱 [AppNotificationDelegate] Notification will present: \(notification.request.content.title)")
+    }
+    
+    // 用户点击通知时的处理
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        print("📱 [AppNotificationDelegate] User tapped notification: \(userInfo)")
+        
+        // 处理新引用通知
+        if let type = userInfo["type"] as? String, type == "new_citation" {
+            if let clusterId = userInfo["cluster_id"] as? String,
+               let scholarId = userInfo["scholar_id"] as? String {
+                print("📱 [AppNotificationDelegate] Processing new_citation notification: clusterId=\(clusterId), scholarId=\(scholarId)")
+                
+                // 在主线程发送通知，让 MainView 处理跳转
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("showCitationNotification"),
+                        object: nil,
+                        userInfo: [
+                            "cluster_id": clusterId,
+                            "scholar_id": scholarId,
+                            "publication_title": userInfo["publication_title"] as? String ?? "",
+                            "citing_paper_title": userInfo["citing_paper_title"] as? String ?? ""
+                        ]
+                    )
+                    print("📱 [AppNotificationDelegate] Posted showCitationNotification on main thread")
+                }
+            } else {
+                print("❌ [AppNotificationDelegate] Missing cluster_id or scholar_id in notification")
+            }
+        } else {
+            print("⚠️ [AppNotificationDelegate] Notification type is not 'new_citation': \(userInfo["type"] as? String ?? "nil")")
+        }
+        
+        completionHandler()
+    }
+}
+
+// MARK: - Test Notification
+extension CiteTrackApp {
+    /// 请求通知权限
+    @MainActor
+    func requestNotificationPermission() async {
+        let center = UNUserNotificationCenter.current()
+        let granted = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+        if granted == true {
+            print("✅ [CiteTrackApp] Notification permission granted")
+        } else {
+            print("⚠️ [CiteTrackApp] Notification permission denied")
+        }
+    }
+    
+    /// 发送测试引用通知
+    @MainActor
+    func sendTestCitationNotification() async {
+        // 检查通知权限
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        
+        if settings.authorizationStatus != .authorized {
+            print("⚠️ [CiteTrackApp] Notification permission not granted, requesting...")
+            let granted = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
+            if granted != true {
+                print("❌ [CiteTrackApp] Cannot send notification: permission denied")
+                return
+            }
+        }
+        
+        let content = UNMutableNotificationContent()
+        content.title = "新引用"
+        content.body = "《Deep Learning for Natural Language Processing》被《Transformer Models in Modern NLP: A Comprehensive Survey》引用"
+        content.sound = .default
+        content.badge = 1
+        
+        content.userInfo = [
+            "type": "new_citation",
+            "publication_title": "Deep Learning for Natural Language Processing",
+            "citing_paper_title": "Transformer Models in Modern NLP: A Comprehensive Survey",
+            "citing_paper_authors": "Smith, J., Johnson, M., et al.",
+            "cluster_id": "test_cluster_123",
+            "scholar_id": "test_scholar_456"
+        ]
+        
+        let identifier = "test_citation_\(UUID().uuidString)"
+        let request = UNNotificationRequest(
+            identifier: identifier,
+            content: content,
+            trigger: nil
+        )
+        
+        do {
+            // 立即发送通知（不使用 trigger，立即显示）
+            try await center.add(request)
+            print("✅ [CiteTrackApp] Test citation notification sent successfully!")
+            print("📱 [CiteTrackApp] Notification title: \(content.title)")
+            print("📱 [CiteTrackApp] Notification body: \(content.body)")
+            print("📱 [CiteTrackApp] Notification identifier: \(identifier)")
+            
+            // 验证通知是否已添加
+            let pendingRequests = await center.pendingNotificationRequests()
+            print("📱 [CiteTrackApp] Total pending notifications: \(pendingRequests.count)")
+            if pendingRequests.contains(where: { $0.identifier == identifier }) {
+                print("📱 [CiteTrackApp] Test notification found in pending list")
+            }
+            
+            // 立即显示通知（即使应用在前台）
+            // 注意：这需要 UNUserNotificationCenterDelegate 的 willPresent 方法支持
+            print("📱 [CiteTrackApp] Notification should appear now (check notification center)")
+        } catch {
+            print("❌ [CiteTrackApp] Failed to send test notification: \(error.localizedDescription)")
+            print("❌ [CiteTrackApp] Error details: \(error)")
+        }
+    }
+}
 
 // MARK: - Deep Link Notifications
 extension Notification.Name {

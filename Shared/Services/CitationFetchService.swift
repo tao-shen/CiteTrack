@@ -400,7 +400,8 @@ public class CitationFetchService: ObservableObject {
         for publication in limitedPublications {
             guard let clusterId = publication.clusterId else {
                 logWarning("Skipping publication '\(publication.title.prefix(50))...' - no cluster ID")
-                processedCount += 1
+                // 使用安全的加法，防止溢出
+                processedCount = min(processedCount + 1, Int.max - 1)
                 if processedCount == actualTotal {
                     logSuccess("Completed: found \(allCitingPapers.count) citing papers")
                     completion(.success(allCitingPapers))
@@ -413,7 +414,8 @@ public class CitationFetchService: ObservableObject {
             fetchCitingPapersForPublication(clusterId: clusterId, scholarId: scholarId) { [weak self] result in
                 guard let self = self else { return }
                 
-                processedCount += 1
+                // 使用安全的加法，防止溢出
+                processedCount = min(processedCount + 1, Int.max - 1)
                 
                 switch result {
                 case .success(let papers):

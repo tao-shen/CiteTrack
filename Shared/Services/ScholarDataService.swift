@@ -105,7 +105,8 @@ public class ScholarDataService: ObservableObject {
         await MainActor.run {
             self.isLoadingScholar = true
             self.lastRequestTime = Date()
-            self.requestCount += 1
+            // 使用安全的加法，防止溢出
+            self.requestCount = min(self.requestCount + 1, Int.max - 1)
         }
         
         defer {

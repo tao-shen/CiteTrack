@@ -72,6 +72,10 @@ public class CitationManager: ObservableObject {
             case .newPublicationsDetected(let scholarId, let newCount):
                 print("📢 [CitationManager] New publications detected for \(scholarId): \(newCount)")
                 
+            case .publicationsChanged(let scholarId, let changes):
+                print("📢 [CitationManager] Detailed changes received for \(scholarId): \(changes.totalNewCitations) new citations")
+                self.publicationChanges[scholarId] = changes
+                
             case .citingPapersUpdated(let clusterId, let count):
                 print("📢 [CitationManager] Citing papers updated for cluster \(clusterId): \(count)")
             }
@@ -109,9 +113,11 @@ public class CitationManager: ObservableObject {
         let startIndex = forceRefresh ? 0 : (currentCount == 0 ? 0 : currentCount)
         
         // 如果当前没有数据，确保清空可能存在的旧数据
+        // 注意：不清空统计数据，避免在数据加载过程中显示错误的引用数
         if currentCount == 0 {
             await MainActor.run {
-                // 清空该学者的数据，确保从第一页开始加载
+                // 清空该学者的论文列表，确保从第一页开始加载
+                // 但不清空统计数据，保留之前的引用数显示，直到新数据加载完成
                 scholarPublications[scholarId] = []
                 hasMorePublications[scholarId] = true
             }
@@ -123,9 +129,11 @@ public class CitationManager: ObservableObject {
             // 如果当前没有数据，总是从 startIndex: 0 开始检查缓存
             // 如果有数据，检查对应 startIndex 的缓存（用于加载更多）
             let cacheStartIndex = startIndex
+            // 首次加载时只显示20篇论文（Google Scholar默认显示的数量），加载更多时才显示更多
+            let limit = (cacheStartIndex == 0) ? 20 : 100
             // 同步检查统一缓存（UnifiedCacheManager 是 @MainActor，已经在主线程）
             let unifiedPublications = await MainActor.run {
-                UnifiedCacheManager.shared.getPublications(scholarId: scholarId, sortBy: effectiveSortBy, startIndex: cacheStartIndex)
+                UnifiedCacheManager.shared.getPublications(scholarId: scholarId, sortBy: effectiveSortBy, startIndex: cacheStartIndex, limit: limit)
             }
             
             if let unifiedPublications = unifiedPublications, !unifiedPublications.isEmpty {
@@ -151,20 +159,12 @@ public class CitationManager: ObservableObject {
                 )
                 
                 // 判断是否还有更多论文
-                // 1. 如果返回的数据量 >= 100，肯定还有更多
-                // 2. 如果返回的数据量 < 100，检查缓存中是否还有更多数据
-                let hasMore: Bool
-                if unifiedPublications.count >= 100 {
-                    hasMore = true
-                } else {
-                    // 检查缓存中是否还有更多数据
-                    let totalCached = await MainActor.run {
-                        UnifiedCacheManager.shared.scholarPublications[scholarId]?[effectiveSortBy]?.count ?? 0
-                    }
-                    // 如果缓存总数 > 当前返回的数量，说明还有更多
-                    // 或者，如果返回的数量 < 100，可能只是缓存不完整，允许尝试加载更多
-                    hasMore = totalCached > cacheStartIndex + unifiedPublications.count || unifiedPublications.count < 100
+                // 检查缓存中是否还有更多数据
+                let totalCached = await MainActor.run {
+                    UnifiedCacheManager.shared.scholarPublications[scholarId]?[effectiveSortBy]?.count ?? 0
                 }
+                // 如果缓存总数 > 当前返回的数量，说明还有更多
+                let hasMore = totalCached > cacheStartIndex + unifiedPublications.count
                 
                 await MainActor.run {
                     self.hasMorePublications[scholarId] = hasMore
@@ -183,21 +183,7 @@ public class CitationManager: ObservableObject {
                     self.isLoading = false
                 }
                 
-                // 如果是首次加载，启动后台批量预取任务（只预取当前排序方式的其他页面，不预取其他排序方式）
-                if startIndex == 0 {
-                    Task {
-                        // 等待一小段时间，确保第一页数据已经写入缓存
-                        try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5秒
-                        
-                        // 后台预取当前排序方式的其他页面（不包括第一页，因为已经显示了）
-                        // 注意：不预取其他排序方式，只在用户实际切换排序时才获取
-                        // 注意：addTask 会自动跳过已缓存的任务，所以第一页不会重复获取
-                        await MainActor.run {
-                            fetchCoordinator.prefetchOtherPages(scholarId: scholarId, sortBy: effectiveSortBy, pages: 3)
-                        }
-                    }
-                }
-                
+                // 不再自动预取多页数据，只使用缓存，避免不必要的 Fetch
                 return
             }
         }
@@ -205,10 +191,12 @@ public class CitationManager: ObservableObject {
         // 2. 检查旧缓存（CitationCacheService）- 向后兼容
         // 使用与统一缓存相同的逻辑
         if !forceRefresh, let cachedPublications = cacheService.getCachedScholarPublicationsList(for: scholarId, sortBy: effectiveSortBy, startIndex: startIndex) {
-            logInfo("💾 [OldCache] Using cached publications for: \(scholarId), sortBy: \(effectiveSortBy), startIndex: \(startIndex)")
+            // 首次加载时只显示20篇论文，加载更多时才显示更多
+            let limitedPublications = (startIndex == 0) ? Array(cachedPublications.prefix(20)) : cachedPublications
+            logInfo("💾 [OldCache] Using cached publications for: \(scholarId), sortBy: \(effectiveSortBy), startIndex: \(startIndex), count: \(limitedPublications.count)")
             
             // 转换为 PublicationInfo
-            let pubInfos = cachedPublications.map { pub in
+            let pubInfos = limitedPublications.map { pub in
                 PublicationInfo(
                     id: pub.id,
                     title: pub.title,
@@ -237,9 +225,8 @@ public class CitationManager: ObservableObject {
             }
             
             // 判断是否还有更多论文
-            // 1. 如果返回的数据量 >= 100，肯定还有更多
-            // 2. 如果返回的数据量 < 100，可能只是缓存不完整，允许尝试加载更多
-            let hasMore = cachedPublications.count >= 100 || (startIndex == 0 && cachedPublications.count < 100)
+            // 检查原始缓存中是否还有更多数据
+            let hasMore = cachedPublications.count > limitedPublications.count || (startIndex == 0 && cachedPublications.count > 20)
             
             await MainActor.run {
                 self.hasMorePublications[scholarId] = hasMore
@@ -258,45 +245,125 @@ public class CitationManager: ObservableObject {
                 self.isLoading = false
             }
             
-            // 如果是首次加载，启动后台批量预取任务（只预取当前排序方式的其他页面，不预取其他排序方式）
-            if startIndex == 0 {
-                Task {
-                    // 等待一小段时间，确保第一页数据已经写入缓存
-                    try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5秒
-                    
-                    // 后台预取当前排序方式的其他页面（不包括第一页，因为已经显示了）
-                    // 注意：不预取其他排序方式，只在用户实际切换排序时才获取
-                    // 注意：addTask 会自动跳过已缓存的任务，所以第一页不会重复获取
-                    await MainActor.run {
-                        fetchCoordinator.prefetchOtherPages(scholarId: scholarId, sortBy: effectiveSortBy, pages: 3)
-                    }
-                }
-            }
-            
+            // 不再自动预取多页数据，只使用缓存，避免不必要的 Fetch
             return
         }
         
-        // 缓存未命中，使用批量预取
-        // fetchCoordinator 总是从 startIndex: 0 开始获取第一页
-        logInfo("🚀 Cache miss, starting batch prefetch for: \(scholarId), sortBy: \(effectiveSortBy), startIndex: 0")
-        
-        // 如果是强制刷新，清空现有数据
+        // 缓存未命中或强制刷新，只获取第一页，不预取多页
         if forceRefresh {
+            logInfo("🔄 Force refresh: fetching first page for: \(scholarId), sortBy: \(effectiveSortBy), startIndex: 0")
+            // 强制刷新时清空现有显示，显示加载状态，然后显示新数据
             await MainActor.run {
                 scholarPublications[scholarId] = []
                 hasMorePublications[scholarId] = true
             }
+        } else {
+            logInfo("🚀 Cache miss, fetching first page only for: \(scholarId), sortBy: \(effectiveSortBy), startIndex: 0")
         }
         
         Task { @MainActor in
-            // 只获取当前选择的排序方式的第一页，立即显示
-            await fetchCoordinator.fetchScholarPublicationsWithPrefetch(scholarId: scholarId, sortBy: effectiveSortBy, priority: .high, onlyFirstPage: true)
-            
-            // 第一页完成后，从缓存加载数据到UI（总是从 startIndex: 0 开始，因为 fetchCoordinator 总是获取第一页）
-            if let cachedPublications = cacheService.getCachedScholarPublicationsList(for: scholarId, sortBy: effectiveSortBy, startIndex: 0) {
-                logInfo("✅ Loaded \(cachedPublications.count) publications from cache after first page fetch")
+            // 强制刷新时：清空当前显示，显示加载状态，直接 Fetch
+            if forceRefresh {
+                // 清空当前显示，显示加载状态
+                self.scholarPublications[scholarId] = []
+                self.hasMorePublications[scholarId] = true
+                self.isLoading = true
                 
-                let pubInfos = cachedPublications.map { pub in
+                // 直接 Fetch，跳过缓存检查
+                await fetchCoordinator.fetchScholarProfilePage(
+                    scholarId: scholarId,
+                    sortBy: effectiveSortBy,
+                    startIndex: 0,
+                    priority: .high
+                )
+            } else {
+                // 非强制刷新：优先检查对应排序的缓存
+                // 检查是否有对应 sortBy 的缓存数据
+                let hasCachedData = UnifiedCacheManager.shared.getPublications(scholarId: scholarId, sortBy: effectiveSortBy, startIndex: 0, limit: 20) != nil
+                
+                if hasCachedData {
+                    // 有对应排序的缓存：立即显示缓存，后台静默更新
+                    if let unifiedPublications = UnifiedCacheManager.shared.getPublications(scholarId: scholarId, sortBy: effectiveSortBy, startIndex: 0, limit: 20) {
+                        let pubInfos = unifiedPublications.map { pub in
+                            PublicationInfo(
+                                id: pub.id,
+                                title: pub.title,
+                                clusterId: pub.clusterId,
+                                citationCount: pub.citationCount,
+                                year: pub.year
+                            )
+                        }
+                        
+                        let totalCached = UnifiedCacheManager.shared.scholarPublications[scholarId]?[effectiveSortBy]?.count ?? 0
+                        // 如果缓存中的数量大于当前显示的数量，或者缓存数量达到20（一页的数量），则认为还有更多
+                        // 这样可以确保即使缓存耗尽，用户也能触发网络请求加载更多
+                        let hasMore = totalCached > unifiedPublications.count || totalCached >= 20
+                        
+                        self.hasMorePublications[scholarId] = hasMore
+                        self.scholarPublications[scholarId] = pubInfos
+                        self.updatePublicationStatistics(for: scholarId, publications: self.scholarPublications[scholarId] ?? [])
+                        self.isLoading = false
+                        
+                        // 后台静默更新（不阻塞UI）
+                        Task {
+                            await fetchCoordinator.fetchScholarProfilePage(
+                                scholarId: scholarId,
+                                sortBy: effectiveSortBy,
+                                startIndex: 0,
+                                priority: .medium
+                            )
+                        }
+                        return
+                    }
+                }
+                
+                // 没有对应排序的缓存：清空当前显示，立即 Fetch（切换排序时需要显示加载状态）
+                // 清空当前显示，避免显示错误排序的数据
+                // 注意：这里已经在 MainActor 上下文中，可以直接更新
+                self.scholarPublications[scholarId] = []
+                self.hasMorePublications[scholarId] = true
+                self.isLoading = true  // 显示加载状态
+                
+                // 立即 Fetch 对应排序的数据
+                await fetchCoordinator.fetchScholarProfilePage(
+                    scholarId: scholarId,
+                    sortBy: effectiveSortBy,
+                    startIndex: 0,
+                    priority: .high
+                )
+            }
+            
+            // 第一页完成后，从缓存加载数据到UI（只显示第一页，20篇）
+            // 优先从 UnifiedCacheManager 获取（只获取第一页）
+            if let unifiedPublications = UnifiedCacheManager.shared.getPublications(scholarId: scholarId, sortBy: effectiveSortBy, startIndex: 0, limit: 20) {
+                logInfo("✅ Loaded \(unifiedPublications.count) publications from UnifiedCache after first page fetch")
+                
+                let pubInfos = unifiedPublications.map { pub in
+                    PublicationInfo(
+                        id: pub.id,
+                        title: pub.title,
+                        clusterId: pub.clusterId,
+                        citationCount: pub.citationCount,
+                        year: pub.year
+                    )
+                }
+                
+                // 判断是否还有更多论文（检查缓存中是否还有更多数据）
+                let totalCached = UnifiedCacheManager.shared.scholarPublications[scholarId]?[effectiveSortBy]?.count ?? 0
+                // 如果缓存总数 > 20，或者返回了100篇（说明还有更多），则允许加载更多
+                let hasMore = totalCached > 20 || unifiedPublications.count >= 100
+                self.hasMorePublications[scholarId] = hasMore
+                
+                // 只显示第一页（20篇）
+                self.scholarPublications[scholarId] = pubInfos
+                
+                self.updatePublicationStatistics(for: scholarId, publications: self.scholarPublications[scholarId] ?? [])
+            } else if let cachedPublications = cacheService.getCachedScholarPublicationsList(for: scholarId, sortBy: effectiveSortBy, startIndex: 0) {
+                // 后备：从旧缓存获取（只显示前20篇）
+                let limitedPublications = Array(cachedPublications.prefix(20))
+                logInfo("✅ Loaded \(limitedPublications.count) publications from old cache after first page fetch")
+                
+                let pubInfos = limitedPublications.map { pub in
                     PublicationInfo(
                         id: pub.id,
                         title: pub.title,
@@ -307,21 +374,10 @@ public class CitationManager: ObservableObject {
                 }
                 
                 // 判断是否还有更多论文
-                // 1. 如果返回的数据量 >= 100，肯定还有更多
-                // 2. 如果返回的数据量 < 100，检查缓存中是否还有更多数据，或者允许尝试加载更多
-                let hasMore: Bool
-                if cachedPublications.count >= 100 {
-                    hasMore = true
-                } else {
-                    // 检查缓存中是否还有更多数据
-                    let totalCached = UnifiedCacheManager.shared.scholarPublications[scholarId]?[effectiveSortBy]?.count ?? 0
-                    // 如果缓存总数 > 当前返回的数量，说明还有更多
-                    // 或者，如果返回的数量 < 100，可能只是缓存不完整，允许尝试加载更多
-                    hasMore = totalCached > cachedPublications.count || cachedPublications.count < 100
-                }
+                let hasMore = cachedPublications.count > 20 || cachedPublications.count >= 100
                 self.hasMorePublications[scholarId] = hasMore
                 
-                // fetchCoordinator 总是获取第一页（startIndex: 0），所以这里总是替换数据
+                // 只显示第一页（20篇）
                 self.scholarPublications[scholarId] = pubInfos
                 
                 self.updatePublicationStatistics(for: scholarId, publications: self.scholarPublications[scholarId] ?? [])
@@ -424,10 +480,13 @@ public class CitationManager: ObservableObject {
         
         // 1. 优先检查统一缓存（UnifiedCacheManager）
         Task { @MainActor in
+            // 加载更多时，每次加载100篇（Google Scholar 每页100篇）
+            let limit = 100
             let unifiedPublications = UnifiedCacheManager.shared.getPublications(
                 scholarId: scholarId,
                 sortBy: effectiveSortBy,
-                startIndex: startIndex
+                startIndex: startIndex,
+                limit: limit
             )
             
             if let unifiedPublications = unifiedPublications, !unifiedPublications.isEmpty {
@@ -445,7 +504,9 @@ public class CitationManager: ObservableObject {
                 }
                 
                 // 判断是否还有更多论文
-                let hasMore = unifiedPublications.count >= 100
+                // 如果返回了100篇，说明可能还有更多；或者检查缓存总数
+                let totalCached = UnifiedCacheManager.shared.scholarPublications[scholarId]?[effectiveSortBy]?.count ?? 0
+                let hasMore = unifiedPublications.count >= 100 || totalCached > startIndex + unifiedPublications.count
                 self.hasMorePublications[scholarId] = hasMore
                 
                 // 同步到旧缓存（保持兼容性）
@@ -748,46 +809,29 @@ public class CitationManager: ObservableObject {
         _ = calculateStatistics(for: scholarId)
     }
     
-    /// 根据论文列表更新统计数据
+    /// 更新统计数据 - 直接从 UnifiedCacheManager 获取，不做任何计算
     private func updatePublicationStatistics(for scholarId: String, publications: [PublicationInfo]) {
-        let totalCitations = publications.compactMap { $0.citationCount }.reduce(0, +)
-        _ = publications.filter { ($0.citationCount ?? 0) > 0 }  // papersWithCitations
-        
-        // 按年份统计引用数
-        var citationsByYear: [Int: Int] = [:]
-        for pub in publications {
-            if let year = pub.year, let count = pub.citationCount {
-                citationsByYear[year, default: 0] += count
+        // 直接从 UnifiedCacheManager 获取引用数，完全显示，不做任何统计计算
+        Task { @MainActor in
+            if let basicInfo = UnifiedCacheManager.shared.getScholarBasicInfo(scholarId: scholarId) {
+                // 直接使用 UnifiedCacheManager 中的完整引用数（从 Google Scholar 主页获取的准确值）
+                let stats = CitationStatistics(
+                    scholarId: scholarId,
+                    totalCitingPapers: basicInfo.citations,
+                    uniqueCitingAuthors: 0,
+                    citationsByYear: [:],
+                    topCitingAuthors: [],
+                    recentCitations: [],
+                    averageCitationsPerYear: Double(basicInfo.citations),
+                    lastUpdated: basicInfo.lastUpdated
+                )
+                self.statistics[scholarId] = stats
+                logInfo("Updated statistics from UnifiedCache: \(basicInfo.citations) citations for \(scholarId)")
+            } else {
+                // 如果 UnifiedCacheManager 没有数据，保留之前的统计数据（不清零）
+                logInfo("No UnifiedCache data for \(scholarId), preserving previous stats")
             }
         }
-        
-        // 计算年均引用数
-        let years = citationsByYear.keys.sorted()
-        let averageCitationsPerYear: Double
-        if years.count > 1, let earliest = years.first, let latest = years.last {
-            let yearSpan = latest - earliest + 1
-            averageCitationsPerYear = Double(totalCitations) / Double(yearSpan)
-        } else {
-            averageCitationsPerYear = Double(totalCitations)
-        }
-        
-        // 创建统计对象
-        let stats = CitationStatistics(
-            scholarId: scholarId,
-            totalCitingPapers: totalCitations,
-            uniqueCitingAuthors: 0, // 无法获取
-            citationsByYear: citationsByYear,
-            topCitingAuthors: [],
-            recentCitations: [],
-            averageCitationsPerYear: averageCitationsPerYear,
-            lastUpdated: Date()
-        )
-        
-        DispatchQueue.main.async {
-            self.statistics[scholarId] = stats
-        }
-        
-        logSuccess("Updated statistics: \(totalCitations) total citations from \(publications.count) publications")
     }
 }
 
