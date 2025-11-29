@@ -423,8 +423,15 @@ class LocalizationManager {
             "status_updating": "Updating...",
             "status_updating_progress": "Updating... (%d/%d)",
             "update_completed": "Update Completed",
+            "update_completed_message": "%d of %d scholars updated successfully.",
             "update_progress_title": "Updating Citations",
             "update_result_message": "%d of %d scholars updated successfully. %d failed.",
+            "updating_all_scholars": "Updating All Scholars",
+            "updating_selected_scholars": "Updating Selected Scholars",
+            "please_wait_updating": "Please wait while updating scholar information...",
+            "button_update": "Update",
+            "error_no_scholars": "No Scholars",
+            "error_no_scholars_message": "Please add scholars first.",
             
             // Refresh Status
             "refresh_completed": "Refresh Completed",
@@ -777,8 +784,15 @@ class LocalizationManager {
             "status_updating": "更新中...",
             "status_updating_progress": "更新中... (%d/%d)",
             "update_completed": "更新完成",
+            "update_completed_message": "已成功更新 %d 个学者（共 %d 个）。",
             "update_progress_title": "更新引用量",
             "update_result_message": "%d 个学者中的 %d 个更新成功，%d 个失败。",
+            "updating_all_scholars": "更新所有学者",
+            "updating_selected_scholars": "更新选中的学者",
+            "please_wait_updating": "正在更新学者信息，请稍候...",
+            "button_update": "更新",
+            "error_no_scholars": "无学者",
+            "error_no_scholars_message": "请先添加学者。",
             
             // Refresh Status
             "refresh_completed": "刷新完成",
@@ -1045,8 +1059,15 @@ class LocalizationManager {
             "status_updating": "更新中...",
             "status_updating_progress": "更新中... (%d/%d)",
             "update_completed": "更新完了",
+            "update_completed_message": "%d人の研究者が正常に更新されました（合計%d人）。",
             "update_progress_title": "引用数更新中",
             "update_result_message": "%d人の研究者のうち%d人が正常に更新されました。%d人が失敗しました。",
+            "updating_all_scholars": "すべての研究者を更新中",
+            "updating_selected_scholars": "選択した研究者を更新中",
+            "please_wait_updating": "研究者情報を更新しています。しばらくお待ちください...",
+            "button_update": "更新",
+            "error_no_scholars": "研究者なし",
+            "error_no_scholars_message": "まず研究者を追加してください。",
             
             // Refresh Status
             "refresh_completed": "更新完了",

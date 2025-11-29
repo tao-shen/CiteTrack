@@ -697,6 +697,12 @@ class SettingsWindowController: NSWindowController {
         removeButton.isBordered = true
         toolbar.addArrangedSubview(removeButton)
         
+        // 更新按钮
+        let updateButton = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: L("button_update"))!, target: self, action: #selector(updateScholars))
+        updateButton.bezelStyle = .texturedRounded
+        updateButton.isBordered = true
+        toolbar.addArrangedSubview(updateButton)
+        
         // 分隔符
         let separator1 = NSBox()
         separator1.boxType = .separator
@@ -942,12 +948,31 @@ class SettingsWindowController: NSWindowController {
         }
         
         // 添加学者
-                let newScholar = Scholar(id: scholarId)
-                PreferencesManager.shared.addScholar(newScholar)
-                loadData()
+        let newScholar = Scholar(id: scholarId)
+        PreferencesManager.shared.addScholar(newScholar)
+        loadData()
         
-                // 通知更新
-                NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+        // 通知更新
+        NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+        
+        // 自动更新该学者的信息
+        googleScholarService.fetchScholarInfo(for: scholarId) { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let info):
+                    // 更新学者信息
+                    PreferencesManager.shared.updateScholar(withId: scholarId, name: info.name, citations: info.citations)
+                    // 重新加载数据以显示更新后的信息
+                    self?.loadData()
+                    // 通知更新
+                    NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+                    print("✅ [SettingsWindow] 自动更新学者信息成功: \(info.name), 引用数: \(info.citations)")
+                case .failure(let error):
+                    print("⚠️ [SettingsWindow] 自动更新学者信息失败: \(error.localizedDescription)")
+                    // 即使更新失败，也继续关闭对话框
+                }
+            }
+        }
         
         // 关闭对话框并清理引用
         print("✅ [DEBUG] Closing dialog window after adding scholar")
@@ -1020,6 +1045,73 @@ class SettingsWindowController: NSWindowController {
         
         // 通知更新
         NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+    }
+    
+    @objc private func updateScholars() {
+        let selectedRows = tableView.selectedRowIndexes
+        
+        // 如果没有选中任何行，更新所有学者
+        let scholarsToUpdate: [Scholar]
+        if selectedRows.isEmpty {
+            scholarsToUpdate = scholars
+        } else {
+            // 更新选中的学者
+            scholarsToUpdate = selectedRows.map { scholars[$0] }
+        }
+        
+        guard !scholarsToUpdate.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = L("error_no_scholars")
+            alert.informativeText = L("error_no_scholars_message")
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: L("button_ok"))
+            alert.runModal()
+            return
+        }
+        
+        // 显示进度提示
+        let alert = NSAlert()
+        alert.messageText = selectedRows.isEmpty ? L("updating_all_scholars") : L("updating_selected_scholars")
+        alert.informativeText = L("please_wait_updating")
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: L("button_ok"))
+        alert.runModal()
+        
+        // 更新学者信息
+        var completedCount = 0
+        let totalCount = scholarsToUpdate.count
+        
+        for scholar in scholarsToUpdate {
+            googleScholarService.fetchScholarInfo(for: scholar.id) { [weak self] result in
+                DispatchQueue.main.async {
+                    completedCount += 1
+                    
+                    switch result {
+                    case .success(let info):
+                        // 更新学者信息
+                        PreferencesManager.shared.updateScholar(withId: scholar.id, name: info.name, citations: info.citations)
+                        print("✅ [SettingsWindow] 更新学者成功: \(info.name), 引用数: \(info.citations)")
+                    case .failure(let error):
+                        print("⚠️ [SettingsWindow] 更新学者失败 \(scholar.id): \(error.localizedDescription)")
+                    }
+                    
+                    // 所有更新完成后，重新加载数据
+                    if completedCount == totalCount {
+                        self?.loadData()
+                        // 通知更新
+                        NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
+                        
+                        // 显示完成提示
+                        let completionAlert = NSAlert()
+                        completionAlert.messageText = L("update_completed")
+                        completionAlert.informativeText = L("update_completed_message", completedCount, totalCount)
+                        completionAlert.alertStyle = .informational
+                        completionAlert.addButton(withTitle: L("button_ok"))
+                        completionAlert.runModal()
+                    }
+                }
+            }
+        }
     }
     
     
