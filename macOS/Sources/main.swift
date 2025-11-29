@@ -749,12 +749,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         menu.addItem(NSMenuItem.separator())
         
-        let checkForUpdatesItem = NSMenuItem(title: L("menu_check_updates"), action: #selector(checkForUpdates), keyEquivalent: "")
-        checkForUpdatesItem.target = self
-        if #available(macOS 11.0, *) {
-            checkForUpdatesItem.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
-        }
-        menu.addItem(checkForUpdatesItem)
+        // Mac App Store 版本不支持检查更新功能（通过 App Store 更新）
+        // #if !APP_STORE
+        // let checkForUpdatesItem = NSMenuItem(title: L("menu_check_updates"), action: #selector(checkForUpdates), keyEquivalent: "")
+        // checkForUpdatesItem.target = self
+        // if #available(macOS 11.0, *) {
+        //     checkForUpdatesItem.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
+        // }
+        // menu.addItem(checkForUpdatesItem)
+        // #endif
         
         let aboutItem = NSMenuItem(title: L("menu_about"), action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
@@ -1003,17 +1006,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         chartsWindowController = nil
     }
     
-    @objc private func checkForUpdates() {
-        // #if !APP_STORE
-        // updaterController.checkForUpdates(nil)
-        // #else
-        // App Store 版本不支持内置更新（通过 App Store 更新）
-        let alert = NSAlert()
-        alert.messageText = L("menu_check_updates")
-        alert.informativeText = L("please_update_from_app_store")
-        alert.runModal()
-        // #endif
-    }
+    // Mac App Store 版本不支持检查更新功能（通过 App Store 更新）
+    // #if !APP_STORE
+    // @objc private func checkForUpdates() {
+    //     updaterController.checkForUpdates(nil)
+    // }
+    // #endif
     
     @objc private func showAbout() {
         let alert = NSAlert()
