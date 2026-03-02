@@ -201,25 +201,29 @@ public class CitationHistoryManager: ObservableObject {
     
     // MARK: - Data Management
     
-    /// Delete all history for a scholar
+    /// Delete all history for a scholar using efficient batch delete
     public func deleteHistory(for scholarId: String, completion: @escaping (Result<Void, Error>) -> Void = { _ in }) {
         backgroundQueue.async {
             let context = self.coreDataManager.newBackgroundContext()
             context.perform {
-                let request = CitationHistoryEntity.fetchRequest(for: scholarId)
-                
                 do {
-                    let entities = try context.fetch(request)
-                    for entity in entities {
-                        context.delete(entity)
+                    let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "CitationHistoryEntity")
+                    fetchRequest.predicate = NSPredicate(format: "scholarId == %@", scholarId)
+                    let batchDelete = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+                    batchDelete.resultType = .resultTypeCount
+
+                    let result = try context.execute(batchDelete) as? NSBatchDeleteResult
+                    let count = result?.result as? Int ?? 0
+
+                    // Merge changes to viewContext so UI updates
+                    self.coreDataManager.viewContext.perform {
+                        self.coreDataManager.viewContext.refreshAllObjects()
                     }
-                    
-                    try self.coreDataManager.saveBackgroundContext(context)
-                    
+
                     DispatchQueue.main.async {
                         completion(.success(()))
                     }
-                    print("✅ 删除学者 \(scholarId) 的历史记录成功")
+                    print("✅ 批量删除学者 \(scholarId) 的 \(count) 条历史记录成功")
                 } catch {
                     DispatchQueue.main.async {
                         completion(.failure(error))
@@ -229,31 +233,31 @@ public class CitationHistoryManager: ObservableObject {
             }
         }
     }
-    
-    /// Delete old history entries (keep only recent data)
+
+    /// Delete old history entries using efficient batch delete
     public func cleanupOldEntries(keepDays: Int = 365, completion: @escaping (Result<Int, Error>) -> Void = { _ in }) {
         let cutoffDate = Date().addingTimeInterval(-TimeInterval(keepDays * 24 * 60 * 60))
-        
+
         backgroundQueue.async {
             let context = self.coreDataManager.newBackgroundContext()
             context.perform {
-                let request: NSFetchRequest<CitationHistoryEntity> = CitationHistoryEntity.fetchRequest()
-                request.predicate = NSPredicate(format: "timestamp < %@", cutoffDate as NSDate)
-                
                 do {
-                    let entities = try context.fetch(request)
-                    let deletedCount = entities.count
-                    
-                    for entity in entities {
-                        context.delete(entity)
+                    let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "CitationHistoryEntity")
+                    fetchRequest.predicate = NSPredicate(format: "timestamp < %@", cutoffDate as NSDate)
+                    let batchDelete = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+                    batchDelete.resultType = .resultTypeCount
+
+                    let result = try context.execute(batchDelete) as? NSBatchDeleteResult
+                    let deletedCount = result?.result as? Int ?? 0
+
+                    self.coreDataManager.viewContext.perform {
+                        self.coreDataManager.viewContext.refreshAllObjects()
                     }
-                    
-                    try self.coreDataManager.saveBackgroundContext(context)
-                    
+
                     DispatchQueue.main.async {
                         completion(.success(deletedCount))
                     }
-                    print("✅ 清理旧历史记录成功，删除 \(deletedCount) 条记录")
+                    print("✅ 批量清理旧历史记录成功，删除 \(deletedCount) 条记录")
                 } catch {
                     DispatchQueue.main.async {
                         completion(.failure(error))

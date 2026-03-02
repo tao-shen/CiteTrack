@@ -106,12 +106,20 @@ public class CitationCacheService {
     }
     
     /// 获取缓存的论文列表
+    /// Returns nil if cache is missing or older than 24 hours (forces refresh for comparison)
     public func getCachedPublications(for scholarId: String) -> [PublicationSnapshot]? {
         guard let cache = publicationCache[scholarId] else {
             return nil
         }
-        
-        // 论文缓存不设置过期时间，用于对比变化
+
+        // Publication cache expires after 24 hours to prevent serving stale data indefinitely
+        let publicationCacheTTL: TimeInterval = 24 * 60 * 60
+        if Date().timeIntervalSince(cache.timestamp) > publicationCacheTTL {
+            logInfo("Publication cache expired for scholar: \(scholarId)")
+            publicationCache.removeValue(forKey: scholarId)
+            return nil
+        }
+
         return cache.publications
     }
     

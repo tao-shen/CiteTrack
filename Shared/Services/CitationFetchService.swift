@@ -891,19 +891,22 @@ public class CitationFetchService: ObservableObject {
             }
             
             // 非首次请求：检查是否需要延迟
-                let elapsed = Date().timeIntervalSince(lastTime)
+            let elapsed = Date().timeIntervalSince(lastTime)
             let totalDelay = self.rateLimitDelay + self.randomDelay()
             if elapsed < totalDelay {
                 let delay = totalDelay - elapsed
                 self.logDebug("Rate limiting: waiting \(String(format: "%.2f", delay))s (elapsed: \(String(format: "%.2f", elapsed))s)")
-                    Thread.sleep(forTimeInterval: delay)
+                // Use non-blocking delay instead of Thread.sleep to avoid freezing
+                self.lastRequestTime = Date().addingTimeInterval(delay)
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    completion()
+                }
             } else {
                 self.logDebug("No rate limit delay needed (elapsed: \(String(format: "%.2f", elapsed))s)")
-            }
-            
-            self.lastRequestTime = Date()
-            DispatchQueue.main.async {
-                completion()
+                self.lastRequestTime = Date()
+                DispatchQueue.main.async {
+                    completion()
+                }
             }
         }
     }

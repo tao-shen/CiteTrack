@@ -459,10 +459,26 @@ class ChartDataService {
         
         let sortedHistory = history.sorted { $0.timestamp < $1.timestamp }
         let values = sortedHistory.map { $0.citationCount }
-        
+
+        guard let firstEntry = sortedHistory.first,
+              let lastEntry = sortedHistory.last,
+              let minVal = values.min(),
+              let maxVal = values.max() else {
+            return ChartStatistics(
+                totalDataPoints: 0,
+                dateRange: (start: Date(), end: Date()),
+                valueRange: (min: 0, max: 0),
+                totalChange: 0,
+                averageChange: 0,
+                growthRate: 0,
+                volatility: 0,
+                trend: .stable
+            )
+        }
+
         let totalDataPoints = sortedHistory.count
-        let dateRange = (start: sortedHistory.first!.timestamp, end: sortedHistory.last!.timestamp)
-        let valueRange = (min: values.min()!, max: values.max()!)
+        let dateRange = (start: firstEntry.timestamp, end: lastEntry.timestamp)
+        let valueRange = (min: minVal, max: maxVal)
         
         let totalChange = valueRange.max - valueRange.min
         let averageChange = totalDataPoints > 1 ? Double(totalChange) / Double(totalDataPoints - 1) : 0
@@ -501,8 +517,7 @@ class ChartDataService {
         guard history.count >= 2 else { return .stable }
         
         let sortedHistory = history.sorted { $0.timestamp < $1.timestamp }
-        let first = sortedHistory.first!
-        let last = sortedHistory.last!
+        guard let first = sortedHistory.first, let last = sortedHistory.last else { return .stable }
         
         let change = last.citationCount - first.citationCount
         let changePercentage = first.citationCount > 0 ? abs(Double(change) / Double(first.citationCount)) * 100 : 0

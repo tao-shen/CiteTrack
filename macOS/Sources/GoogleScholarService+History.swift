@@ -77,11 +77,12 @@ extension GoogleScholarService {
             if errors.isEmpty {
                 completion(.success(results))
             } else {
-                // Return partial success if some scholars succeeded
                 if !results.isEmpty {
                     completion(.success(results))
+                } else if let firstError = errors.first {
+                    completion(.failure(firstError))
                 } else {
-                    completion(.failure(errors.first!))
+                    completion(.failure(NSError(domain: "GoogleScholarService", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unknown error"])))
                 }
             }
         }
@@ -198,20 +199,23 @@ extension GoogleScholarService {
         for scholarId: String,
         completion: @escaping (Result<(name: String, citations: Int), ScholarError>) -> Void
     ) {
-        GoogleScholarService.requestQueue.async { [weak self] in
-            let now = Date()
-            let timeSinceLastRequest = now.timeIntervalSince(GoogleScholarService.lastRequestTime)
-            
-            if timeSinceLastRequest < GoogleScholarService.minimumRequestInterval {
-                let delay = GoogleScholarService.minimumRequestInterval - timeSinceLastRequest
-                Thread.sleep(forTimeInterval: delay)
+        let now = Date()
+        let timeSinceLastRequest = now.timeIntervalSince(GoogleScholarService.lastRequestTime)
+
+        if timeSinceLastRequest < GoogleScholarService.minimumRequestInterval {
+            let delay = GoogleScholarService.minimumRequestInterval - timeSinceLastRequest
+            GoogleScholarService.requestQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+                GoogleScholarService.lastRequestTime = Date()
+                DispatchQueue.main.async(qos: .userInitiated) {
+                    self?.fetchScholarInfo(for: scholarId, completion: completion)
+                }
             }
-            
-            GoogleScholarService.lastRequestTime = Date()
-            
-            DispatchQueue.main.async(qos: .userInitiated) {
-                self?.fetchScholarInfo(for: scholarId, completion: completion)
-            }
+            return
+        }
+
+        GoogleScholarService.lastRequestTime = Date()
+        DispatchQueue.main.async(qos: .userInitiated) {
+            self.fetchScholarInfo(for: scholarId, completion: completion)
         }
     }
     

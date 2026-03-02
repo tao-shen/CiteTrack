@@ -763,8 +763,8 @@ struct CiteTrackWidgetProvider: TimelineProvider {
         guard let scholarId = selectedId else { return nil }
         
         let selected = scholars.first { $0.id == scholarId }
-        if selected != nil {
-            print("✅ [Widget] 使用用户选择的学者: \(selected!.displayName)")
+        if let selected = selected {
+            print("✅ [Widget] 使用用户选择的学者: \(selected.displayName)")
         }
         
         return selected
@@ -1326,8 +1326,10 @@ struct ToggleScholarIntent: AppIntent {
            let currentIndex = scholars.firstIndex(where: { $0.id == currentId }) {
             let nextIndex = (currentIndex + 1) % scholars.count
             nextScholar = scholars[nextIndex]
+        } else if let first = scholars.first {
+            nextScholar = first
         } else {
-            nextScholar = scholars[0]
+            return
         }
         
         // 设置切换标记，不清除其他标记

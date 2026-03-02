@@ -99,9 +99,17 @@ public class UnifiedCacheManager: ObservableObject {
     /// 从持久化存储加载数据
     private func loadPersistedData() {
         let appGroupDefaults = UserDefaults(suiteName: appGroupIdentifier) ?? UserDefaults.standard
-        guard let data = appGroupDefaults.data(forKey: persistenceKey),
-              let persisted = try? JSONDecoder().decode(PersistedCacheData.self, from: data) else {
+        guard let data = appGroupDefaults.data(forKey: persistenceKey) else {
             print("📦 [UnifiedCache] No persisted data found, starting fresh")
+            return
+        }
+
+        let persisted: PersistedCacheData
+        do {
+            persisted = try JSONDecoder().decode(PersistedCacheData.self, from: data)
+        } catch {
+            print("❌ [UnifiedCache] Failed to decode persisted data: \(error.localizedDescription). Clearing corrupted cache.")
+            clearPersistedData()
             return
         }
         
@@ -137,8 +145,11 @@ public class UnifiedCacheManager: ObservableObject {
             lastSaved: Date()
         )
         
-        guard let data = try? JSONEncoder().encode(persisted) else {
-            print("❌ [UnifiedCache] Failed to encode data for persistence")
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(persisted)
+        } catch {
+            print("❌ [UnifiedCache] Failed to encode data for persistence: \(error.localizedDescription)")
             return
         }
         

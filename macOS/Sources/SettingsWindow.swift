@@ -28,8 +28,11 @@ class EditableTextField: NSTextField {
     
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.type == NSEvent.EventType.keyDown {
+            guard let characters = event.charactersIgnoringModifiers else {
+                return super.performKeyEquivalent(with: event)
+            }
             if (event.modifierFlags.rawValue & NSEvent.ModifierFlags.deviceIndependentFlagsMask.rawValue) == commandKey {
-                switch event.charactersIgnoringModifiers! {
+                switch characters {
                 case "x":
                     if NSApp.sendAction(#selector(NSText.cut(_:)), to: nil, from: self) { return true }
                 case "c":
@@ -37,15 +40,21 @@ class EditableTextField: NSTextField {
                 case "v":
                     if NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: self) { return true }
                 case "z":
-                    if NSApp.sendAction(Selector(("undo:")), to: nil, from: self) { return true }
+                    if let undoManager = self.undoManager, undoManager.canUndo {
+                        undoManager.undo()
+                        return true
+                    }
                 case "a":
                     if NSApp.sendAction(#selector(NSResponder.selectAll(_:)), to: nil, from: self) { return true }
                 default:
                     break
                 }
             } else if (event.modifierFlags.rawValue & NSEvent.ModifierFlags.deviceIndependentFlagsMask.rawValue) == commandShiftKey {
-                if event.charactersIgnoringModifiers == "Z" {
-                    if NSApp.sendAction(Selector(("redo:")), to: nil, from: self) { return true }
+                if characters == "Z" {
+                    if let undoManager = self.undoManager, undoManager.canRedo {
+                        undoManager.redo()
+                        return true
+                    }
                 }
             }
         }
@@ -1307,8 +1316,10 @@ class SettingsWindowController: NSWindowController {
         let chartsWindowController = ChartsWindowController()
         chartsWindowController.showWindow(nil)
         
-        // Keep reference to prevent deallocation
-        NSApp.delegate?.perform(Selector(("setChartsWindowController:")), with: chartsWindowController)
+        // Keep reference to prevent deallocation using type-safe cast
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            appDelegate.chartsWindowController = chartsWindowController
+        }
     }
     
     // MARK: - iCloud Sync Actions

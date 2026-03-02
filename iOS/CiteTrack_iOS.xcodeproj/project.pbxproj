@@ -48,6 +48,8 @@
 		E28462172E744FA20040CDC6 /* SwiftUICharts in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = E28462162E744FA20040CDC6 /* SwiftUICharts */; };
 		E29641D92E74876E00F2192F /* ContributionChart in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = E29641D82E74876E00F2192F /* ContributionChart */; };
 		E82A6BEDCB7B708C4258FF29 /* WhoCiteMeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F54B5A9D19FB1FC241AD4CC /* WhoCiteMeView.swift */; };
+		852507111088025424044628 /* SelectionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 380558653595655430862952 /* SelectionViews.swift */; };
+		238652789153115628566232 /* ChartViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818820330565341001121037 /* ChartViews.swift */; };
 		EE62AC8D536887913EF9C1E8 /* CiteTrackWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6789012345678 /* CiteTrackWidget.swift */; };
 		FFA0B1C0FFA0B1C0FFA0B1C0FFA0B1 /* LocalizationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00B2C3D100B2C3D100B2C3D100B2C /* LocalizationManager.swift */; };
 		InitViewBuild123456789012345678901234 /* InitializationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = InitView123456789012345678901234 /* InitializationView.swift */; };
@@ -101,6 +103,8 @@
 		3A3CD9923CA4F4BAB897275C /* WidgetInfo.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = WidgetInfo.plist; path = CiteTrackWidgetExtension/WidgetInfo.plist; sourceTree = "<group>"; };
 		4532AD9E733BDB8599392643 /* CitingAuthorEntity+Extensions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = "CitingAuthorEntity+Extensions.swift"; path = "../Shared/CoreData/CitingAuthorEntity+Extensions.swift"; sourceTree = "<group>"; };
 		4F54B5A9D19FB1FC241AD4CC /* WhoCiteMeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WhoCiteMeView.swift; path = ./CiteTrack/Views/WhoCiteMeView.swift; sourceTree = "<group>"; };
+		380558653595655430862952 /* SelectionViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SelectionViews.swift; path = ./CiteTrack/Views/SelectionViews.swift; sourceTree = "<group>"; };
+		818820330565341001121037 /* ChartViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ChartViews.swift; path = ./CiteTrack/Views/ChartViews.swift; sourceTree = "<group>"; };
 		5A14B49CE3D149720ACED922 /* CitingPaperListView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CitingPaperListView.swift; path = ./CiteTrack/Views/CitingPaperListView.swift; sourceTree = "<group>"; };
 		5DAE3FC6426B40A428FC683B /* CitationManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CitationManager.swift; path = ../Shared/Managers/CitationManager.swift; sourceTree = "<group>"; };
 		66F1029866F1029866F1029866F1 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -331,6 +335,8 @@
 				39DCB356977172C12A172AEC /* CitingPaperDetailView.swift */,
 				5A14B49CE3D149720ACED922 /* CitingPaperListView.swift */,
 				4F54B5A9D19FB1FC241AD4CC /* WhoCiteMeView.swift */,
+				380558653595655430862952 /* SelectionViews.swift */,
+				818820330565341001121037 /* ChartViews.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -490,6 +496,8 @@
 				2485362AF6FC19356491DD90 /* CitingPaperDetailView.swift in Sources */,
 				98331AF0DB120E3FCB25F601 /* CitingPaperListView.swift in Sources */,
 				E82A6BEDCB7B708C4258FF29 /* WhoCiteMeView.swift in Sources */,
+				852507111088025424044628 /* SelectionViews.swift in Sources */,
+				238652789153115628566232 /* ChartViews.swift in Sources */,
 				4393C28514997DEFB1D1BFEC /* UnifiedCacheManager.swift in Sources */,
 				430055B66A50AE5266F08C11 /* CitationFetchService+ScholarInfo.swift in Sources */,
 			);

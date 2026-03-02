@@ -225,8 +225,8 @@ class NotificationManager {
         
         let significantChanges = changes.filter { $0.isSignificant }
         
-        if significantChanges.count == 1 {
-            sendNotification(for: significantChanges.first!)
+        if significantChanges.count == 1, let one = significantChanges.first {
+            sendNotification(for: one)
         } else if significantChanges.count > 1 {
             sendBatchNotification(for: significantChanges)
         }

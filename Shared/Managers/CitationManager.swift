@@ -2,10 +2,9 @@ import Foundation
 import Combine
 
 // MARK: - Citation Manager
+@MainActor
 public class CitationManager: ObservableObject {
-    // 使用 nonisolated(unsafe) 来允许从非主线程访问 shared
-    // 注意：这要求所有对 shared 的访问都确保在主线程上（SwiftUI 的 @StateObject 会保证这一点）
-    nonisolated(unsafe) public static let shared = CitationManager()
+    public static let shared = CitationManager()
     
     // Published properties
     @Published public var citingPapers: [String: [CitingPaper]] = [:]  // scholarId -> papers
@@ -34,11 +33,7 @@ public class CitationManager: ObservableObject {
         self.fetchService = CitationFetchService.shared
         self.cacheService = CitationCacheService.shared
         self.exportService = CitationExportService.shared
-        // 延迟初始化 fetchCoordinator，确保在主线程上访问
-        // 由于 SwiftUI 的 @StateObject 会在主线程上创建实例，这里使用 assumeIsolated 是安全的
-        self.fetchCoordinator = MainActor.assumeIsolated {
-            CitationFetchCoordinator.shared
-        }
+        self.fetchCoordinator = CitationFetchCoordinator.shared
         
         // 订阅统一缓存的数据变化事件
         setupCacheSubscription()

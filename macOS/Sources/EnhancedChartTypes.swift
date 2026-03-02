@@ -318,7 +318,8 @@ class ModernChartView: NSView {
         areaPath.addPath(linePath)
         
         // Close to bottom-right
-        areaPath.addLine(to: CGPoint(x: points.last!.x, y: chartRect.minY))
+        guard let lastPoint = points.last else { return areaPath }
+        areaPath.addLine(to: CGPoint(x: lastPoint.x, y: chartRect.minY))
         areaPath.closeSubpath()
         
         return areaPath

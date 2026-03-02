@@ -511,8 +511,7 @@ class ChartView: NSView {
         context.setLineWidth(1.5)
         context.setLineDash(phase: 0, lengths: [5, 3])
         
-        let startPoint = trendLine.points.first!
-        let endPoint = trendLine.points.last!
+        guard let startPoint = trendLine.points.first, let endPoint = trendLine.points.last else { return }
         
         // Convert trend line points to chart coordinates
         let startX = rect.minX

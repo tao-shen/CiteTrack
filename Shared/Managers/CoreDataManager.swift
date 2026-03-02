@@ -83,7 +83,11 @@ public class CoreDataManager: ObservableObject {
     // MARK: - Background Context
     
     public func newBackgroundContext() -> NSManagedObjectContext {
-        return persistentContainer.newBackgroundContext()
+        let context = persistentContainer.newBackgroundContext()
+        // Ensure background contexts also have a merge policy to handle conflicts consistently
+        context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
+        context.automaticallyMergesChangesFromParent = true
+        return context
     }
     
     // MARK: - Save Context
@@ -165,8 +169,19 @@ public class CoreDataManager: ObservableObject {
         timestampAttribute.attributeType = .dateAttributeType
         timestampAttribute.isOptional = false
         
-        historyEntity.properties = [idAttribute, scholarIdAttribute, citationCountAttribute, timestampAttribute]
-        
+        let createdAtAttribute = NSAttributeDescription()
+        createdAtAttribute.name = "createdAt"
+        createdAtAttribute.attributeType = .dateAttributeType
+        createdAtAttribute.isOptional = false
+
+        let sourceAttribute = NSAttributeDescription()
+        sourceAttribute.name = "source"
+        sourceAttribute.attributeType = .stringAttributeType
+        sourceAttribute.isOptional = false
+        sourceAttribute.defaultValue = "automatic"
+
+        historyEntity.properties = [idAttribute, scholarIdAttribute, citationCountAttribute, timestampAttribute, createdAtAttribute, sourceAttribute]
+
         model.entities = [historyEntity]
         
         print("✅ 创建了默认 Core Data 模型")
@@ -192,9 +207,10 @@ extension CitationHistoryEntity {
         let request = fetchRequest()
         request.predicate = NSPredicate(format: "scholarId == %@", scholarId)
         request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+        request.fetchBatchSize = 100
         return request
     }
-    
+
     public class func fetchRequest(for scholarId: String, from startDate: Date, to endDate: Date) -> NSFetchRequest<CitationHistoryEntity> {
         let request = fetchRequest()
         request.predicate = NSPredicate(
@@ -202,6 +218,7 @@ extension CitationHistoryEntity {
             scholarId, startDate as NSDate, endDate as NSDate
         )
         request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: true)]
+        request.fetchBatchSize = 100
         return request
     }
 }

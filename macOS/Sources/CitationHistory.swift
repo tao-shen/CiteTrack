@@ -123,9 +123,7 @@ extension Scholar {
     
     var latestChange: Int? {
         let history = historicalData.sorted { $0.timestamp < $1.timestamp }
-        guard history.count >= 2 else { return nil }
-        
-        let latest = history.last!
+        guard history.count >= 2, let latest = history.last else { return nil }
         let previous = history[history.count - 2]
         return latest.citationCount - previous.citationCount
     }

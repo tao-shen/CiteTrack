@@ -486,16 +486,18 @@ class PreferencesManager {
 
 // MARK: - App Delegate
 class AppDelegate: NSObject, NSApplicationDelegate {
-    private var statusBarItem: NSStatusItem!
-    private var menu: NSMenu!
+    private var statusBarItem: NSStatusItem?
+    private var menu: NSMenu?
     private var timer: Timer?
     private let scholarService = GoogleScholarService()
     private var settingsWindowController: SettingsWindowController?
-    private var chartsWindowController: NSWindowController?
+    var chartsWindowController: NSWindowController?
     private var scholars: [Scholar] = []
     private var currentCitations: [String: Int] = [:]
     private let backgroundDataService = BackgroundDataCollectionService.shared
     private var isUpdating = false
+    /// Thread-safe queue for protecting shared mutable state during citation refresh
+    private let citationUpdateQueue = DispatchQueue(label: "com.citetrack.citationupdate.serial")
     
     // Sparkle updater (disabled for development)
     // #if !APP_STORE
@@ -663,13 +665,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     private func updateMenuBarDisplay() {
         if !PreferencesManager.shared.showInMenuBar {
-            statusBarItem.isVisible = false
+            statusBarItem?.isVisible = false
             return
         }
-        
-        statusBarItem.isVisible = true
-        
-        if let button = statusBarItem.button {
+
+        statusBarItem?.isVisible = true
+
+        if let button = statusBarItem?.button {
             button.image = nil
             button.imagePosition = .noImage
             button.toolTip = L("tooltip_citetrack")
@@ -677,36 +679,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
         }
     }
-    
+
     private func updateMenuBarTitle(_ title: String) {
         // 确保在主线程执行UI更新
         assert(Thread.isMainThread, "updateMenuBarTitle() must be called on the main thread")
-        
-        if let button = statusBarItem.button {
+
+        if let button = statusBarItem?.button {
             button.title = title
         }
     }
-    
+
     private func setupMenu() {
         menu = NSMenu()
-        statusBarItem.menu = menu
+        statusBarItem?.menu = menu
         rebuildMenu()
     }
     
     private func rebuildMenu() {
         // 确保在主线程执行UI更新
         assert(Thread.isMainThread, "rebuildMenu() must be called on the main thread")
-        
+
+        guard let menu = menu else { return }
+
         menu.removeAllItems()
-        
+
         let titleItem = NSMenuItem(title: L("app_name"), action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
         if isUpdating {
-            // 显示更新中状态
             let updatingItem = NSMenuItem(title: L("status_updating"), action: nil, keyEquivalent: "")
             updatingItem.isEnabled = false
             menu.addItem(updatingItem)
@@ -723,49 +726,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 menu.addItem(item)
             }
         }
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
         let refreshItem = NSMenuItem(title: L("menu_manual_update"), action: #selector(refreshCitations), keyEquivalent: "r")
         refreshItem.target = self
         if #available(macOS 11.0, *) {
             refreshItem.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
         }
         menu.addItem(refreshItem)
-        
+
         let settingsItem = NSMenuItem(title: L("menu_preferences"), action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self
         if #available(macOS 11.0, *) {
             settingsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
         }
         menu.addItem(settingsItem)
-        
+
         let chartsItem = NSMenuItem(title: L("menu_charts"), action: #selector(showCharts), keyEquivalent: "")
         chartsItem.target = self
         if #available(macOS 11.0, *) {
             chartsItem.image = NSImage(systemSymbolName: "rectangle.grid.2x2", accessibilityDescription: nil)
         }
         menu.addItem(chartsItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
-        // Mac App Store 版本不支持检查更新功能（通过 App Store 更新）
-        // #if !APP_STORE
-        // let checkForUpdatesItem = NSMenuItem(title: L("menu_check_updates"), action: #selector(checkForUpdates), keyEquivalent: "")
-        // checkForUpdatesItem.target = self
-        // if #available(macOS 11.0, *) {
-        //     checkForUpdatesItem.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
-        // }
-        // menu.addItem(checkForUpdatesItem)
-        // #endif
-        
+
         let aboutItem = NSMenuItem(title: L("menu_about"), action: #selector(showAbout), keyEquivalent: "")
         aboutItem.target = self
         if #available(macOS 11.0, *) {
             aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
         }
         menu.addItem(aboutItem)
-        
+
         let quitItem = NSMenuItem(title: L("menu_quit"), action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         if #available(macOS 11.0, *) {
@@ -817,104 +810,83 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             alert.runModal()
             return
         }
-        
-        // 设置更新状态
+
+        // Prevent concurrent refresh operations
+        guard !isUpdating else { return }
         isUpdating = true
-        
-        // 显示更新中状态
+
         updateMenuBarTitle("⋯")
-        rebuildMenu() // 重建菜单以显示updating状态
-        
-        // 使用同步队列保护共享变量
-        let updateQueue = DispatchQueue(label: "com.citetrack.citationupdate", attributes: .concurrent)
+        rebuildMenu()
+
+        // All shared mutable state is now accessed only on the main thread
         var updatedCount = 0
         let totalCount = scholars.count
         var hasChanges = false
         var changeDetails: [String] = []
-        
+
         let group = DispatchGroup()
-        
+
         for scholar in scholars {
             group.enter()
             let oldCitations = currentCitations[scholar.id] ?? 0
-            
+
             scholarService.fetchScholarInfo(for: scholar.id) { [weak self] result in
-                DispatchQueue.main.async(qos: .userInitiated) {
-                    // 使用 weak-strong dance 模式
-                    guard let strongSelf = self else { 
+                DispatchQueue.main.async {
+                    guard let strongSelf = self else {
                         group.leave()
-                        return 
+                        return
                     }
-                    
+
                     defer { group.leave() }
-                    
+
                     switch result {
                     case .success(let info):
-                        // 使用 barrier 确保线程安全的更新
-                        updateQueue.async(flags: .barrier) {
-                            updatedCount += 1
-                            let newCitations = info.citations
-                            let change = newCitations - oldCitations
-                            
-                            // 记录变化
-                            if change != 0 {
-                                hasChanges = true
-                                let changeText = change > 0 ? "+\(change)" : "\(change)"
-                                changeDetails.append("\(scholar.name): \(oldCitations) → \(newCitations) (\(changeText))")
-                            }
-                            
-                            DispatchQueue.main.async(qos: .userInitiated) {
-                                // 更新数据 (在主线程执行)
-                                strongSelf.currentCitations[scholar.id] = newCitations
-                                PreferencesManager.shared.updateScholar(withId: scholar.id, name: info.name, citations: newCitations)
-                                
-                                // 实时更新菜单显示
-                                strongSelf.rebuildMenu()
-                            }
+                        // All state mutations happen on the main thread — no race condition
+                        updatedCount += 1
+                        let newCitations = info.citations
+                        let change = newCitations - oldCitations
+
+                        if change != 0 {
+                            hasChanges = true
+                            let changeText = change > 0 ? "+\(change)" : "\(change)"
+                            changeDetails.append("\(scholar.name): \(oldCitations) → \(newCitations) (\(changeText))")
                         }
-                        
+
+                        strongSelf.currentCitations[scholar.id] = newCitations
+                        PreferencesManager.shared.updateScholar(withId: scholar.id, name: info.name, citations: newCitations)
+                        strongSelf.rebuildMenu()
+
                     case .failure(let error):
                         print("更新学者 \(scholar.name) 失败: \(error.localizedDescription)")
                     }
                 }
             }
         }
-        
-        // 等待所有请求完成
+
         group.notify(queue: .main) { [weak self] in
             guard let strongSelf = self else { return }
-            
-            // 重置更新状态
+
             strongSelf.isUpdating = false
-            
-            // 根据更新结果显示不同状态
+
             if updatedCount == totalCount {
-                // 全部成功
                 strongSelf.updateMenuBarTitle("✓")
-                // 2秒后恢复正常显示
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
-                    guard let strongSelf = self else { return }
-                    strongSelf.updateMenuBarTitle("∞")
-                    strongSelf.rebuildMenu() // 恢复正常菜单显示
+                    self?.updateMenuBarTitle("∞")
+                    self?.rebuildMenu()
                 }
             } else {
-                // 有失败的情况
                 strongSelf.updateMenuBarTitle("⚠️")
-                // 3秒后恢复正常显示
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
-                    guard let strongSelf = self else { return }
-                    strongSelf.updateMenuBarTitle("∞")
-                    strongSelf.rebuildMenu() // 恢复正常菜单显示
+                    self?.updateMenuBarTitle("∞")
+                    self?.rebuildMenu()
                 }
             }
-            
-            // 立即重建菜单以显示更新后的数据
+
             strongSelf.rebuildMenu()
-            
-            // 显示更新结果
+
             let alert = NSAlert()
             alert.messageText = L("update_completed")
-            
+
             if hasChanges {
                 alert.informativeText = L("update_result_with_changes", updatedCount, totalCount) + "\n\n" + L("change_details") + ":\n" + changeDetails.joined(separator: "\n")
                 alert.alertStyle = .informational
@@ -922,10 +894,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.informativeText = L("update_result_no_changes", updatedCount, totalCount)
                 alert.alertStyle = .informational
             }
-            
+
             alert.runModal()
-            
-            // 通知其他组件数据已更新
+
             NotificationCenter.default.post(name: NSNotification.Name("ScholarsUpdated"), object: nil)
         }
     }
