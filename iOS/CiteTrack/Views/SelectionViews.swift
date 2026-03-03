@@ -31,6 +31,10 @@ struct ThemeSelectionView: View {
                 .padding(.vertical, 4)
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    AnalyticsService.shared.log(AnalyticsEventName.settingsThemeChanged, parameters: [
+                        AnalyticsParamKey.newTheme: theme.rawValue
+                    ])
+                    AnalyticsService.shared.setUserProperty(theme.rawValue, forName: AnalyticsUserProperty.appTheme)
                     settingsManager.theme = theme
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         dismiss()
@@ -40,6 +44,7 @@ struct ThemeSelectionView: View {
         }
         .navigationTitle(localizationManager.localized("theme"))
         .navigationBarTitleDisplayMode(.inline)
+        .analyticsScreen(AnalyticsScreen.themeSelection)
     }
 }
 
@@ -74,6 +79,9 @@ struct WidgetThemeSelectionView: View {
                 .padding(.vertical, 4)
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    AnalyticsService.shared.log(AnalyticsEventName.settingsWidgetThemeChanged, parameters: [
+                        AnalyticsParamKey.newTheme: theme.rawValue
+                    ])
                     settingsManager.widgetTheme = theme
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                         dismiss()
@@ -83,6 +91,7 @@ struct WidgetThemeSelectionView: View {
         }
         .navigationTitle(localizationManager.localized("widget_theme"))
         .navigationBarTitleDisplayMode(.inline)
+        .analyticsScreen(AnalyticsScreen.widgetThemeSelection)
     }
 }
 
@@ -118,6 +127,12 @@ struct LanguageSelectionView: View {
                 .padding(.vertical, 4)
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    let oldLanguage = localizationManager.currentLanguage.rawValue
+                    AnalyticsService.shared.log(AnalyticsEventName.settingsLanguageChanged, parameters: [
+                        AnalyticsParamKey.newLanguage: language.rawValue,
+                        AnalyticsParamKey.oldLanguage: oldLanguage
+                    ])
+                    AnalyticsService.shared.setUserProperty(language.rawValue, forName: AnalyticsUserProperty.appLanguage)
                     localizationManager.switchLanguage(to: language) {
                         dismiss()
                     }
@@ -126,5 +141,6 @@ struct LanguageSelectionView: View {
         }
         .navigationTitle(localizationManager.localized("select_language"))
         .navigationBarTitleDisplayMode(.inline)
+        .analyticsScreen(AnalyticsScreen.languageSelection)
     }
 }

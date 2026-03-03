@@ -1022,13 +1022,15 @@ struct QuickRefreshIntent: AppIntent {
     static var openAppWhenRun: Bool = false
     
     func perform() async throws -> some IntentResult {
+        // Relay widget event to main app via AppGroup
+        AnalyticsService.shared.relayWidgetEvent(AnalyticsEventName.widgetRefreshTriggered)
         let intentStartTime = Date()
         let startTimestamp = intentStartTime.timeIntervalSince1970
         NSLog("🚨🚨🚨 QuickRefreshIntent 被触发！！！ 时间戳: \(startTimestamp)")
         print("🚨🚨🚨 [Intent] QuickRefreshIntent 被触发！！！ 时间戳: \(startTimestamp)")
         print("🔄 [Intent] ===== 新版本代码 - 用户触发小组件刷新 =====")
         print("⏱️ [Intent] 🎯 计时开始: \(intentStartTime)")
-        
+
         let groupIdentifier = appGroupIdentifier
         let timestamp = Date()
         
@@ -1291,8 +1293,9 @@ struct ToggleScholarIntent: AppIntent {
     static var openAppWhenRun: Bool = false
     
     func perform() async throws -> some IntentResult {
+        AnalyticsService.shared.relayWidgetEvent(AnalyticsEventName.widgetScholarSwitched)
         print("🎯 [Intent] ===== 新版本代码 - 用户触发学者切换 =====")
-        
+
         let groupIdentifier = appGroupIdentifier
         
         // 获取所有学者
@@ -1329,7 +1332,7 @@ struct ToggleScholarIntent: AppIntent {
         } else if let first = scholars.first {
             nextScholar = first
         } else {
-            return
+            return .result()
         }
         
         // 设置切换标记，不清除其他标记

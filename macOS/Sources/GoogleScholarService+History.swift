@@ -368,7 +368,10 @@ class BackgroundDataCollectionService {
             print("No scholars to update")
             return
         }
-        
+
+        AnalyticsService.shared.log(AnalyticsEventName.citationRefreshAuto, parameters: [
+            AnalyticsParamKey.scholarCount: scholars.count
+        ])
         print("Performing automatic citation collection for \(scholars.count) scholars")
         
         googleScholarService.fetchAndSaveMultipleScholars(scholars) { result in

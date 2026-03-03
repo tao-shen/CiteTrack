@@ -304,18 +304,22 @@ public class CitationFetchService: ObservableObject {
                         break
                     case 429:
                         self.logWarning("Rate limited by Google Scholar")
+                        AnalyticsService.shared.logCitationError("rate_limit", statusCode: 429)
                         completion(.failure(.rateLimited))
                         return
                     case 404:
                         self.logError("Scholar not found: \(scholarId)")
+                        AnalyticsService.shared.logCitationError("not_found", statusCode: 404)
                         completion(.failure(.scholarNotFound))
                         return
                     case 500...599:
                         self.logError("Server error: \(httpResponse.statusCode)")
+                        AnalyticsService.shared.logCitationError("server_error", statusCode: httpResponse.statusCode)
                         completion(.failure(.serverError(httpResponse.statusCode)))
                         return
                     default:
                         self.logError("Unexpected HTTP status: \(httpResponse.statusCode)")
+                        AnalyticsService.shared.logCitationError("http_error", statusCode: httpResponse.statusCode)
                         completion(.failure(.serverError(httpResponse.statusCode)))
                         return
                     }

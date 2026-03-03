@@ -142,22 +142,27 @@ class NotificationManager {
     
     func sendNotification(for change: CitationChange) {
         guard settings.isEnabled else { return }
-        
+
         // Check quiet hours
         if let quietHours = settings.quietHours, quietHours.isQuietTime() {
             print("Skipping notification due to quiet hours")
             return
         }
-        
+
+        let direction = change.change > 0 ? "increase" : "decrease"
+        AnalyticsService.shared.log(AnalyticsEventName.notificationSent, parameters: [
+            AnalyticsParamKey.direction: direction
+        ])
+
         // Send different types of notifications based on settings
         if settings.notificationTypes.contains(.system) {
             sendSystemNotification(for: change)
         }
-        
+
         if settings.notificationTypes.contains(.popup) {
             sendPopupNotification(for: change)
         }
-        
+
         if settings.notificationTypes.contains(.menuBar) {
             sendMenuBarNotification(for: change)
         }

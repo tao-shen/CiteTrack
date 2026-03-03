@@ -441,6 +441,7 @@ class SettingsWindowController: NSWindowController {
     
     
     @objc private func exportData() {
+        AnalyticsService.shared.log(AnalyticsEventName.settingsDataExportStarted)
         let savePanel = NSSavePanel()
         if #available(macOS 11.0, *) {
             savePanel.allowedContentTypes = [.json, .commaSeparatedText]
@@ -476,6 +477,7 @@ class SettingsWindowController: NSWindowController {
     }
     
     @objc private func importData() {
+        AnalyticsService.shared.log(AnalyticsEventName.settingsDataImportStarted)
         let openPanel = NSOpenPanel()
         if #available(macOS 11.0, *) {
             openPanel.allowedContentTypes = [.json]
@@ -957,10 +959,19 @@ class SettingsWindowController: NSWindowController {
         }
         
         // 添加学者
+        let inputType = inputText.contains("scholar.google") ? "url" : "id"
+        AnalyticsService.shared.log(AnalyticsEventName.scholarAddSubmitted, parameters: [
+            AnalyticsParamKey.inputType: inputType
+        ])
         let newScholar = Scholar(id: scholarId)
         PreferencesManager.shared.addScholar(newScholar)
+        AnalyticsService.shared.log(AnalyticsEventName.scholarAddSuccess)
+        AnalyticsService.shared.setUserProperty(
+            String(PreferencesManager.shared.scholars.count),
+            forName: AnalyticsUserProperty.scholarCount
+        )
         loadData()
-        
+
         // 通知更新
         NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
         
@@ -1020,27 +1031,38 @@ class SettingsWindowController: NSWindowController {
                 let scholar = scholars[row]
                 PreferencesManager.shared.removeScholar(withId: scholar.id)
             }
+            AnalyticsService.shared.log(AnalyticsEventName.scholarDelete, parameters: [
+                AnalyticsParamKey.scholarCountAfter: PreferencesManager.shared.scholars.count
+            ])
+            AnalyticsService.shared.setUserProperty(
+                String(PreferencesManager.shared.scholars.count),
+                forName: AnalyticsUserProperty.scholarCount
+            )
             loadData()
             // 通知更新
             NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
         }
     }
-    
+
     @objc private func moveScholarUp() {
         let selectedRow = tableView.selectedRow
         guard selectedRow > 0 else { return }
-        
+
+        AnalyticsService.shared.log(AnalyticsEventName.scholarReordered, parameters: [
+            AnalyticsParamKey.method: "arrow"
+        ])
+
         // 交换位置
         scholars.swapAt(selectedRow, selectedRow - 1)
         PreferencesManager.shared.scholars = scholars
-        
+
         tableView.reloadData()
         tableView.selectRowIndexes(IndexSet(integer: selectedRow - 1), byExtendingSelection: false)
-        
+
         // 通知更新
         NotificationCenter.default.post(name: .scholarsDataUpdated, object: nil)
     }
-    
+
     @objc private func moveScholarDown() {
         let selectedRow = tableView.selectedRow
         guard selectedRow >= 0 && selectedRow < scholars.count - 1 else { return }
@@ -1190,6 +1212,12 @@ class SettingsWindowController: NSWindowController {
     
     @objc private func languageSelectionChanged(_ sender: NSPopUpButton) {
         guard let language = sender.selectedItem?.representedObject as? LocalizationManager.Language else { return }
+        let oldLanguage = LocalizationManager.shared.currentLanguageCode
+        AnalyticsService.shared.log(AnalyticsEventName.settingsLanguageChanged, parameters: [
+            AnalyticsParamKey.newLanguage: language.rawValue,
+            AnalyticsParamKey.oldLanguage: oldLanguage
+        ])
+        AnalyticsService.shared.setUserProperty(language.rawValue, forName: AnalyticsUserProperty.appLanguage)
         LocalizationManager.shared.setLanguage(language)
     }
     
@@ -1291,21 +1319,37 @@ class SettingsWindowController: NSWindowController {
     @objc private func updateIntervalChanged() {
         let selectedIndex = updateIntervalPopup.indexOfSelectedItem
         let interval = indexToInterval(selectedIndex)
+        AnalyticsService.shared.log(AnalyticsEventName.settingsAutoUpdateFreqChanged, parameters: [
+            AnalyticsParamKey.frequencyHours: interval / 3600
+        ])
+        AnalyticsService.shared.setUserProperty(String(interval), forName: AnalyticsUserProperty.updateInterval)
         PreferencesManager.shared.updateInterval = interval
     }
-    
+
     @objc private func showInDockChanged() {
-        PreferencesManager.shared.showInDock = showInDockCheckbox.state == .on
+        let enabled = showInDockCheckbox.state == .on
+        AnalyticsService.shared.log(AnalyticsEventName.settingsShowInDockChanged, parameters: [
+            AnalyticsParamKey.enabled: enabled
+        ])
+        PreferencesManager.shared.showInDock = enabled
         updateAppearance()
     }
-    
+
     @objc private func showInMenuBarChanged() {
-        PreferencesManager.shared.showInMenuBar = showInMenuBarCheckbox.state == .on
+        let enabled = showInMenuBarCheckbox.state == .on
+        AnalyticsService.shared.log(AnalyticsEventName.settingsShowInMenuBarChanged, parameters: [
+            AnalyticsParamKey.enabled: enabled
+        ])
+        PreferencesManager.shared.showInMenuBar = enabled
         updateAppearance()
     }
-    
+
     @objc private func launchAtLoginChanged() {
-        PreferencesManager.shared.launchAtLogin = launchAtLoginCheckbox.state == .on
+        let enabled = launchAtLoginCheckbox.state == .on
+        AnalyticsService.shared.log(AnalyticsEventName.settingsLaunchAtLoginChanged, parameters: [
+            AnalyticsParamKey.enabled: enabled
+        ])
+        PreferencesManager.shared.launchAtLogin = enabled
     }
     
     @objc private func openChartsWindow() {
@@ -1326,8 +1370,12 @@ class SettingsWindowController: NSWindowController {
     
     @objc private func iCloudSyncToggled(_ sender: NSButton) {
         let isEnabled = sender.state == .on
+        AnalyticsService.shared.log(AnalyticsEventName.settingsICloudSyncToggled, parameters: [
+            AnalyticsParamKey.enabled: isEnabled
+        ])
+        AnalyticsService.shared.setUserProperty(isEnabled ? "true" : "false", forName: AnalyticsUserProperty.icloudSyncEnabled)
         PreferencesManager.shared.iCloudSyncEnabled = isEnabled
-        
+
         // Update UI state
         updateiCloudSyncUIState(enabled: isEnabled)
         

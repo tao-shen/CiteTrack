@@ -4,6 +4,9 @@ import ServiceManagement
 #if !APP_STORE
 import Sparkle
 #endif
+#if canImport(FirebaseCore)
+import FirebaseCore
+#endif
 
 // MARK: - User Defaults Keys
 extension UserDefaults {
@@ -505,14 +508,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // #endif
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // Firebase Analytics
+        #if canImport(FirebaseCore)
+        FirebaseApp.configure()
+        #endif
+        AnalyticsService.shared.configure()
+
+        let isFirst = !UserDefaults.standard.bool(forKey: "HasLaunchedBefore")
+        if isFirst {
+            AnalyticsService.shared.log(AnalyticsEventName.appFirstLaunch, parameters: [
+                AnalyticsParamKey.platform: "macos"
+            ])
+            UserDefaults.standard.set(true, forKey: "HasLaunchedBefore")
+        }
+
         // 首先设置应用为常规模式，确保显示在 Dock 中
         NSApp.setActivationPolicy(.regular)
-        
-        // Initialize Sparkle updater (disabled for development)
-        // #if !APP_STORE
-        // setupSparkleUpdater()
-        // #endif
-        
+
         // Initialize Core Data stack
         initializeCoreData()
         
@@ -534,6 +546,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 确保应用激活到前台
         NSApp.activate(ignoringOtherApps: true)
         
+        AnalyticsService.shared.log(AnalyticsEventName.appOpen, parameters: [
+            AnalyticsParamKey.scholarCount: scholars.count,
+            AnalyticsParamKey.platform: "macos"
+        ])
+        AnalyticsService.shared.updateAllUserProperties(
+            scholarCount: scholars.count,
+            language: LocalizationManager.shared.currentLanguageCode,
+            updateInterval: String(PreferencesManager.shared.updateInterval)
+        )
+
         if scholars.isEmpty {
             // 延迟一点显示首次设置，确保应用完全启动
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -585,9 +607,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationWillTerminate(_ aNotification: Notification) {
+        AnalyticsService.shared.log(AnalyticsEventName.appTerminate, parameters: [
+            AnalyticsParamKey.scholarCount: scholars.count
+        ])
+
         // Save Core Data context before terminating
         CoreDataManager.shared.saveContext()
-        
+
         // Stop background data collection
         backgroundDataService.stopAutomaticCollection()
         
@@ -814,6 +840,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Prevent concurrent refresh operations
         guard !isUpdating else { return }
         isUpdating = true
+        AnalyticsService.shared.log(AnalyticsEventName.citationRefreshManual, parameters: [
+            AnalyticsParamKey.source: "menu",
+            AnalyticsParamKey.scholarCount: scholars.count
+        ])
 
         updateMenuBarTitle("⋯")
         rebuildMenu()
@@ -866,6 +896,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         group.notify(queue: .main) { [weak self] in
             guard let strongSelf = self else { return }
 
+            AnalyticsService.shared.log(AnalyticsEventName.citationRefreshCompleted, parameters: [
+                AnalyticsParamKey.successCount: updatedCount,
+                AnalyticsParamKey.failCount: totalCount - updatedCount
+            ])
+
             strongSelf.isUpdating = false
 
             if updatedCount == totalCount {
@@ -902,6 +937,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func showSettings() {
+        AnalyticsService.shared.logScreenView(AnalyticsScreen.settingsWindow)
         if settingsWindowController == nil {
             settingsWindowController = SettingsWindowController()
         }
@@ -909,8 +945,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindowController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
-    
+
     @objc private func showCharts() {
+        AnalyticsService.shared.logScreenView(AnalyticsScreen.chartsWindow)
         print("AppDelegate: showCharts() called")
         
         // 防止多次调用导致的崩溃：如果窗口已存在，直接返回

@@ -2,6 +2,9 @@ import SwiftUI
 #if canImport(SwiftEntryKit)
 import SwiftEntryKit
 #endif
+#if canImport(FirebaseCore)
+import FirebaseCore
+#endif
 
 struct ScrollOffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
@@ -110,7 +113,33 @@ struct CiteTrackApp: App {
     
     init() {
         NSLog("🧪 [CiteTrackApp] init called - app is starting up")
-        
+
+        // Firebase Analytics
+        #if canImport(FirebaseCore)
+        FirebaseApp.configure()
+        #endif
+        AnalyticsService.shared.configure()
+
+        let scholars = DataManager.shared.scholars
+        let isFirst = !UserDefaults.standard.bool(forKey: "HasLaunchedBefore")
+        if isFirst {
+            AnalyticsService.shared.log(AnalyticsEventName.appFirstLaunch, parameters: [
+                AnalyticsParamKey.platform: "ios"
+            ])
+            UserDefaults.standard.set(true, forKey: "HasLaunchedBefore")
+        }
+        AnalyticsService.shared.log(AnalyticsEventName.appOpen, parameters: [
+            AnalyticsParamKey.scholarCount: scholars.count,
+            AnalyticsParamKey.platform: "ios"
+        ])
+        AnalyticsService.shared.updateAllUserProperties(
+            scholarCount: scholars.count,
+            language: LocalizationManager.shared.currentLanguage.rawValue,
+            theme: SettingsManager.shared.theme.rawValue,
+            icloudSyncEnabled: UserDefaults.standard.bool(forKey: "iCloudSyncEnabled"),
+            autoUpdateEnabled: AutoUpdateManager.shared.isAutoUpdateEnabled()
+        )
+
         // 设置通知中心代理（确保前台也能显示通知）
         // 创建一个简单的代理类来处理前台通知显示
         UNUserNotificationCenter.current().delegate = AppNotificationDelegate.shared
@@ -191,6 +220,8 @@ struct CiteTrackApp: App {
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
+                AnalyticsService.shared.log(AnalyticsEventName.appForeground)
+                AnalyticsService.shared.processWidgetEvents()
                 // 应用激活时尝试安排下一次刷新
                 CiteTrackApp.scheduleAppRefresh()
                 // 前台激活时，立即同步全局 LastRefreshTime
@@ -199,6 +230,8 @@ struct CiteTrackApp: App {
                 let old = DataManager.shared.lastRefreshTime
                 DataManager.shared.lastRefreshTime = t
                 print("🧪 [CiteTrackApp] \(String(format: "debug_sync_last_refresh_time".localized, old?.description ?? "nil", t?.description ?? "nil"))")
+            } else if newPhase == .background {
+                AnalyticsService.shared.log(AnalyticsEventName.appBackground)
             }
         }
     }
@@ -227,6 +260,11 @@ struct CiteTrackApp: App {
         
         print("🔗 [DeepLink] Host: \(host ?? "nil"), Path: \(pathComponents)")
         
+        AnalyticsService.shared.log(AnalyticsEventName.deepLinkOpened, parameters: [
+            AnalyticsParamKey.host: host ?? "unknown",
+            AnalyticsParamKey.source: "deep_link"
+        ])
+
         switch host {
         case "add-scholar":
             // 切换到添加学者页面
@@ -419,6 +457,7 @@ extension CiteTrackApp {
     }
 
     static func handleAppRefresh(task: BGAppRefreshTask) {
+        AnalyticsService.shared.log(AnalyticsEventName.bgRefreshTriggered)
         // 安排下一次
         scheduleAppRefresh()
 
@@ -432,6 +471,10 @@ extension CiteTrackApp {
         let scholars = DataManager.shared.scholars
         if scholars.isEmpty {
             WidgetCenter.shared.reloadAllTimelines()
+            AnalyticsService.shared.log(AnalyticsEventName.bgRefreshCompleted, parameters: [
+                AnalyticsParamKey.success: true,
+                AnalyticsParamKey.scholarCount: 0
+            ])
             task.setTaskCompleted(success: true)
             return
         }
@@ -669,6 +712,7 @@ struct MainView: View {
             } else {
                 TabView(selection: $selectedTab) {
             DashboardView()
+                .analyticsScreen(AnalyticsScreen.dashboard)
                 .tabItem {
                     Image(systemName: "chart.bar.fill")
                     Text(localizationManager.localized("dashboard"))
@@ -682,6 +726,7 @@ struct MainView: View {
                 }
             
             NewScholarView()
+                .analyticsScreen(AnalyticsScreen.scholars)
                 .tabItem {
                     Image(systemName: "person.2.fill")
                     Text(localizationManager.localized("scholars"))
@@ -720,20 +765,27 @@ struct MainView: View {
             
             // Who Cite Me Tab
             WhoCiteMeView()
+                .analyticsScreen(AnalyticsScreen.whoCiteMe)
                 .tabItem {
                     Image(systemName: "quote.bubble")
                     Text(localizationManager.localized("who_cite_me"))
                 }
                 .badge(badgeCountManager.count)
                 .tag(3)
-            
+
             SettingsView()
+                .analyticsScreen(AnalyticsScreen.settings)
                 .tabItem {
                     Image(systemName: "gear")
                     Text(localizationManager.localized("settings"))
                 }
                 .tag(4)
         }
+                .onChange(of: selectedTab) { _, newTab in
+                    AnalyticsService.shared.log(AnalyticsEventName.tabSelected, parameters: [
+                        AnalyticsParamKey.tabName: AnalyticsTabName.from(index: newTab)
+                    ])
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .deepLinkAddScholar)) { _ in
                     selectedTab = 1 // 切换到学者管理页面
                 }
@@ -865,6 +917,11 @@ struct DashboardView: View {
                                 }
                             }
                             .pickerStyle(SegmentedPickerStyle())
+                            .onChange(of: sortOption) { _, newSort in
+                                AnalyticsService.shared.log(AnalyticsEventName.dashboardSortChanged, parameters: [
+                                    AnalyticsParamKey.sortType: newSort.rawValue
+                                ])
+                            }
                         }
                     }
                     
@@ -996,6 +1053,9 @@ struct NewScholarView: View {
         let todayGrowth = earliestTodayCount != nil ? (currentCitations - earliestTodayCount!) : 0
 
         if delta > 0 {
+            AnalyticsService.shared.log(AnalyticsEventName.citationGrowthCelebrated, parameters: [
+                AnalyticsParamKey.delta: delta
+            ])
             // 有本次增长：标题🎉 恭喜！ 描述：该学者引用量增长了 +%d，礼花：显示
             lastConfettiReason = "single_update delta=\(delta)"
             // 使用安全的加法，防止溢出（虽然不太可能，但为了安全）
@@ -1134,11 +1194,25 @@ struct NewScholarView: View {
             }
             .navigationTitle(localizationManager.localized("scholar_management"))
             .toolbar { toolbarContent }
-            .refreshable { CT_RecordManualRefresh(); await refreshAllScholarsAsync() }
+            .refreshable {
+                AnalyticsService.shared.log(AnalyticsEventName.citationRefreshManual, parameters: [
+                    AnalyticsParamKey.source: "pull_to_refresh",
+                    AnalyticsParamKey.scholarCount: dataManager.scholars.count
+                ])
+                CT_RecordManualRefresh()
+                await refreshAllScholarsAsync()
+            }
             .sheet(item: $activeSheet) { sheetType in
                 switch sheetType {
                 case .addScholar:
                     AddScholarView { newScholar in
+                        AnalyticsService.shared.log(AnalyticsEventName.scholarAddSuccess, parameters: [
+                            AnalyticsParamKey.citationCount: newScholar.citations ?? 0
+                        ])
+                        AnalyticsService.shared.setUserProperty(
+                            String(dataManager.scholars.count + 1),
+                            forName: AnalyticsUserProperty.scholarCount
+                        )
                         // 若尚未确认本人学者，则自动将首次手动添加的学者标记为 It's me（不依赖当前列表为空）
                         if confirmedMyScholarId == nil || confirmedMyScholarId?.isEmpty == true {
                             confirmedMyScholarId = newScholar.id
@@ -1156,10 +1230,12 @@ struct NewScholarView: View {
                 case .chart(let scholar):
                     ScholarChartDetailView(scholar: scholar)
                         .onAppear {
+                            AnalyticsService.shared.log(AnalyticsEventName.dashboardScholarChartOpened)
                             print("🔍 [Sheet Debug] ScholarChartDetailView appeared for: \(scholar.displayName)")
                         }
                 case .edit(let scholar):
                     EditScholarView(scholar: scholar) { updatedScholar in
+                        AnalyticsService.shared.log(AnalyticsEventName.scholarEditSaved)
                         dataManager.updateScholar(updatedScholar)
                     }
                 }
@@ -1568,10 +1644,22 @@ struct NewScholarView: View {
 
     private func deleteScholar(_ scholar: Scholar) {
         dataManager.removeScholar(id: scholar.id)
+        AnalyticsService.shared.log(AnalyticsEventName.scholarDelete, parameters: [
+            AnalyticsParamKey.scholarCountAfter: dataManager.scholars.count
+        ])
+        AnalyticsService.shared.setUserProperty(
+            String(dataManager.scholars.count),
+            forName: AnalyticsUserProperty.scholarCount
+        )
     }
 
     private func deleteAllScholars() {
+        let count = dataManager.scholars.count
+        AnalyticsService.shared.log(AnalyticsEventName.scholarDeleteAll, parameters: [
+            AnalyticsParamKey.scholarCount: count
+        ])
         dataManager.removeAllScholars()
+        AnalyticsService.shared.setUserProperty("0", forName: AnalyticsUserProperty.scholarCount)
     }
     
     private func editScholar(_ scholar: Scholar) {
@@ -1954,14 +2042,15 @@ struct SettingsView: View {
     }
     
     private func clearAllCache() {
+        AnalyticsService.shared.log(AnalyticsEventName.settingsCacheCleared)
         print("🗑️ [Settings] Clearing all cache...")
-        
+
         // 清理 UnifiedCacheManager 的缓存
         UnifiedCacheManager.shared.clearAllCache()
-        
+
         // 清理 CitationCacheService 的缓存
         CitationCacheService.shared.clearAllCache()
-        
+
         print("✅ [Settings] All cache cleared successfully")
         
         // 更新缓存大小显示
@@ -1979,12 +2068,16 @@ struct SettingsView: View {
     }
     
     private func importFromiCloud() {
+        AnalyticsService.shared.log(AnalyticsEventName.settingsDataImportStarted)
         print("🚀 [iCloud Debug] Import with file picker; default folder = iCloud app folder")
         importPickerInitialDirectory = iCloudManager.preferredExportDirectory()
         showingImportPicker = true
     }
 
     private func exportToiCloud() {
+        AnalyticsService.shared.log(AnalyticsEventName.settingsDataExportStarted, parameters: [
+            AnalyticsParamKey.format: "json"
+        ])
         print("🚀 [iCloud Debug] Export with folder picker; default = iCloud app folder, data only")
         do {
             // 1) 只构建数据文件（使用统一命名规则）
@@ -2278,6 +2371,7 @@ struct AddScholarView: View {
             }
             .navigationTitle(localizationManager.localized("add_scholar"))
             .navigationBarTitleDisplayMode(.inline)
+            .analyticsScreen(AnalyticsScreen.addScholar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(localizationManager.localized("cancel")) {
@@ -2287,6 +2381,7 @@ struct AddScholarView: View {
             }
             .sheet(isPresented: $activeScannerPresented) {
                 VisionTextScannerView { token in
+                    AnalyticsService.shared.log(AnalyticsEventName.scholarCameraScanSuccess)
                     // 尝试从识别文本中提取学者ID
                     if let extracted = GoogleScholarService.shared.extractScholarId(from: token) {
                         scholarId = extracted
@@ -2295,7 +2390,11 @@ struct AddScholarView: View {
                     }
                     activeScannerPresented = false
                 } onCancel: {
+                    AnalyticsService.shared.log(AnalyticsEventName.scholarCameraScanCancelled)
                     activeScannerPresented = false
+                }
+                .onAppear {
+                    AnalyticsService.shared.log(AnalyticsEventName.scholarCameraScanStarted)
                 }
             }
         }
@@ -2305,16 +2404,24 @@ struct AddScholarView: View {
 
     private func addScholar() {
         guard !scholarId.isEmpty else { return }
-        
+
+        let inputType = scholarId.contains("scholar.google") ? "url" : "id"
+        AnalyticsService.shared.log(AnalyticsEventName.scholarAddSubmitted, parameters: [
+            AnalyticsParamKey.inputType: inputType
+        ])
+
         isLoading = true
         errorMessage = ""
-        
+
         // 尝试从输入中提取学者ID（支持URL和纯ID）
         let extractedId = GoogleScholarService.shared.extractScholarId(from: scholarId)
-        
+
         guard let finalScholarId = extractedId, !finalScholarId.isEmpty else {
             isLoading = false
             errorMessage = localizationManager.localized("invalid_scholar_id_or_url")
+            AnalyticsService.shared.log(AnalyticsEventName.scholarAddError, parameters: [
+                AnalyticsParamKey.errorType: "invalid_id"
+            ])
             return
         }
         
@@ -2339,6 +2446,9 @@ struct AddScholarView: View {
                     self.dismiss()
                 } else {
                     self.errorMessage = "无法获取学者信息"
+                    AnalyticsService.shared.log(AnalyticsEventName.scholarAddError, parameters: [
+                        AnalyticsParamKey.errorType: "fetch_failed"
+                    ])
                 }
             }
         }
@@ -2407,13 +2517,14 @@ struct EditScholarView: View {
             }
             .navigationTitle(localizationManager.localized("edit_scholar"))
             .navigationBarTitleDisplayMode(.inline)
+            .analyticsScreen(AnalyticsScreen.editScholar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(localizationManager.localized("cancel")) {
                         dismiss()
                     }
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(localizationManager.localized("save")) {
                         saveScholar()
@@ -2423,7 +2534,7 @@ struct EditScholarView: View {
             }
         }
     }
-    
+
     private func saveScholar() {
         var updatedScholar = Scholar(id: scholar.id, name: scholarName.trimmingCharacters(in: .whitespacesAndNewlines))
         updatedScholar.citations = scholar.citations
