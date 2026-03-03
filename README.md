@@ -1,212 +1,402 @@
 <div align="center">
-  <img src="macOS/assets/logo.png" alt="CiteTrack Logo" width="128" height="128">
-  
+  <img src="macOS/assets/logo.png" alt="CiteTrack Logo" width="150" height="150">
+
   # CiteTrack
-  
-  **A professional multilingual macOS app for monitoring and visualizing Google Scholar citations**
-  
-  [![Platform](https://img.shields.io/badge/platform-macOS-blue)](https://www.apple.com/macos/)
-  [![Swift](https://img.shields.io/badge/language-Swift-orange)](https://swift.org/)
-  [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-  [![Release](https://img.shields.io/github/v/release/tao-shen/CiteTrack)](https://github.com/tao-shen/CiteTrack/releases)
+
+  ### Track Your Research Impact Across Devices
+
+  **A cross-platform iOS & macOS application for monitoring, visualizing, and analyzing Google Scholar citations in real time**
+
+  ---
+
+  [![iOS](https://img.shields.io/badge/iOS-17.6+-000000?style=for-the-badge&logo=ios&logoColor=white)](https://apps.apple.com/app/citetrack/id6752281652)
+  [![macOS](https://img.shields.io/badge/macOS-10.15+-000000?style=for-the-badge&logo=apple&logoColor=white)](https://apps.apple.com/app/citetrack/id6752281652)
+  [![Swift](https://img.shields.io/badge/Swift-5.9+-F05138?style=for-the-badge&logo=swift&logoColor=white)](https://swift.org/)
+  [![SwiftUI](https://img.shields.io/badge/SwiftUI-blue?style=for-the-badge&logo=swift&logoColor=white)](https://developer.apple.com/xcode/swiftui/)
+
+  <br>
+
+  [![App Store](https://img.shields.io/badge/App_Store-Download-0D96F6?style=for-the-badge&logo=app-store&logoColor=white)](https://apps.apple.com/app/citetrack/id6752281652)
+  [![GitHub Release](https://img.shields.io/github/v/release/tao-shen/CiteTrack?style=for-the-badge&logo=github&label=Release)](https://github.com/tao-shen/CiteTrack/releases/latest)
+
+  <br>
+
+  [![License](https://img.shields.io/github/license/tao-shen/CiteTrack?style=flat-square&color=green)](LICENSE)
+  [![Stars](https://img.shields.io/github/stars/tao-shen/CiteTrack?style=flat-square&logo=github)](https://github.com/tao-shen/CiteTrack/stargazers)
+  [![Forks](https://img.shields.io/github/forks/tao-shen/CiteTrack?style=flat-square&logo=github)](https://github.com/tao-shen/CiteTrack/network/members)
+  [![Issues](https://img.shields.io/github/issues/tao-shen/CiteTrack?style=flat-square&logo=github)](https://github.com/tao-shen/CiteTrack/issues)
+  [![Last Commit](https://img.shields.io/github/last-commit/tao-shen/CiteTrack?style=flat-square&logo=github)](https://github.com/tao-shen/CiteTrack/commits/main)
+  [![Code Size](https://img.shields.io/github/languages/code-size/tao-shen/CiteTrack?style=flat-square&logo=github)](https://github.com/tao-shen/CiteTrack)
+  [![Repo Size](https://img.shields.io/github/repo-size/tao-shen/CiteTrack?style=flat-square&logo=github)](https://github.com/tao-shen/CiteTrack)
+  [![Top Language](https://img.shields.io/github/languages/top/tao-shen/CiteTrack?style=flat-square&logo=swift&color=F05138)](https://github.com/tao-shen/CiteTrack)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square&logo=github)](https://github.com/tao-shen/CiteTrack/pulls)
+  [![Maintained](https://img.shields.io/badge/Maintained-yes-brightgreen?style=flat-square)](https://github.com/tao-shen/CiteTrack/graphs/commit-activity)
+
+  <br>
+
+  [![Google Scholar](https://img.shields.io/badge/Google_Scholar-4285F4?style=flat-square&logo=google-scholar&logoColor=white)](https://scholar.google.com/)
+  [![Core Data](https://img.shields.io/badge/Core_Data-Persistence-8E44AD?style=flat-square&logo=apple)](https://developer.apple.com/documentation/coredata)
+  [![iCloud](https://img.shields.io/badge/iCloud-Sync-3693F3?style=flat-square&logo=icloud&logoColor=white)](https://developer.apple.com/icloud/)
+  [![WidgetKit](https://img.shields.io/badge/WidgetKit-Widgets-FF9500?style=flat-square&logo=apple)](https://developer.apple.com/widgets/)
+  [![Firebase](https://img.shields.io/badge/Firebase-Analytics-FFCA28?style=flat-square&logo=firebase&logoColor=black)](https://firebase.google.com/)
+  [![Sparkle](https://img.shields.io/badge/Sparkle-Auto_Update-purple?style=flat-square)](https://sparkle-project.org/)
+
+  <br>
+
+  [![English](https://img.shields.io/badge/lang-English-blue?style=flat-square)](#-language-support)
+  [![Chinese](https://img.shields.io/badge/lang-中文-red?style=flat-square)](#-language-support)
+  [![Japanese](https://img.shields.io/badge/lang-日本語-white?style=flat-square)](#-language-support)
+  [![Korean](https://img.shields.io/badge/lang-한국어-blue?style=flat-square)](#-language-support)
+  [![Spanish](https://img.shields.io/badge/lang-Español-yellow?style=flat-square)](#-language-support)
+  [![French](https://img.shields.io/badge/lang-Français-blue?style=flat-square)](#-language-support)
+  [![German](https://img.shields.io/badge/lang-Deutsch-black?style=flat-square)](#-language-support)
+
 </div>
 
 ---
 
-## ✨ Features
-
-### 📊 Professional Chart System
-- **Interactive Visualizations**: Line charts, bar charts, and area charts with real-time data
-- **Historical Tracking**: Complete citation history with Core Data persistence
-- **Time Range Filtering**: View data by week, month, quarter, year, or custom ranges
-- **Advanced Analytics**: Trend analysis, growth rates, and statistical insights
-- **Data Export**: Export charts and data to CSV/JSON formats
-
-### 🔄 Smart Monitoring
-- **Real-time Updates**: Automatically fetches Google Scholar citation data
-- **Background Collection**: Intelligent data collection with configurable intervals
-- **Change Notifications**: Smart alerts when citation counts change
-- **Multiple Scholars**: Track unlimited scholars with individual dashboards
-
-### 🌍 Multilingual Interface
-- **7 Languages**: English, Chinese, Japanese, Korean, Spanish, French, German
-- **Auto-detection**: Automatically detects system language
-- **Live Switching**: Change languages without restarting
-
-### 💾 Data Management
-- **Core Data Integration**: Robust data persistence and migration
-- **iCloud Sync**: Optional cloud synchronization across devices
-- **Data Repair Tools**: Built-in tools for data validation and repair
-- **History Management**: Complete citation history with timestamps
-
-### 🎨 Modern UI
-- **Native macOS Design**: Follows Apple's Human Interface Guidelines
-- **Dark Mode Support**: Seamless adaptation to system themes
-- **Responsive Layout**: Optimized for different window sizes
-- **Menu Bar Integration**: Lightweight menu bar presence
-
-## 🌍 Language Support
-
-CiteTrack automatically detects your system language and supports:
-
-- 🇺🇸 **English** (Full support)
-- 🇨🇳 **简体中文** (Full support)
-- 🇯🇵 **日本語** (Full support)
-- 🇰🇷 **한국어** (Full support)
-- 🇪🇸 **Español** (Full support)
-- 🇫🇷 **Français** (Full support)
-- 🇩🇪 **Deutsch** (Full support)
-
-## 📥 Download
-
-Download the latest version from the [Releases page](https://github.com/tao-shen/CiteTrack/releases/latest).
-
-**Recommended:** Download `CiteTrack-Charts-v2.0.0.dmg` for the complete charts-enabled version.
-
-## 🚀 Quick Start
-
-1. Download the DMG file from releases
-2. Open the DMG and drag CiteTrack.app to Applications
-3. Launch CiteTrack and add your first scholar
-4. Click the menu bar icon to view charts and statistics
-
-## 📊 Chart System
-
-### Visualization Options
-- **Line Charts**: Perfect for trend analysis over time
-- **Bar Charts**: Compare citation counts across different periods
-- **Area Charts**: Visualize cumulative growth patterns
-
-### Interactive Features
-- **Hover Tooltips**: Detailed information on data points
-- **Zoom & Pan**: Navigate through large datasets
-- **Time Range Selector**: Custom date range selection with Apple-style pickers
-- **Theme Options**: Multiple color schemes and themes
-
-### Analytics Dashboard
-- **Statistics Cards**: Key metrics at a glance
-- **Trend Analysis**: Growth rates and change indicators
-- **Insights Panel**: AI-powered insights about citation patterns
-- **Export Tools**: Save charts as images or export data
-
-### 📸 Example Screenshot
+## Screenshots
 
 <div align="center">
-  <img src="macOS/assets/hinton_citations_example.png" alt="CiteTrack Hinton Citations Example" width="800">
+  <img src="macOS/assets/hinton_citations_example.png" alt="CiteTrack macOS - Citation Charts" width="800">
   <br>
-  <em>Tracking Geoffrey Hinton's Google Scholar citations with interactive charts and analytics</em>
+  <em>macOS: Tracking Geoffrey Hinton's Google Scholar citations with interactive charts and analytics</em>
 </div>
 
-## 🛠️ Development
+---
 
-### Requirements
-- macOS 10.15+
-- Xcode Command Line Tools
-- Swift 5.0+
+## Highlights
 
-### Build from Source
+| | Feature | Description |
+|---|---|---|
+| **Cross-Platform** | iOS + macOS | One codebase, shared logic, native UI on each platform |
+| **Real-Time Tracking** | Auto-refresh | Monitor citation counts with configurable update intervals |
+| **Interactive Charts** | Line / Bar / Area / Heatmap | Professional data visualization with zoom, pan, and tooltips |
+| **Who Cited Me** | Reverse lookup | Discover which papers cite your publications and explore citing authors |
+| **Home Screen Widgets** | WidgetKit | Glanceable citation stats right on your iOS home screen |
+| **Menu Bar App** | macOS native | Lightweight menu bar presence with quick access to stats |
+| **iCloud Sync** | CloudKit | Seamlessly sync scholar data across all your Apple devices |
+| **7 Languages** | i18n | English, Chinese, Japanese, Korean, Spanish, French, German |
+| **Smart Alerts** | Notifications | Get notified instantly when your citation counts change |
+| **Data Export** | CSV / JSON | Export citation history for use in other tools |
+| **Dark Mode** | System adaptive | Beautiful in both light and dark themes |
+| **Open Source** | MIT License | Fully transparent, community-driven development |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                          CiteTrack                                  │
+├───────────────────────┬─────────────────────────────────────────────┤
+│                       │                                             │
+│   ┌───────────────┐   │   ┌───────────────────────────────────┐     │
+│   │   iOS App      │   │   │          macOS App                │     │
+│   │  (SwiftUI)     │   │   │         (AppKit)                  │     │
+│   ├───────────────┤   │   ├───────────────────────────────────┤     │
+│   │ Dashboard      │   │   │ Menu Bar Controller               │     │
+│   │ Scholar List   │   │   │ Settings Window                   │     │
+│   │ Charts View    │   │   │ Charts Window (Modern/Classic)    │     │
+│   │ Who Cited Me   │   │   │ Data Repair Tools                 │     │
+│   │ Settings       │   │   │ Notification Popups               │     │
+│   │ Widget Ext.    │   │   │ Dashboard Components              │     │
+│   └───────┬───────┘   │   └──────────┬────────────────────────┘     │
+│           │           │              │                               │
+├───────────┴───────────┴──────────────┴───────────────────────────────┤
+│                                                                      │
+│                    Shared Framework Layer                             │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │                                                                │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐ │  │
+│  │  │   Services    │  │   Managers    │  │      Models          │ │  │
+│  │  ├──────────────┤  ├──────────────┤  ├──────────────────────┤ │  │
+│  │  │ CitationFetch│  │ Citation     │  │ Scholar              │ │  │
+│  │  │ GoogleScholar│  │ CloudKitSync │  │ CitationHistory      │ │  │
+│  │  │ ScholarData  │  │ AppConfig    │  │ CitingPaper          │ │  │
+│  │  │ Notification │  │ UserDefaults │  │ CitingAuthor         │ │  │
+│  │  │ CloudKitSync │  │ iCloudSync   │  │ CitationStatistics   │ │  │
+│  │  │ CitationCache│  │              │  │ CitationFilter       │ │  │
+│  │  │ DataSync     │  │              │  │ WidgetModels         │ │  │
+│  │  │ Export       │  │              │  │ ExportFormat         │ │  │
+│  │  │ Widget Data  │  │              │  │                      │ │  │
+│  │  │ Analytics    │  │              │  │                      │ │  │
+│  │  │ Backup       │  │              │  │                      │ │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────────────┘ │  │
+│  │                                                                │  │
+│  │  ┌──────────────────────────────────────────────────────────┐  │  │
+│  │  │                    Core Data Stack                       │  │  │
+│  │  │  CitationTrackingModel.xcdatamodeld                      │  │  │
+│  │  │  ┌─────────┐  ┌───────────────┐  ┌──────────────────┐   │  │  │
+│  │  │  │ Scholar  │──│ CitationEntry │──│ CitationHistory  │   │  │  │
+│  │  │  └─────────┘  └───────────────┘  └──────────────────┘   │  │  │
+│  │  └──────────────────────────────────────────────────────────┘  │  │
+│  │                                                                │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                       External Services                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐   │
+│  │Google Scholar │  │   iCloud /   │  │  Firebase Analytics      │   │
+│  │   (scraping)  │  │  CloudKit    │  │  (event tracking)        │   │
+│  └──────────────┘  └──────────────┘  └──────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Installation
+
+### Option 1: App Store (Recommended)
+
+<div align="center">
+
+  [![Download on the App Store](https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg)](https://apps.apple.com/app/citetrack/id6752281652)
+
+  Available for both **iPhone / iPad** and **Mac**.
+
+</div>
+
+### Option 2: GitHub Release (macOS DMG)
+
+1. Go to the [Releases page](https://github.com/tao-shen/CiteTrack/releases/latest)
+2. Download `CiteTrack.dmg`
+3. Open the DMG and drag **CiteTrack.app** into your **Applications** folder
+4. Launch CiteTrack from Applications
+
+### Option 3: Build from Source
 
 ```bash
 # Clone the repository
 git clone https://github.com/tao-shen/CiteTrack.git
 cd CiteTrack
 
-# Build the charts-enabled application
-./scripts/build_charts.sh
+# Build macOS app
+cd macOS
+xcodebuild -project CiteTrack_macOS.xcodeproj \
+           -scheme CiteTrack \
+           -configuration Release \
+           build
 
-# Create DMG installer
-./scripts/create_charts_dmg.sh
+# Build iOS app
+cd ../iOS
+xcodebuild -project CiteTrack_iOS.xcodeproj \
+           -scheme CiteTrack \
+           -configuration Release \
+           -destination 'generic/platform=iOS' \
+           build
 ```
 
-### Project Structure
-
-```
-CiteTrack/
-├── README.md                           # Project documentation
-├── LICENSE                             # MIT license
-├── .gitignore                          # Git ignore rules
-├── Sources/                            # Swift source code
-│   ├── main.swift                      # Main application entry
-│   ├── Localization.swift              # Multilingual support
-│   ├── SettingsWindow.swift            # Settings interface
-│   ├── ChartsViewController.swift      # Chart visualization
-│   ├── ChartView.swift                 # Custom chart rendering
-│   ├── ChartDataService.swift          # Chart data processing
-│   ├── CoreDataManager.swift           # Data persistence
-│   ├── CitationHistoryManager.swift    # History management
-│   ├── NotificationManager.swift       # Smart notifications
-│   ├── iCloudSyncManager.swift         # Cloud synchronization
-│   └── DataRepairViewController.swift  # Data management tools
-├── scripts/                            # Build and deployment scripts
-│   ├── build_charts.sh                 # Charts build script
-│   ├── create_charts_dmg.sh            # DMG creation script
-│   └── test_app.sh                     # Testing utilities
-├── docs/                               # Project documentation
-│   ├── CHART_STABILITY_IMPROVEMENTS.md # Chart system docs
-│   └── ICLOUD_DEBUG_GUIDE.md          # iCloud integration guide
-├── assets/                             # Project assets
-│   ├── app_icon.icns                   # Application icon
-│   └── logo.png                        # Project logo
-├── Frameworks/                         # External dependencies
-│   └── Sparkle.framework               # Auto-update framework
-├── CiteTrack.entitlements              # App capabilities
-└── Sources/CitationTrackingModel.xcdatamodeld/  # Core Data model
-```
-
-## 📊 Technical Specifications
-
-- **Application Size:** ~4.9MB (with charts)
-- **Installer Size:** ~2.1MB (DMG)
-- **System Requirements:** macOS 10.15+
-- **Architecture:** Universal (Intel & Apple Silicon)
-- **Language:** Swift
-- **Frameworks:** AppKit, Core Data, UserNotifications
-- **Localization:** 7 languages supported
-- **Data Storage:** Core Data with optional iCloud sync
-
-## 🔒 Privacy & Security
-
-CiteTrack is open source and privacy-friendly:
-- ✅ **Open Source:** Full source code available
-- ✅ **No Data Collection:** No personal information collected
-- ✅ **Local Storage:** All data stored on your device
-- ✅ **Optional Cloud Sync:** iCloud sync is opt-in only
-- ✅ **Minimal Permissions:** Only accesses public Google Scholar data
-- ✅ **Code Signed:** Uses ad-hoc signing for integrity
-
-## 🆕 What's New in v2.0.0
-
-### Major Features
-- 📊 **Complete Chart System**: Professional data visualization with interactive charts
-- 📱 **Modern UI**: Redesigned interface with native macOS styling
-- 💾 **Core Data Integration**: Robust data persistence with migration support
-- ☁️ **iCloud Sync**: Optional cloud synchronization across devices
-- 🔔 **Smart Notifications**: Intelligent alerts for citation changes
-- 🛠️ **Data Management**: Advanced tools for data repair and maintenance
-
-### Technical Improvements
-- Memory-safe async operations with proper cleanup
-- Enhanced error handling and user feedback
-- Background data collection service
-- Fixed calendar display issues in date pickers
-- Improved performance and stability
-
-## 📝 Contributing
-
-Contributions are welcome! Feel free to:
-- Report bugs via [GitHub Issues](https://github.com/tao-shen/CiteTrack/issues)
-- Suggest features through issues
-- Submit pull requests
-- Help with translations for additional languages
-
-## 📄 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+**Requirements:**
+- macOS 14.0+ (for building)
+- Xcode 15.0+
+- Swift 5.9+
+- Apple Developer account (for iOS device deployment)
 
 ---
 
+## Features in Detail
+
+### Citation Tracking & Monitoring
+
+Add scholars by their Google Scholar profile URL or ID. CiteTrack periodically fetches the latest citation data and stores it locally with Core Data. Configure update intervals from 1 hour to daily.
+
+### Interactive Charts
+
+| Platform | Chart Types | Features |
+|----------|------------|----------|
+| **iOS** | Line, Bar, Heatmap | Time range picker, data point selection, SwiftUI native |
+| **macOS** | Line, Bar, Area | Zoom/pan, hover tooltips, custom themes, multiple chart styles |
+
+Both platforms support filtering by time range: week, month, quarter, year, or custom date ranges.
+
+### Who Cited Me
+
+Discover which papers cite your publications. Browse citing papers with details including:
+- Paper title, authors, and publication year
+- Abstract preview
+- Direct links to the paper and citing authors' profiles
+- Filter by year, keyword, or author
+- Export results to CSV or JSON
+
+### Home Screen Widgets (iOS)
+
+WidgetKit-powered widgets show citation stats at a glance:
+- Total citation count
+- Recent changes with delta indicators
+- Quick access to the full app via deep links
+
+### Menu Bar App (macOS)
+
+Runs unobtrusively in the menu bar with:
+- Quick citation count overview
+- One-click refresh
+- Notification popups for citation changes
+- Access to the full charts window
+
+### iCloud Sync
+
+Enable iCloud to sync your scholar list and citation data across all your Apple devices. Works with both iOS and macOS apps via CloudKit.
+
+### Smart Notifications
+
+Get notified when citation counts change:
+- System notifications on both platforms
+- Popup windows on macOS with quick chart access
+- Badge counts on iOS
+
+---
+
+## Language Support
+
+CiteTrack automatically detects your system language. Supported languages:
+
+| Language | Status |
+|----------|--------|
+| English | Full support |
+| Chinese (Simplified) | Full support |
+| Japanese | Full support |
+| Korean | Full support |
+| Spanish | Full support |
+| French | Full support |
+| German | Full support |
+
+---
+
+## Project Structure
+
+```
+CiteTrack/
+├── iOS/                                # iOS application
+│   ├── CiteTrack/                      # Main iOS app target
+│   │   ├── CiteTrackApp.swift          # App entry point (SwiftUI)
+│   │   └── Views/                      # SwiftUI views
+│   │       ├── ChartViews.swift        # Citation chart visualizations
+│   │       ├── WhoCiteMeView.swift     # Citing papers browser
+│   │       ├── SelectionViews.swift    # Theme, language, settings pickers
+│   │       ├── CitationFilterView.swift
+│   │       ├── CitationStatisticsView.swift
+│   │       └── ...
+│   ├── CiteTrackWidgetExtension/       # Home screen widget
+│   └── CiteTrack_iOS.xcodeproj
+│
+├── macOS/                              # macOS application
+│   ├── Sources/                        # AppKit source files
+│   │   ├── main.swift                  # App entry point
+│   │   ├── MainAppDelegate.swift       # Menu bar controller
+│   │   ├── SettingsWindow.swift        # Preferences window
+│   │   ├── ModernChartsViewController.swift
+│   │   ├── ChartView.swift             # Custom chart rendering
+│   │   ├── Localization.swift          # i18n support
+│   │   ├── CoreDataManager.swift       # macOS Core Data
+│   │   ├── NotificationManager.swift   # Alert system
+│   │   └── ...                         # 30 source files
+│   ├── assets/                         # App icon, logo, screenshots
+│   ├── Frameworks/                     # Sparkle.framework (auto-update)
+│   └── CiteTrack_macOS.xcodeproj
+│
+├── Shared/                             # Cross-platform shared code
+│   ├── Services/                       # Business logic services
+│   │   ├── CitationFetchService.swift  # Google Scholar data fetching
+│   │   ├── AnalyticsService.swift      # Firebase Analytics wrapper
+│   │   ├── CloudKitSyncService.swift   # iCloud synchronization
+│   │   ├── ScholarDataService.swift    # Scholar CRUD operations
+│   │   ├── WidgetDataService.swift     # Widget data provider
+│   │   └── ...                         # 17 service files
+│   ├── Managers/                       # State & configuration managers
+│   │   ├── CitationManager.swift       # Citation change detection
+│   │   ├── AppConfigManager.swift      # App settings
+│   │   └── ...                         # 7 manager files
+│   ├── Models/                         # Data models
+│   │   ├── Scholar.swift               # Scholar entity
+│   │   ├── CitingPaper.swift           # Citing paper model
+│   │   ├── CitationHistory.swift       # Historical records
+│   │   └── ...                         # 8 model files
+│   ├── CoreData/                       # Core Data stack & migrations
+│   ├── Localization/                   # Localized strings (7 languages)
+│   └── Tests/                          # Shared unit tests
+│
+├── scripts/                            # Build & deployment scripts
+├── docs/                               # Technical documentation
+└── submit/                             # App Store submission assets
+```
+
+---
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| **iOS UI** | SwiftUI, WidgetKit |
+| **macOS UI** | AppKit, Custom Chart Engine |
+| **Data Persistence** | Core Data |
+| **Cloud Sync** | CloudKit / iCloud |
+| **Analytics** | Firebase Analytics |
+| **Auto-Update** | Sparkle Framework (macOS) |
+| **Networking** | URLSession |
+| **Data Parsing** | Google Scholar HTML scraping |
+| **Localization** | NSLocalizedString (7 languages) |
+| **Architecture** | MVVM + Service Layer |
+| **CI/CD** | Xcode Build, App Store Connect API |
+
+---
+
+## Roadmap
+
+- [ ] **Citation Source Tracking** — Monitor exactly how other papers cite your publications, with context snippets and citation categorization
+- [ ] Citation trend predictions with ML
+- [ ] Collaboration network visualization
+- [ ] PDF library integration
+- [ ] Additional language support
+
+> **Coming Soon:** Our top priority is building a citation source monitoring system that tracks *how* other papers reference your work — giving you deeper insight into your research impact beyond just numbers.
+
+---
+
+## Privacy & Security
+
+CiteTrack is designed with privacy as a core principle:
+
+- **Open Source** — Full source code available for audit
+- **Local-First** — All data stored on-device by default
+- **No Account Required** — Use the app without creating any account
+- **Optional iCloud** — Cloud sync is strictly opt-in
+- **Minimal Data Access** — Only fetches publicly available Google Scholar pages
+- **No Tracking** — No third-party advertising or user profiling
+
+---
+
+## Contributing
+
+Contributions are welcome! Here's how you can help:
+
+1. **Report Bugs** — Open an [issue](https://github.com/tao-shen/CiteTrack/issues) with steps to reproduce
+2. **Request Features** — Suggest improvements via issues
+3. **Submit PRs** — Fork the repo, make changes, and submit a pull request
+4. **Translations** — Help translate CiteTrack into more languages
+5. **Star the Repo** — If CiteTrack helps your research, consider giving it a star!
+
+---
+
+## License
+
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
+
+---
+
+## About
+
+**CiteTrack** is built and maintained by [Tao Shen](https://github.com/tao-shen), a researcher who wanted a better way to keep track of citation metrics without constantly checking Google Scholar manually.
+
+If you find CiteTrack useful for your academic work, feel free to share it with your colleagues or give the project a star on GitHub!
+
 <div align="center">
-  <strong>Made with ❤️ for the global academic community</strong>
   <br>
-  <em>Visualize your research impact with professional charts and analytics</em>
+
+  **[App Store](https://apps.apple.com/app/citetrack/id6752281652)** · **[GitHub Releases](https://github.com/tao-shen/CiteTrack/releases)** · **[Report Bug](https://github.com/tao-shen/CiteTrack/issues)** · **[Request Feature](https://github.com/tao-shen/CiteTrack/issues)**
+
+  <br>
+
+  <sub>Built for researchers, by a researcher.</sub>
+
 </div>
