@@ -29,7 +29,6 @@ Temporary Items
 .apdisk
 
 # Xcode
-# 忽略用户特定的Xcode文件，但保留项目文件
 *.xcodeproj/project.xcworkspace/xcuserdata/
 *.xcodeproj/xcuserdata/
 *.xcodeproj/project.xcworkspace/xcshareddata/
@@ -63,6 +62,13 @@ Carthage/Build/
 
 # Backup files
 bak/
+*.backup
+*.backup2
+*.bak
+*_backup.*
+backup_files/
+backup_old_files*/
+.signing_archive/
 
 # Temporary files
 *.tmp
@@ -72,29 +78,27 @@ bak/
 # CiteTrack Specific
 # ======================
 
-# 备份文件夹（不上传到Git）
-backup_files/
-
-# 构建产物
+# Build artifacts
+build2/
 *.app/
 *.dmg
 *.zip
+*.xcarchive
 dist/
-CiteTrack.app/
-CiteTrack*.dmg
 
-# 临时构建文件
+# Temporary build files
 dmg_temp/
 *_temp/
 build_temp/
+icon_test_temp/
 
-# 开发工具
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# 密钥和敏感信息
+# Keys and secrets
 *.p12
 *.key
 *.pem
@@ -102,12 +106,14 @@ private_keys/
 secrets/
 GoogleService-Info.plist
 AuthKey_*.p8
-# 注意: .signing_archive/ 文件夹包含签名信息，如果要开源需谨慎处理
 
-# 测试文件
+# App Store submission assets
+submit/
+
+# Test files
 test_output/
 *.test
 
-# 日志文件
+# Logs
 *.log
-logs/ 
+logs/
