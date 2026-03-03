@@ -1022,8 +1022,12 @@ struct QuickRefreshIntent: AppIntent {
     static var openAppWhenRun: Bool = false
     
     func perform() async throws -> some IntentResult {
-        // Relay widget event to main app via AppGroup
-        AnalyticsService.shared.relayWidgetEvent(AnalyticsEventName.widgetRefreshTriggered)
+        // Relay widget event to main app via AppGroup UserDefaults
+        if let defaults = UserDefaults(suiteName: appGroupIdentifier) {
+            var pending = defaults.array(forKey: "PendingAnalyticsEvents") as? [[String: Any]] ?? []
+            pending.append(["event": "widget_refresh_triggered", "timestamp": Date().timeIntervalSince1970])
+            defaults.set(pending, forKey: "PendingAnalyticsEvents")
+        }
         let intentStartTime = Date()
         let startTimestamp = intentStartTime.timeIntervalSince1970
         NSLog("🚨🚨🚨 QuickRefreshIntent 被触发！！！ 时间戳: \(startTimestamp)")
@@ -1293,7 +1297,12 @@ struct ToggleScholarIntent: AppIntent {
     static var openAppWhenRun: Bool = false
     
     func perform() async throws -> some IntentResult {
-        AnalyticsService.shared.relayWidgetEvent(AnalyticsEventName.widgetScholarSwitched)
+        // Relay widget event to main app via AppGroup UserDefaults
+        if let defaults = UserDefaults(suiteName: appGroupIdentifier) {
+            var pending = defaults.array(forKey: "PendingAnalyticsEvents") as? [[String: Any]] ?? []
+            pending.append(["event": "widget_scholar_switched", "timestamp": Date().timeIntervalSince1970])
+            defaults.set(pending, forKey: "PendingAnalyticsEvents")
+        }
         print("🎯 [Intent] ===== 新版本代码 - 用户触发学者切换 =====")
 
         let groupIdentifier = appGroupIdentifier

@@ -101,6 +101,7 @@ build_temp/
 private_keys/
 secrets/
 GoogleService-Info.plist
+AuthKey_*.p8
 # 注意: .signing_archive/ 文件夹包含签名信息，如果要开源需谨慎处理
 
 # 测试文件
