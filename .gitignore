@@ -102,10 +102,11 @@ icon_test_temp/
 *.p12
 *.key
 *.pem
+*.p8
 private_keys/
 secrets/
+.keys/
 GoogleService-Info.plist
-AuthKey_*.p8
 
 # App Store submission assets
 submit/

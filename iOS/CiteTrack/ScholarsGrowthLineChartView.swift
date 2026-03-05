@@ -444,23 +444,23 @@ struct LineView: View {
         self.title = title
         self.legend = legend
         self.style = style
-        self.valueSpecifier = valueSpecifier!
-        self.legendSpecifier = legendSpecifier!
+        self.valueSpecifier = valueSpecifier ?? "%.1f"
+        self.legendSpecifier = legendSpecifier ?? "%.2f"
         self.dates = dates
-        self.darkModeStyle = style.darkModeStyle != nil ? style.darkModeStyle! : Styles.lineViewDarkMode
+        self.darkModeStyle = style.darkModeStyle ?? Styles.lineViewDarkMode
     }
     
     public var body: some View {
         GeometryReader{ geometry in
             VStack(alignment: .leading, spacing: 8) {
                 Group{
-                    if (self.title != nil){
-                        Text(self.title!)
+                    if let title = self.title {
+                        Text(title)
                             .font(.headline)
                             .bold().foregroundColor(self.colorScheme == .dark ? self.darkModeStyle.textColor : self.style.textColor)
                     }
-                    if (self.legend != nil){
-                        Text(self.legend!)
+                    if let legend = self.legend {
+                        Text(legend)
                             .font(.caption)
                             .foregroundColor(self.colorScheme == .dark ? self.darkModeStyle.legendTextColor : self.style.legendTextColor)
                     }
@@ -539,33 +539,25 @@ struct LineView: View {
     func getClosestDataPoint(toPoint: CGPoint, width:CGFloat, height: CGFloat) -> CGPoint {
         let points = self.data.onlyPoints()
         guard points.count > 1 else { return .zero }
-        
-        // 使用安全的计算，防止溢出
+        guard width > 0, height > 0 else { return .zero }
+
         let safeCount = CGFloat(max(points.count - 1, 1))
         let stepWidth: CGFloat = width / safeCount
-        
-        // 使用安全的加法和类型转换，防止溢出
+        guard stepWidth.isFinite, stepWidth > 0 else { return .zero }
+
         let maxValue = points.max() ?? 0
         let minValue = points.min() ?? 0
-        // 使用安全的限制值，防止溢出（限制在安全范围内，相加时不会溢出）
-        // 直接使用 CGFloat 转换，避免 Int 溢出
-        let maxValueCGFloat = CGFloat(maxValue)
-        let minValueCGFloat = CGFloat(minValue)
-        let sum = maxValueCGFloat + minValueCGFloat
-        let safeSum = max(sum, 1.0) // 防止除零
-        let stepHeight: CGFloat = height / safeSum
-        
-        // 使用安全的计算，防止溢出
-        let safeX = max(min(toPoint.x, CGFloat.greatestFiniteMagnitude), -CGFloat.greatestFiniteMagnitude)
-        let calculatedIndex = (safeX - 15) / stepWidth
-        let clampedIndex = max(min(Int(floor(calculatedIndex)), Int.max - 1), 0)
-        
+        let range = CGFloat(max(maxValue - minValue, 1))
+        let stepHeight: CGFloat = height / range
+
+        let calculatedIndex = max(0, (toPoint.x - 15) / stepWidth)
+        let clampedIndex = min(Int(floor(calculatedIndex)), points.count - 1)
+
         if clampedIndex >= 0 && clampedIndex < points.count {
             self.currentDataNumber = points[clampedIndex]
-            let safeIndex = CGFloat(min(clampedIndex, Int.max - 1))
-            let safePointValue = points[clampedIndex]
-            let safePointValueCGFloat = CGFloat(safePointValue)
-            return CGPoint(x: safeIndex * stepWidth, y: safePointValueCGFloat * stepHeight)
+            let x = CGFloat(clampedIndex) * stepWidth
+            let y = CGFloat(points[clampedIndex] - minValue) * stepHeight
+            return CGPoint(x: x, y: y)
         }
         return .zero
     }
@@ -804,9 +796,9 @@ struct Line: View {
         var min: Double?
         var max: Double?
         let points = self.data.onlyPoints()
-        if minDataValue != nil && maxDataValue != nil {
-            min = minDataValue!
-            max = maxDataValue!
+        if let minVal = minDataValue, let maxVal = maxDataValue {
+            min = minVal
+            max = maxVal
         }else if let minPoint = points.min(), let maxPoint = points.max(), minPoint != maxPoint {
             min = minPoint
             max = maxPoint
@@ -925,25 +917,36 @@ struct MagnifierRect: View {
 // MARK: - Path 扩展
 extension Path {
     func trimmedPath(for percent: CGFloat) -> Path {
+        // Guard against NaN/infinite values that would crash trimmedPath
+        guard percent.isFinite else { return Path() }
+
         let boundsDistance: CGFloat = 0.001
         let completion: CGFloat = 1 - boundsDistance
-        
+
         let pct = percent > 1 ? 0 : (percent < 0 ? 1 : percent)
-        
+
         let start = pct > completion ? completion : pct - boundsDistance
         let end = pct > completion ? 1 : pct + boundsDistance
-        return trimmedPath(from: start, to: end)
+
+        // Clamp to valid range [0, 1]
+        let safeStart = max(0, min(1, start))
+        let safeEnd = max(safeStart, min(1, end))
+        return trimmedPath(from: safeStart, to: safeEnd)
     }
-    
+
     func point(for percent: CGFloat) -> CGPoint {
+        guard percent.isFinite else { return .zero }
         let path = trimmedPath(for: percent)
         return CGPoint(x: path.boundingRect.midX, y: path.boundingRect.midY)
     }
     
     func point(to maxX: CGFloat) -> CGPoint {
         let total = length
+        guard total > 0, total.isFinite else { return .zero }
         let sub = length(to: maxX)
+        guard sub.isFinite else { return .zero }
         let percent = sub / total
+        guard percent.isFinite else { return .zero }
         return point(for: percent)
     }
     
@@ -1024,7 +1027,12 @@ extension Path {
                 ret += point.curve(to: to, control1: control1, control2: control2)
                 point = to
             case .closeSubpath:
-                fatalError("Can't include closeSubpath")
+                // Safely handle closeSubpath instead of crashing
+                if let to = start {
+                    ret += point.line(to: to)
+                    point = to
+                }
+                start = nil
             }
         }
         return ret
@@ -1035,7 +1043,7 @@ extension Path {
         if (points.count < 2){
             return path
         }
-        let offset = globalOffset ?? points.min()!
+        guard let offset = globalOffset ?? points.min() else { return path }
         var p1 = CGPoint(x: 0, y: CGFloat(points[0]-offset)*step.y)
         path.move(to: p1)
         for pointIndex in 1..<points.count {
@@ -1053,7 +1061,7 @@ extension Path {
         if (points.count < 2){
             return path
         }
-        let offset = globalOffset ?? points.min()!
+        guard let offset = globalOffset ?? points.min() else { return path }
 
         path.move(to: .zero)
         var p1 = CGPoint(x: 0, y: CGFloat(points[0]-offset)*step.y)
@@ -1106,7 +1114,9 @@ extension Path {
 // MARK: - CGPoint 扩展
 extension CGPoint {
     func point(to: CGPoint, x: CGFloat) -> CGPoint {
-        let a = (to.y - self.y) / (to.x - self.x)
+        let dx = to.x - self.x
+        guard dx != 0 else { return CGPoint(x: x, y: self.y) }
+        let a = (to.y - self.y) / dx
         let y = self.y + (x - self.x) * a
         return CGPoint(x: x, y: y)
     }

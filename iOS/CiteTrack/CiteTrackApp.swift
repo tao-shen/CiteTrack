@@ -5,6 +5,9 @@ import SwiftEntryKit
 #if canImport(FirebaseCore)
 import FirebaseCore
 #endif
+#if canImport(FirebaseCrashlytics)
+import FirebaseCrashlytics
+#endif
 
 struct ScrollOffsetPreferenceKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
@@ -114,9 +117,14 @@ struct CiteTrackApp: App {
     init() {
         NSLog("🧪 [CiteTrackApp] init called - app is starting up")
 
-        // Firebase Analytics
+        // Firebase Analytics + Crashlytics
         #if canImport(FirebaseCore)
         FirebaseApp.configure()
+        #endif
+        #if canImport(FirebaseCrashlytics)
+        let crashlyticsUserID = DataManager.shared.scholars.first?.id ?? "no_scholar"
+        Crashlytics.crashlytics().setUserID(crashlyticsUserID)
+        Crashlytics.crashlytics().log("App launched")
         #endif
         AnalyticsService.shared.configure()
 
@@ -526,7 +534,7 @@ extension CiteTrackApp {
 }
 
 struct MainView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab = ProcessInfo.processInfo.arguments.contains("-debugChartsTab") ? 2 : (ProcessInfo.processInfo.arguments.contains("-debugOpenChart") ? 1 : 0)
     @StateObject private var localizationManager = LocalizationManager.shared
     @StateObject private var settingsManager = SettingsManager.shared
     @StateObject private var badgeCountManager = BadgeCountManager.shared
@@ -1194,6 +1202,21 @@ struct NewScholarView: View {
             }
             .navigationTitle(localizationManager.localized("scholar_management"))
             .toolbar { toolbarContent }
+            .onAppear {
+                // DEBUG: Auto-open chart for testing crashes
+                if ProcessInfo.processInfo.arguments.contains("-debugOpenChart") {
+                    if let scholarIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "-debugChartIndex"),
+                       scholarIndex + 1 < ProcessInfo.processInfo.arguments.count,
+                       let idx = Int(ProcessInfo.processInfo.arguments[scholarIndex + 1]),
+                       idx < dataManager.scholars.count {
+                        let scholar = dataManager.scholars[idx]
+                        print("🧪 [DEBUG] Auto-opening chart for scholar index \(idx): \(scholar.displayName)")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            activeSheet = .chart(scholar)
+                        }
+                    }
+                }
+            }
             .refreshable {
                 AnalyticsService.shared.log(AnalyticsEventName.citationRefreshManual, parameters: [
                     AnalyticsParamKey.source: "pull_to_refresh",
@@ -1231,7 +1254,7 @@ struct NewScholarView: View {
                     ScholarChartDetailView(scholar: scholar)
                         .onAppear {
                             AnalyticsService.shared.log(AnalyticsEventName.dashboardScholarChartOpened)
-                            print("🔍 [Sheet Debug] ScholarChartDetailView appeared for: \(scholar.displayName)")
+                            print("📊 [Sheet] ScholarChartDetailView sheet appeared for: \(scholar.displayName), id=\(scholar.id)")
                         }
                 case .edit(let scholar):
                     EditScholarView(scholar: scholar) { updatedScholar in
@@ -1312,7 +1335,7 @@ struct NewScholarView: View {
                 ScholarRowWithChartAndManagement(
                     scholar: scholar,
                     onChartTap: {
-                        print("🔍 [NewScholar Debug] \(String(format: "debug_scholar_chart_tap_print".localized, scholar.displayName))")
+                        print("📊 [Chart] Scholar chart tap: \(scholar.displayName), id=\(scholar.id)")
                         activeSheet = .chart(scholar)
                     },
                     onUpdateTap: {
@@ -1863,6 +1886,23 @@ struct SettingsView: View {
                     }
                 }
                 
+                #if DEBUG
+                Section("Debug") {
+                    Button(role: .destructive) {
+                        #if canImport(FirebaseCrashlytics)
+                        Crashlytics.crashlytics().log("Test crash triggered from Settings")
+                        fatalError("Test crash for Crashlytics verification")
+                        #endif
+                    } label: {
+                        HStack {
+                            Image(systemName: "ant.fill")
+                                .foregroundColor(.red)
+                            Text("Test Crash (Crashlytics)")
+                        }
+                    }
+                }
+                #endif
+
                 Section(localizationManager.localized("about")) {
                     Text(localizationManager.localized("app_description"))
                         .font(.headline)
@@ -2672,7 +2712,7 @@ struct ScholarRowWithChartAndManagement: View {
             HStack(spacing: 0) {
                 // 更新按钮
                 Button(action: {
-                    print("🔍 [Management Debug] \(String(format: "debug_management_update_tap_print".localized, scholar.displayName))")
+                    print("📊 [Management] Update tapped: \(scholar.displayName)")
                     onUpdateTap()
                 }) {
                     VStack(spacing: 2) {
@@ -2700,7 +2740,7 @@ struct ScholarRowWithChartAndManagement: View {
                 
                 // 图表按钮
                 Button(action: {
-                    print("🔍 [Chart Debug] \(String(format: "debug_chart_button_tap_print".localized, scholar.displayName))")
+                    print("📊 [Chart] Chart button tapped: \(scholar.displayName)")
                     onChartTap()
                 }) {
                     VStack(spacing: 2) {
@@ -3029,17 +3069,23 @@ struct ScholarChartDetailView: View {
                 selectedDataPoint = nil // 重置选中状态
                 isDragging = false
                 dragLocation = nil
-                print("🔍 [Chart Debug] ScholarChartDetailView onAppear for: \(scholar.displayName)")
+                let appearMsg = "📊 [Chart] ScholarChartDetailView appeared for: \(scholar.displayName), id=\(scholar.id), citations=\(scholar.citations ?? -1)"
+                print(appearMsg)
+                #if canImport(FirebaseCrashlytics)
+                Crashlytics.crashlytics().log(appearMsg)
+                Crashlytics.crashlytics().setCustomValue(scholar.id, forKey: "chart_scholar_id")
+                Crashlytics.crashlytics().setCustomValue(scholar.displayName, forKey: "chart_scholar_name")
+                Crashlytics.crashlytics().setCustomValue(scholar.citations ?? -1, forKey: "chart_scholar_citations")
+                #endif
                 loadRealHistoryData()
             }
             .onDisappear {
-                // 清理状态
                 isLoading = false
                 chartData = []
                 selectedDataPoint = nil
                 isDragging = false
                 dragLocation = nil
-                print("🔍 [Chart Debug] ScholarChartDetailView onDisappear for: \(scholar.displayName)")
+                print("📊 [Chart] ScholarChartDetailView disappeared for: \(scholar.displayName)")
             }
         }
     }
@@ -3275,7 +3321,7 @@ struct ScholarChartDetailView: View {
                                                     impactFeedback.impactOccurred()
                                                 }
                                                 selectedDataPoint = closest
-                                                print("🔍 [Chart Debug] \(String(format: "debug_drag_to_data_point_print".localized, "\(closest.value)"))")
+                                                print("📊 [Chart] Drag to data point: value=\(closest.value)")
                                             }
                                         }
                                         .onEnded { value in
@@ -3286,7 +3332,7 @@ struct ScholarChartDetailView: View {
                                             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                                             impactFeedback.impactOccurred()
                                             
-                                            print("🔍 [Chart Debug] \(String(format: "debug_drag_end_print".localized, "\(selectedDataPoint?.value ?? 0)"))")
+                                            print("📊 [Chart] Drag ended, selected value=\(selectedDataPoint?.value ?? 0)")
                                         }
                                 )
                                 
@@ -3411,56 +3457,54 @@ struct ScholarChartDetailView: View {
     }
     
     private func loadRealHistoryData() {
-        // 设置加载状态
         isLoading = true
-        
-        // 计算时间范围
+
         let endDate = Date()
         let startDate: Date
-        
+
         switch selectedTimeRange {
-        case 0: // 近一周
+        case 0:
             startDate = Calendar.current.date(byAdding: .day, value: -7, to: endDate) ?? endDate
-        case 1: // 近一月
+        case 1:
             startDate = Calendar.current.date(byAdding: .day, value: -30, to: endDate) ?? endDate
-        case 2: // 近三月
+        case 2:
             startDate = Calendar.current.date(byAdding: .day, value: -90, to: endDate) ?? endDate
         default:
             startDate = Calendar.current.date(byAdding: .day, value: -30, to: endDate) ?? endDate
         }
-        
-        print("🔍 [Chart Debug] \(String(format: "debug_load_scholar_data_print".localized, scholar.displayName))")
-        print("🔍 [Chart Debug] \(String(format: "debug_time_range_print".localized, "\(startDate)", "\(endDate)"))")
-        
-        // 从DataManager获取真实历史数据
+
+        let logMsg = "📊 [Chart] Loading data for: \(scholar.displayName), id=\(scholar.id), range=\(selectedTimeRange)"
+        print(logMsg)
+        #if canImport(FirebaseCrashlytics)
+        Crashlytics.crashlytics().log(logMsg)
+        #endif
+        print("📊 [Chart] Time range: \(startDate) ~ \(endDate), selectedTimeRange=\(selectedTimeRange)")
+
         let histories = DataManager.shared.getHistory(for: scholar.id, from: startDate, to: endDate)
-        
-        print("🔍 [Chart Debug] \(String(format: "debug_histories_count_print".localized, histories.count))")
-        
+
+        print("📊 [Chart] Found \(histories.count) history records")
+
         DispatchQueue.main.async {
-            // 转换为图表数据格式
             self.chartData = histories.map { history in
                 ChartDataPoint(
                     date: history.timestamp,
                     value: history.citationCount
                 )
             }.sorted { $0.date < $1.date }
-            
-            print("🔍 [Chart Debug] \(String(format: "debug_chart_data_count_print".localized, self.chartData.count))")
-            
-            // 如果没有历史数据，显示当前引用数作为单个数据点
+
+            print("📊 [Chart] Converted to \(self.chartData.count) chart data points")
+
             if self.chartData.isEmpty, let currentCitations = self.scholar.citations {
-                print("🔍 [Chart Debug] \(String(format: "debug_no_history_data_print".localized, currentCitations))")
+                print("📊 [Chart] No history data, using current citations: \(currentCitations)")
                 self.chartData = [ChartDataPoint(
                     date: Date(),
                     value: currentCitations
                 )]
             }
-            
-            // 结束加载状态
+
             self.isLoading = false
-            
-            print("✅ \(String(format: "debug_load_scholar_success_print".localized, self.scholar.displayName, self.chartData.count))")
+
+            print("✅ [Chart] Loaded for \(self.scholar.displayName): \(self.chartData.count) data points")
         }
     }
     
@@ -3539,7 +3583,9 @@ struct ScholarChartDetailView: View {
     }
     
     private var range: Int {
-        chartData.map(\.value).max() ?? 1
+        let maxVal = chartData.map(\.value).max() ?? 1
+        let minVal = chartData.map(\.value).min() ?? 0
+        return max(maxVal - minVal, 1)
     }
     
     private func selectDataPoint(_ point: ChartDataPoint) {
@@ -3547,14 +3593,14 @@ struct ScholarChartDetailView: View {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
         
-        print("🔍 [Chart Debug] \(String(format: "debug_data_point_tap_print".localized, "\(point.value)", "\(point.date)"))")
+        print("📊 [Chart] Data point tapped: value=\(point.value), date=\(point.date)")
         withAnimation(.easeInOut(duration: 0.2)) {
             if selectedDataPoint?.id == point.id {
-                selectedDataPoint = nil // 取消选中
-                print("🔍 [Chart Debug] \("debug_deselect_data_point_print".localized)")
+                selectedDataPoint = nil
+                print("📊 [Chart] Data point deselected")
             } else {
-                selectedDataPoint = point // 选中新点
-                print("🔍 [Chart Debug] \(String(format: "debug_select_data_point_print".localized, "\(point.value)"))")
+                selectedDataPoint = point
+                print("📊 [Chart] Data point selected: value=\(point.value)")
             }
         }
     }

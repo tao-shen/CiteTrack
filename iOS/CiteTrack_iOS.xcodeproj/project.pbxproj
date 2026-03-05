@@ -43,6 +43,7 @@
 		CB6F529450B5405AA2AFF4A5 /* CitationFetchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F858A5336C97415C99560C31 /* CitationFetchCoordinator.swift */; };
 		DD67808EDD67808EDD67808EDD6780 /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE78919FEE78919FEE78919FEE789 /* SettingsManager.swift */; };
 		FIREBASE0B2E7600000088055D /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = FIREBASE0C2E7600000088055D /* FirebaseAnalytics */; };
+		FIREBASE0D2E7600000088055D /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = FIREBASE0E2E7600000088055D /* FirebaseCrashlytics */; };
 		GSPLIST0A2E7600IOSBUILD1 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = GSPLIST0B2E7600IOSFILEREF /* GoogleService-Info.plist */; };
 		E202DA3C2E732DE80088055D /* ConfettiSwiftUI in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = E202DA3B2E732DE80088055D /* ConfettiSwiftUI */; };
 		E202DA3F2E7335A60088055D /* SwiftEntryKit in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = E202DA3E2E7335A60088055D /* SwiftEntryKit */; };
@@ -156,6 +157,7 @@
 				E202DA3F2E7335A60088055D /* SwiftEntryKit in Frameworks */,
 				E202DA3C2E732DE80088055D /* ConfettiSwiftUI in Frameworks */,
 				FIREBASE0B2E7600000088055D /* FirebaseAnalytics in Frameworks */,
+				FIREBASE0D2E7600000088055D /* FirebaseCrashlytics in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -372,6 +374,25 @@
 			productReference = 6BBF93D21F43686374D1DB06 /* CiteTrackWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		CRASHLYTICS_DSYM_UPLOAD /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}",
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${PRODUCT_NAME}",
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Info.plist",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist",
+				"$(TARGET_BUILD_DIR)/$(EXECUTABLE_PATH)",
+			);
+			name = "Firebase Crashlytics dSYM Upload";
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\"\n";
+		};
 		68224F4F68224F4F68224F4F68224 /* CiteTrack */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 79335060793350607933506079335 /* Build configuration list for PBXNativeTarget "CiteTrack" */;
@@ -380,6 +401,7 @@
 				13D6E9FA13D6E9FA13D6E9FA13D6E /* Frameworks */,
 				9B55728209B55728209B55728209B /* Resources */,
 				A6F723E00C21F120E737D01D /* Embed Foundation Extensions */,
+				CRASHLYTICS_DSYM_UPLOAD /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -538,11 +560,11 @@
 				CODE_SIGN_ENTITLEMENTS = CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -563,11 +585,11 @@
 				CODE_SIGN_ENTITLEMENTS = CiteTrackWidgetExtension/CiteTrackWidgetExtension.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -713,7 +735,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"CiteTrack/Preview Content\"";
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				ENABLE_PREVIEWS = YES;
@@ -736,7 +758,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -761,7 +783,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "\"CiteTrack/Preview Content\"";
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				ENABLE_PREVIEWS = YES;
@@ -784,7 +806,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -912,6 +934,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FIREBASE0A2E7600000088055D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAnalytics;
+		};
+		FIREBASE0E2E7600000088055D /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FIREBASE0A2E7600000088055D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
