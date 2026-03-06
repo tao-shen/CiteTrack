@@ -1914,8 +1914,12 @@ struct CitingPapersSheetContent: View {
                     }
                 }
                 
+                // Citation Context — verbatim text from Semantic Scholar
                 Divider()
-                
+                CitationContextSection(citingPaper: paper, myPaperTitle: publication.title)
+
+                Divider()
+
                 // 操作按钮
                 VStack(spacing: 12) {
                     if let scholarUrl = paper.scholarUrl, let url = URL(string: scholarUrl) {

@@ -190,7 +190,10 @@ struct CiteTrackApp: App {
                 )
                 .id(localizationManager.currentLanguage.rawValue)
                 .onOpenURL { url in
-                    handleDeepLink(url: url)
+                    // Pass Google Sign-In OAuth redirect URLs first; fall back to deep links
+                    if !GoogleAuthService.shared.handle(url) {
+                        handleDeepLink(url: url)
+                    }
                 }
                 .onAppear {
                     NSLog("🧪 [CiteTrackApp] WindowGroup.onAppear")
@@ -304,7 +307,10 @@ struct CiteTrackApp: App {
     // MARK: - Widget Action Handlers
     private func handleWidgetRefresh() {
         print("🔄 [Widget] \("debug_widget_refresh_start".localized)")
-        
+
+        // 记录Widget触发的刷新到用户行为（热力图计数）
+        CT_RecordManualRefresh()
+
         // 设置刷新时间戳，Widget会检测到这个时间戳并播放动画
         let now = Date()
         UserDefaults.standard.set(now, forKey: "LastRefreshTime")
@@ -534,7 +540,7 @@ extension CiteTrackApp {
 }
 
 struct MainView: View {
-    @State private var selectedTab = ProcessInfo.processInfo.arguments.contains("-debugChartsTab") ? 2 : (ProcessInfo.processInfo.arguments.contains("-debugOpenChart") ? 1 : 0)
+    @State private var selectedTab = 0
     @StateObject private var localizationManager = LocalizationManager.shared
     @StateObject private var settingsManager = SettingsManager.shared
     @StateObject private var badgeCountManager = BadgeCountManager.shared
@@ -712,7 +718,7 @@ struct MainView: View {
     }
     
     // 不再使用热力图测试的初始化模拟数据
-    
+
     var body: some View {
         Group {
             if initializationService.isFirstLaunch && initializationService.isInitializing {
@@ -720,42 +726,31 @@ struct MainView: View {
             } else {
                 TabView(selection: $selectedTab) {
             DashboardView()
+                .toolbar(.hidden, for: .tabBar)
                 .analyticsScreen(AnalyticsScreen.dashboard)
-                .tabItem {
-                    Image(systemName: "chart.bar.fill")
-                    Text(localizationManager.localized("dashboard"))
-                }
+                .tabItem { Label("", systemImage: "chart.bar.fill") }
                 .tag(0)
                 .onReceive(NotificationCenter.default.publisher(for: Notification.Name("iCloudImportPromptAvailable"))) { _ in
                     if iCloudSyncManager.shared.showImportPrompt == true {
-                        // 强制切到 Dashboard 时也能弹出（showImportPrompt 已经绑定 alert）
                         iCloudSyncManager.shared.showImportPrompt = true
                     }
                 }
-            
+
             NewScholarView()
+                .toolbar(.hidden, for: .tabBar)
                 .analyticsScreen(AnalyticsScreen.scholars)
-                .tabItem {
-                    Image(systemName: "person.2.fill")
-                    Text(localizationManager.localized("scholars"))
-                }
+                .tabItem { Label("", systemImage: "person.2.fill") }
                 .tag(1)
-            
-            // 新增：学者增长折线图（使用 SwiftUICharts 多学者对比）
+
             NavigationView {
                 ScrollView(.vertical, showsIndicators: true) {
                     VStack(spacing: 12) {
-                        // 🟠 橙色区域：外层ScholarsGrowthLineChartView - 图表组件容器
                         ScholarsGrowthLineChartView()
                             .environmentObject(DataManager.shared)
                             .environmentObject(localizationManager)
-                            // .background(Color.orange.opacity(0.3)) // 调试：外层ScholarsGrowthLineChartView背景
-                            .frame(maxHeight: 450) // 设置最大高度，让图表有足够空间但不会过高
-                            .frame(minHeight: 440) // 设置最小高度，确保图表有基本显示空间
-                        
-                        // 🟢 绿色区域：贡献活动热力图区域
+                            .frame(maxHeight: 450)
+                            .frame(minHeight: 440)
                         contributionChartSection
-                            // .background(Color.purple.opacity(0.3)) // 调试：bottomTextSection背景
                     }
                     .padding(.horizontal)
                     .padding(.top, 8)
@@ -765,29 +760,36 @@ struct MainView: View {
                 .navigationBarTitleDisplayMode(.large)
             }
             .navigationViewStyle(StackNavigationViewStyle())
-            .tabItem {
-                Image(systemName: "chart.xyaxis.line")
-                Text(localizationManager.localized("charts"))
-            }
+            .toolbar(.hidden, for: .tabBar)
+            .tabItem { Label("", systemImage: "chart.xyaxis.line") }
             .tag(2)
-            
-            // Who Cite Me Tab
+
             WhoCiteMeView()
+                .toolbar(.hidden, for: .tabBar)
                 .analyticsScreen(AnalyticsScreen.whoCiteMe)
-                .tabItem {
-                    Image(systemName: "quote.bubble")
-                    Text(localizationManager.localized("who_cite_me"))
-                }
+                .tabItem { Label("", systemImage: "quote.bubble") }
                 .badge(badgeCountManager.count)
                 .tag(3)
 
-            SettingsView()
-                .analyticsScreen(AnalyticsScreen.settings)
-                .tabItem {
-                    Image(systemName: "gear")
-                    Text(localizationManager.localized("settings"))
-                }
+            CitationInsightsView()
+                .toolbar(.hidden, for: .tabBar)
+                .tabItem { Label("", systemImage: "text.magnifyingglass") }
                 .tag(4)
+
+            SettingsView()
+                .toolbar(.hidden, for: .tabBar)
+                .analyticsScreen(AnalyticsScreen.settings)
+                .tabItem { Label("", systemImage: "gear") }
+                .tag(5)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                Divider()
+                NativeTabBarView(selectedTab: $selectedTab, badgeCount: badgeCountManager.count)
+                    .frame(height: 49)
+            }
+            .background(.bar)
+            .ignoresSafeArea(edges: .bottom)
         }
                 .onChange(of: selectedTab) { _, newTab in
                     AnalyticsService.shared.log(AnalyticsEventName.tabSelected, parameters: [
@@ -805,6 +807,55 @@ struct MainView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - Native UITabBar (all 6 items, no More)
+
+private struct NativeTabBarView: UIViewRepresentable {
+    @Binding var selectedTab: Int
+    let badgeCount: Int
+
+    func makeUIView(context: Context) -> UITabBar {
+        let bar = UITabBar()
+        bar.delegate = context.coordinator
+        // Remove UITabBar's own background so SwiftUI's .bar material handles it uniformly
+        bar.backgroundImage = UIImage()
+        bar.shadowImage = UIImage()
+        bar.isTranslucent = true
+        let lm = LocalizationManager.shared
+        let defs: [(String, String, Int)] = [
+            ("chart.bar.fill",       lm.localized("dashboard"),         0),
+            ("person.2.fill",        lm.localized("scholars"),          1),
+            ("chart.xyaxis.line",    lm.localized("charts"),            2),
+            ("quote.bubble.fill",    lm.localized("who_cite_me"),       3),
+            ("text.magnifyingglass", lm.localized("citation_insights"), 4),
+            ("gear",                 lm.localized("settings"),          5),
+        ]
+        bar.setItems(defs.map { icon, title, tag in
+            UITabBarItem(title: title, image: UIImage(systemName: icon), tag: tag)
+        }, animated: false)
+        bar.selectedItem = bar.items?[selectedTab]
+        applyBadge(bar)
+        return bar
+    }
+
+    func updateUIView(_ bar: UITabBar, context: Context) {
+        guard let items = bar.items, selectedTab < items.count else { return }
+        bar.selectedItem = items[selectedTab]
+        applyBadge(bar)
+    }
+
+    private func applyBadge(_ bar: UITabBar) {
+        bar.items?[3].badgeValue = badgeCount > 0 ? (badgeCount > 99 ? "99+" : "\(badgeCount)") : nil
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator($selectedTab) }
+
+    final class Coordinator: NSObject, UITabBarDelegate {
+        @Binding var selectedTab: Int
+        init(_ t: Binding<Int>) { _selectedTab = t }
+        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) { selectedTab = item.tag }
     }
 }
 
@@ -1202,21 +1253,6 @@ struct NewScholarView: View {
             }
             .navigationTitle(localizationManager.localized("scholar_management"))
             .toolbar { toolbarContent }
-            .onAppear {
-                // DEBUG: Auto-open chart for testing crashes
-                if ProcessInfo.processInfo.arguments.contains("-debugOpenChart") {
-                    if let scholarIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "-debugChartIndex"),
-                       scholarIndex + 1 < ProcessInfo.processInfo.arguments.count,
-                       let idx = Int(ProcessInfo.processInfo.arguments[scholarIndex + 1]),
-                       idx < dataManager.scholars.count {
-                        let scholar = dataManager.scholars[idx]
-                        print("🧪 [DEBUG] Auto-opening chart for scholar index \(idx): \(scholar.displayName)")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            activeSheet = .chart(scholar)
-                        }
-                    }
-                }
-            }
             .refreshable {
                 AnalyticsService.shared.log(AnalyticsEventName.citationRefreshManual, parameters: [
                     AnalyticsParamKey.source: "pull_to_refresh",
@@ -3093,9 +3129,7 @@ struct ScholarChartDetailView: View {
     private func moveTimeRangeSelection(offset: Int) {
         let all = Array(0..<timeRanges.count)
         let currentIndex = selectedTimeRange
-        // 使用安全的加法，防止溢出
-        let safeOffset = max(min(offset, Int.max - currentIndex), Int.min - currentIndex)
-        let newIndex = min(max(currentIndex + safeOffset, all.first ?? 0), (all.last ?? 0))
+        let newIndex = min(max(currentIndex + offset, all.first ?? 0), (all.last ?? 0))
         if newIndex != currentIndex {
             withAnimation { selectedTimeRange = newIndex }
             // 选择变化后加载数据
@@ -3198,12 +3232,8 @@ struct ScholarChartDetailView: View {
                                 
                                 // 生成5个均匀分布的Y轴标签值
                                 ForEach(0..<5, id: \.self) { i in
-                                    let normalizedPosition = CGFloat(4 - i) / 4.0 // 从上到下
-                                    // 使用安全的计算，防止溢出
-                                    let safeRange = max(min(range, Int.max - 1), 1)
-                                    let normalizedValue = normalizedPosition * Double(safeRange)
-                                    let safeNormalizedValue = max(min(Int(normalizedValue), Int.max - minValue), Int.min - minValue)
-                                    let value = minValue + safeNormalizedValue
+                                    let normalizedPosition = Double(4 - i) / 4.0 // 从上到下
+                                    let value = minValue + Int((normalizedPosition * Double(range)).rounded())
                                     
                                     Text(formatNumber(value))
                                         .font(.caption)
@@ -3237,14 +3267,9 @@ struct ScholarChartDetailView: View {
                                             let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
                                             
                                             for (index, point) in chartData.enumerated() {
-                                                // 使用安全的计算，防止溢出
-                                                let safeIndex = min(index, Int.max - 1)
                                                 let safeCount = max(chartData.count - 1, 1)
-                                                let x = CGFloat(safeIndex) * (chartWidth / CGFloat(safeCount))
-                                                let valueDiff = point.value - minValue
-                                                let safeValueDiff = max(min(valueDiff, Int.max - 1), Int.min + 1)
-                                                let safeRange = max(range, 1)
-                                                let normalizedValue = CGFloat(safeValueDiff) / CGFloat(safeRange)
+                                                let x = CGFloat(index) * (chartWidth / CGFloat(safeCount))
+                                                let normalizedValue = CGFloat(point.value - minValue) / CGFloat(range)
                                                 let y = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
                                                 
                                                 if index == 0 {
@@ -3263,14 +3288,9 @@ struct ScholarChartDetailView: View {
                                         let minValue = chartData.map(\.value).min() ?? 0
                                         let range = max(maxValue - minValue, 1)
                                         let chartWidth = geometry.size.width - 90 // 调整宽度匹配新Y轴
-                                        // 使用安全的计算，防止溢出
-                                        let safeIndex = min(index, Int.max - 1)
                                         let safeCount = max(chartData.count - 1, 1)
-                                        let x = CGFloat(safeIndex) * (chartWidth / CGFloat(safeCount))
-                                        let valueDiff = point.value - minValue
-                                        let safeValueDiff = max(min(valueDiff, Int.max - 1), Int.min + 1)
-                                        let safeRange = max(range, 1)
-                                        let normalizedValue = CGFloat(safeValueDiff) / CGFloat(safeRange)
+                                        let x = CGFloat(index) * (chartWidth / CGFloat(safeCount))
+                                        let normalizedValue = CGFloat(point.value - minValue) / CGFloat(range)
                                         let y = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
                                         
                                         ZStack {
@@ -3556,15 +3576,8 @@ struct ScholarChartDetailView: View {
         let stepWidth = chartWidth / CGFloat(safeCount)
         
         for (index, dataPoint) in chartData.enumerated() {
-            // 使用安全的乘法，防止溢出
-            let safeIndex = min(index, Int.max - 1)
-            let dataPointX = CGFloat(safeIndex) * stepWidth
-            
-            // 使用安全的减法，防止溢出
-            let valueDiff = dataPoint.value - minValue
-            let safeValueDiff = max(min(valueDiff, Int.max - 1), Int.min + 1)
-            let safeRange = max(range, 1) // 防止除零
-            let normalizedValue = CGFloat(safeValueDiff) / CGFloat(safeRange)
+            let dataPointX = CGFloat(index) * stepWidth
+            let normalizedValue = CGFloat(dataPoint.value - minValue) / CGFloat(range)
             let dataPointY = 160 - (normalizedValue * 128) // 范围从32到160，与网格线精确匹配
             
             let distance = hypot(x - dataPointX, y - dataPointY)

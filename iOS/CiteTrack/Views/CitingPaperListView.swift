@@ -5,7 +5,9 @@ struct CitingPaperListView: View {
     let scholarId: String
     let papers: [CitingPaper]
     let isLoading: Bool
-    
+    /// Title of the user's publication that is being cited (passed down to CitingPaperDetailView)
+    var publicationTitle: String? = nil
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 标题
@@ -35,7 +37,7 @@ struct CitingPaperListView: View {
     private var papersList: some View {
         LazyVStack(spacing: 12) {
             ForEach(papers) { paper in
-                NavigationLink(destination: CitingPaperDetailView(paper: paper)) {
+                NavigationLink(destination: CitingPaperDetailView(paper: paper, myPaperTitle: publicationTitle)) {
                     CitingPaperRow(paper: paper)
                 }
                 .buttonStyle(PlainButtonStyle())

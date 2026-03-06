@@ -3,24 +3,33 @@ import SwiftUI
 // MARK: - Citing Paper Detail View
 struct CitingPaperDetailView: View {
     let paper: CitingPaper
-    
+    /// Title of the user's own paper that was cited — used to fetch verbatim citation context.
+    /// Optional: citation context section is hidden when nil.
+    var myPaperTitle: String? = nil
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 // 标题
                 titleSection
-                
+
                 // 作者
                 authorsSection
-                
+
                 // 发表信息
                 publicationInfoSection
-                
+
                 // 摘要
                 if let abstract = paper.abstract {
                     abstractSection(abstract)
                 }
-                
+
+                // Citation Context — verbatim text from Semantic Scholar
+                if let title = myPaperTitle {
+                    Divider()
+                    CitationContextSection(citingPaper: paper, myPaperTitle: title)
+                }
+
                 // 操作按钮
                 actionButtons
             }
@@ -147,7 +156,7 @@ struct CitingPaperDetailView: View {
 struct CitingPaperDetailView_Previews: PreviewProvider {
     static var previews: some View {
         NavigationView {
-            CitingPaperDetailView(paper: CitingPaper.mock())
+            CitingPaperDetailView(paper: CitingPaper.mock(), myPaperTitle: "Sample Cited Paper Title")
         }
     }
 }

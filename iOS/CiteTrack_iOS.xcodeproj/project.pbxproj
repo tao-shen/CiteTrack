@@ -61,6 +61,14 @@
 		WelcomeConfigBuild123456789012345678901234 /* WelcomeConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = WelcomeConfig123456789012345678901234 /* WelcomeConfig.swift */; };
 		A1B2C3D4E5F6A1B2C3D4E5F6 /* AnalyticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E2D3C4B5A6F1E2D3C4B5A6 /* AnalyticsService.swift */; };
 		A2B3C4D5E6F7A2B3C4D5E6F7 /* AnalyticsEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E3D4C5B6A7F2E3D4C5B6A7 /* AnalyticsEvents.swift */; };
+		CC001B001CC001B001CC001B00 /* CitationContext.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC001F001CC001F001CC001F00 /* CitationContext.swift */; };
+		CC002B001CC002B001CC002B00 /* SemanticScholarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC002F001CC002F001CC002F00 /* SemanticScholarService.swift */; };
+		CC003B001CC003B001CC003B00 /* CitationContextService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC003F001CC003F001CC003F00 /* CitationContextService.swift */; };
+		CC004B001CC004B001CC004B00 /* GoogleAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC004F001CC004F001CC004F00 /* GoogleAuthService.swift */; };
+		CC005B001CC005B001CC005B00 /* GoogleSignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC005F001CC005F001CC005F00 /* GoogleSignInView.swift */; };
+		CC006B001CC006B001CC006B00 /* CitationContextSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC006F001CC006F001CC006F00 /* CitationContextSection.swift */; };
+		CC007B001CC007B001CC007B00 /* CitationInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC007F001CC007F001CC007F00 /* CitationInsightsView.swift */; };
+		GSIGNIN001BuildF0000000000 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = GSIGNIN001ProdRef000000000 /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -144,6 +152,13 @@
 		GSPLIST0B2E7600IOSFILEREF /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		F1E2D3C4B5A6F1E2D3C4B5A6 /* AnalyticsService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AnalyticsService.swift; path = ../Shared/Services/AnalyticsService.swift; sourceTree = "<group>"; };
 		F2E3D4C5B6A7F2E3D4C5B6A7 /* AnalyticsEvents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AnalyticsEvents.swift; path = ../Shared/Services/AnalyticsEvents.swift; sourceTree = "<group>"; };
+		CC001F001CC001F001CC001F00 /* CitationContext.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CitationContext.swift; path = ../Shared/Models/CitationContext.swift; sourceTree = "<group>"; };
+		CC002F001CC002F001CC002F00 /* SemanticScholarService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SemanticScholarService.swift; path = ../Shared/Services/SemanticScholarService.swift; sourceTree = "<group>"; };
+		CC003F001CC003F001CC003F00 /* CitationContextService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CitationContextService.swift; path = ../Shared/Services/CitationContextService.swift; sourceTree = "<group>"; };
+		CC004F001CC004F001CC004F00 /* GoogleAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GoogleAuthService.swift; path = CiteTrack/Services/GoogleAuthService.swift; sourceTree = SOURCE_ROOT; };
+		CC005F001CC005F001CC005F00 /* GoogleSignInView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GoogleSignInView.swift; path = CiteTrack/Views/Auth/GoogleSignInView.swift; sourceTree = SOURCE_ROOT; };
+		CC006F001CC006F001CC006F00 /* CitationContextSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CitationContextSection.swift; path = ./CiteTrack/Views/CitationContextSection.swift; sourceTree = "<group>"; };
+		CC007F001CC007F001CC007F00 /* CitationInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CitationInsightsView.swift; path = ./CiteTrack/Views/CitationInsightsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -158,6 +173,7 @@
 				E202DA3C2E732DE80088055D /* ConfettiSwiftUI in Frameworks */,
 				FIREBASE0B2E7600000088055D /* FirebaseAnalytics in Frameworks */,
 				FIREBASE0D2E7600000088055D /* FirebaseCrashlytics in Frameworks */,
+				GSIGNIN001BuildF0000000000 /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -197,6 +213,14 @@
 			);
 			sourceTree = "<group>";
 		};
+		CC009GRP01CC009GRP01CC009 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				CC004F001CC004F001CC004F00 /* GoogleAuthService.swift */,
+			);
+			name = Services;
+			sourceTree = "<group>";
+		};
 		35F91C1C35F91C1C35F91C1C35F91 /* CiteTrack */ = {
 			isa = PBXGroup;
 			children = (
@@ -223,6 +247,7 @@
 				66F1029866F1029866F1029866F1 /* Assets.xcassets */,
 				GSPLIST0B2E7600IOSFILEREF /* GoogleService-Info.plist */,
 				57113E3E57113E3E57113E3E57113 /* Preview Content */,
+				CC009GRP01CC009GRP01CC009 /* Services */,
 			);
 			path = CiteTrack;
 			sourceTree = "<group>";
@@ -288,6 +313,8 @@
 				F858A5336C97415C99560C31 /* CitationFetchCoordinator.swift */,
 				0199E7A8F0B2997CAAC06B7D /* UnifiedCacheManager.swift */,
 				3827C421D2D48677F5EFF151 /* CitationFetchService+ScholarInfo.swift */,
+				CC002F001CC002F001CC002F00 /* SemanticScholarService.swift */,
+				CC003F001CC003F001CC003F00 /* CitationContextService.swift */,
 			);
 			name = Services;
 			sourceTree = "<group>";
@@ -328,6 +355,7 @@
 				0B238D39C7C2574A663E0164 /* CitationStatistics.swift */,
 				2DB6F2C5C0B1FE88EB9DD874 /* CitingAuthor.swift */,
 				F92941C320908B67A09C110F /* CitingPaper.swift */,
+				CC001F001CC001F001CC001F00 /* CitationContext.swift */,
 			);
 			name = Models;
 			sourceTree = "<group>";
@@ -340,6 +368,14 @@
 			name = .;
 			sourceTree = "<group>";
 		};
+		CC008GRP01CC008GRP01CC008 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				CC005F001CC005F001CC005F00 /* GoogleSignInView.swift */,
+			);
+			name = Auth;
+			sourceTree = "<group>";
+		};
 		F858073056C639C8DA175E19 /* Views */ = {
 			isa = PBXGroup;
 			children = (
@@ -350,6 +386,9 @@
 				4F54B5A9D19FB1FC241AD4CC /* WhoCiteMeView.swift */,
 				380558653595655430862952 /* SelectionViews.swift */,
 				818820330565341001121037 /* ChartViews.swift */,
+				CC006F001CC006F001CC006F00 /* CitationContextSection.swift */,
+				CC007F001CC007F001CC007F00 /* CitationInsightsView.swift */,
+				CC008GRP01CC008GRP01CC008 /* Auth */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -452,6 +491,7 @@
 				E28462152E744FA20040CDC6 /* XCRemoteSwiftPackageReference "ChartView" */,
 				E29641D72E74876E00F2192F /* XCRemoteSwiftPackageReference "SwiftUI-ContributionChart" */,
 				FIREBASE0A2E7600000088055D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				GSIGNIN001PkgRef0000000000 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			productRefGroup = 46002D2D46002D2D46002D2D46002 /* Products */;
 			projectDirPath = "";
@@ -537,6 +577,13 @@
 				238652789153115628566232 /* ChartViews.swift in Sources */,
 				4393C28514997DEFB1D1BFEC /* UnifiedCacheManager.swift in Sources */,
 				430055B66A50AE5266F08C11 /* CitationFetchService+ScholarInfo.swift in Sources */,
+				CC001B001CC001B001CC001B00 /* CitationContext.swift in Sources */,
+				CC002B001CC002B001CC002B00 /* SemanticScholarService.swift in Sources */,
+				CC003B001CC003B001CC003B00 /* CitationContextService.swift in Sources */,
+				CC004B001CC004B001CC004B00 /* GoogleAuthService.swift in Sources */,
+				CC005B001CC005B001CC005B00 /* GoogleSignInView.swift in Sources */,
+				CC006B001CC006B001CC006B00 /* CitationContextSection.swift in Sources */,
+				CC007B001CC007B001CC007B00 /* CitationInsightsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -564,7 +611,7 @@
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -589,7 +636,7 @@
 				DEVELOPMENT_TEAM = HNU7NA3S7L;
 				INFOPLIST_FILE = CiteTrackWidgetExtension/WidgetInfo.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack.widget;
 				PRODUCT_NAME = CiteTrackWidgetExtension;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -758,7 +805,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -806,7 +853,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 11.5;
-				MARKETING_VERSION = 1.1.1;
+				MARKETING_VERSION = 1.1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.citetrack.CiteTrack;
 				PRODUCT_NAME = CiteTrack;
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -902,6 +949,14 @@
 				minimumVersion = 11.0.0;
 			};
 		};
+		GSIGNIN001PkgRef0000000000 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -939,6 +994,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FIREBASE0A2E7600000088055D /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseCrashlytics;
+		};
+		GSIGNIN001ProdRef000000000 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = GSIGNIN001PkgRef0000000000 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

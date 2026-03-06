@@ -225,6 +225,8 @@ public class LocalizationManager: ObservableObject {
         // WelcomeConfig supplemental keys
         en["continue"] = en["continue"] ?? "Continue"
         en["privacy_disclaimer"] = en["privacy_disclaimer"] ?? "Your academic data is securely stored on your device and synced via iCloud with encryption. We value your privacy and do not collect or share your personal information."
+        // Citation Insights (new feature)
+        en["citation_insights"] = en["citation_insights"] ?? "Insights"
         localizations[.english] = en
 
         // Chinese (Simplified)
@@ -275,6 +277,8 @@ public class LocalizationManager: ObservableObject {
         // WelcomeConfig supplemental keys
         zh["continue"] = zh["continue"] ?? "继续"
         zh["privacy_disclaimer"] = zh["privacy_disclaimer"] ?? "您的学术数据将安全存储在本地设备上，并通过 iCloud 进行加密同步。我们重视您的隐私，不会收集或分享您的个人信息。"
+        // Citation Insights (new feature)
+        zh["citation_insights"] = zh["citation_insights"] ?? "引用洞察"
         localizations[.chinese] = zh
     }
     

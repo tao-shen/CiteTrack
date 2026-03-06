@@ -1,78 +1,61 @@
 import Cocoa
+import SwiftUI
 
-// MARK: - Charts Window Controller
+// MARK: - Charts Window Controller (SwiftUI)
 class ChartsWindowController: NSWindowController {
-    
-    private var chartsViewController: ChartsViewController?
-    
+
     override init(window: NSWindow?) {
         super.init(window: window)
         setupWindow()
-        setupViewController()
+        setupSwiftUIContent()
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     private func setupWindow() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 780),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        
+
         window.center()
         window.title = L("charts_window_title")
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 600, height: 400)
-        
-        // 设置窗口级别和属性，避免与设置窗口冲突
-        window.level = .normal
-        window.hidesOnDeactivate = false
-        
+        window.minSize = NSSize(width: 900, height: 620)
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = .controlBackgroundColor
+
         self.window = window
     }
-    
-    private func setupViewController() {
-        print("ChartsWindowController: Creating ChartsViewController...")
-        chartsViewController = ChartsViewController()
-        
-        guard let chartsVC = chartsViewController else {
-            print("ChartsWindowController: ERROR - Failed to create ChartsViewController")
-            return
-        }
-        
-        // 确保视图控制器正确初始化
-        print("ChartsWindowController: Loading view...")
-        chartsVC.loadView()
-        
-        print("ChartsWindowController: Calling viewDidLoad...")
-        chartsVC.viewDidLoad()
-        
-        // 设置窗口内容视图
-        window?.contentView = chartsVC.view
-        
-        print("ChartsWindowController: Successfully created and configured charts view controller")
+
+    private func setupSwiftUIContent() {
+        let hostingController = NSHostingController(rootView: ChartsContentView())
+        window?.contentViewController = hostingController
     }
-    
+
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
-        
-        // 确保窗口在前台显示
+
+        window?.alphaValue = 0.0
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        
-        print("ChartsWindowController: Window shown")
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.25
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+            window?.animator().alphaValue = 1.0
+        }
     }
-    
-    // 实现窗口委托方法来处理窗口关闭
+
     override func windowDidLoad() {
         super.windowDidLoad()
         window?.delegate = self
     }
-    
+
     deinit {
         print("ChartsWindowController: Deallocated")
     }
@@ -81,11 +64,8 @@ class ChartsWindowController: NSWindowController {
 // MARK: - NSWindowDelegate
 extension ChartsWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        print("ChartsWindowController: Window will close, cleaning up")
-        
-        // 通知AppDelegate清理窗口引用
         if let appDelegate = NSApp.delegate as? AppDelegate {
             appDelegate.chartsWindowDidClose()
         }
     }
-} 
+}

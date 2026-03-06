@@ -65,9 +65,8 @@ class ChartsViewController: NSViewController {
     }
     
     private func applyModernTheme() {
-        // Simple clean background
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        view.layer?.backgroundColor = NSColor(hex: "#F5F5F3").cgColor
     }
     
     override func viewDidAppear() {
@@ -129,9 +128,8 @@ class ChartsViewController: NSViewController {
     }
     
     private func setupToolbar() {
-        // Apply modern styling to the view
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        view.layer?.backgroundColor = NSColor(hex: "#F5F5F3").cgColor
         
         // Scholar selection
         scholarPopup = NSPopUpButton()
@@ -264,19 +262,11 @@ class ChartsViewController: NSViewController {
         chartView.delegate = self
         chartView.configuration = currentConfiguration
         chartView.translatesAutoresizingMaskIntoConstraints = false
-        
-        // Simple chart view styling
-        chartView.wantsLayer = true
-        chartView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
     
     private func setupStatisticsView() {
         statisticsView = StatisticsView()
         statisticsView.translatesAutoresizingMaskIntoConstraints = false
-        
-        // Simple statistics view styling
-        statisticsView.wantsLayer = true
-        statisticsView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
     
     private func setupConstraints() {
@@ -297,14 +287,14 @@ class ChartsViewController: NSViewController {
         view.addSubview(stackView)
         
         NSLayoutConstraint.activate([
-            stackView.topAnchor.constraint(equalTo: view.topAnchor, constant: 16),
-            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            stackView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -16),
-            
-            toolbarView.heightAnchor.constraint(equalToConstant: 90),
+            stackView.topAnchor.constraint(equalTo: view.topAnchor, constant: DesignSpacing.xl),
+            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: DesignSpacing.xl),
+            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -DesignSpacing.xl),
+            stackView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -DesignSpacing.xl),
+
+            toolbarView.heightAnchor.constraint(equalToConstant: 80),
             chartView.heightAnchor.constraint(greaterThanOrEqualToConstant: 300),
-            statisticsView.heightAnchor.constraint(equalToConstant: 100)
+            statisticsView.heightAnchor.constraint(equalToConstant: 90)
         ])
     }
     
@@ -315,14 +305,14 @@ class ChartsViewController: NSViewController {
         // Create vertical stack for multiple rows
         let mainStack = NSStackView()
         mainStack.orientation = .vertical
-        mainStack.spacing = 8
+        mainStack.spacing = DesignSpacing.xs
         mainStack.alignment = .leading
         mainStack.translatesAutoresizingMaskIntoConstraints = false
-        
+
         // First row: Basic controls
         let controlsStack = NSStackView()
         controlsStack.orientation = .horizontal
-        controlsStack.spacing = 16
+        controlsStack.spacing = DesignSpacing.md
         controlsStack.alignment = .centerY
         controlsStack.translatesAutoresizingMaskIntoConstraints = false
         
@@ -384,9 +374,10 @@ class ChartsViewController: NSViewController {
     private func createLabeledControl(_ label: String, _ control: NSView) -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        
+
         let labelView = NSTextField(labelWithString: label)
-        labelView.font = NSFont.systemFont(ofSize: 12)
+        labelView.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+        labelView.textColor = NSColor(hex: "#6E6E73")
         labelView.translatesAutoresizingMaskIntoConstraints = false
         
         control.translatesAutoresizingMaskIntoConstraints = false
